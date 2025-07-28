@@ -58,6 +58,19 @@ interface AttendanceRecord {
   breaks: { start: string; end: string }[];
 }
 
+// --- Interface pour les props de AddStaffModal
+interface AddStaffModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onAddStaff: (newMember: Omit<StaffMember, 'contact'> & { // Le type est légèrement ajusté pour correspondre à la création
+        name: string;
+        role: StaffRole;
+        workZone: 'Zone A - Réception' | 'Zone B - Stockage' | 'Zone C - Expédition';
+        phone: string;
+        email: string;
+    }) => void;
+}
+
 //--- Définition de l'interface pour les props du composant KPI
 interface StaffKpiCardProps {
   icon: React.ReactNode;
@@ -65,6 +78,16 @@ interface StaffKpiCardProps {
   value: string;
   detail?: string; // Le '?' rend cette prop optionnelle
   colorClass: string;
+}
+
+interface StaffListTableProps {
+  members: StaffMember[];
+  onSelectMember: (member: StaffMember) => void;
+}
+
+interface StaffDetailSheetProps {
+    member: StaffMember;
+    onClose: () => void;
 }
 
 interface PerformanceMetrics {
@@ -231,7 +254,7 @@ const StaffListTable = ({ members, onSelectMember }) => (
 );
 
 //--- Fiche de détail d'un employé (Panneau latéral)
-const StaffDetailSheet = ({ member, onClose }) => {
+const StaffDetailSheet = ({ member, onClose }: StaffDetailSheetProps) => {
     const performanceData = {
         labels: ['Colis traités', 'Taux de réussite (%)', 'Erreurs', 'Tps moyen (min)'],
         datasets: [
@@ -336,7 +359,7 @@ const StaffDetailSheet = ({ member, onClose }) => {
 };
 
 //--- Modal d'ajout d'un membre
-const AddStaffModal = ({ isOpen, onClose, onAddStaff }) => {
+const AddStaffModal = ({ isOpen, onClose, onAddStaff }:AddStaffModalProps) => {
     const [formData, setFormData] = useState({
         name: '', role: 'Manutentionnaire', workZone: 'Zone B - Stockage', phone: '', email: ''
     });
