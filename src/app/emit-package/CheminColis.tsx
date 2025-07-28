@@ -433,32 +433,34 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                       <span>Autres points relais</span>
                     </div>
                   </div>
-    {displayedPoints.length > 0 ? displayedPoints.map((point: PointRelais) => {
-        if (point.id === fixedOriginPoint.id) return null;
-        const isSelectedAsArrival = selectedDestination?.id === point.id;
-                      const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
-                      
-                      // NOUVEAU : Calculer la couleur de fond selon la distance
-                      const distance = calculateDistance(
-                        fixedOriginPoint.lat, fixedOriginPoint.lng,
-                        point.lat, point.lng
-                      );
-                      const isNearby = distance <= 200;
-                      
-                      return (
-                      <div key={`list-point-${point.id}`} onClick={() => handlePointSelect(point)} className={`p-2.5 rounded-lg border transition-all duration-150 flex items-start gap-2.5 cursor-pointer ${isSelectedAsArrival ? 'bg-red-50 border-red-500' : isNearby ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' : 'hover:bg-gray-100 border-gray-200'}`}>
-                          <div className={`mt-0.5 w-8 h-8 shrink-0 rounded-md flex items-center justify-center text-sm ${isNearby ? 'bg-purple-200 text-purple-700' : 'bg-gray-200 text-gray-700'}`}>
-                            <TypeIcon size={16} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-sm text-gray-800 truncate`}>{point.name}</h4>
-                            <p className="text-xs text-gray-600 truncate">{point.address}</p>
-                            <p className="text-xs text-gray-500">{Math.round(distance)}m du départ</p>
-                          </div>
-                          <ChevronRight size={18} className="text-gray-400 self-center shrink-0"/>
-                      </div>
-                      );
-                  }) : <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>}
+                  {displayedPoints.length > 0 ? displayedPoints.map((point: PointRelais) => {
+                    // Fixed: Add type assertion to ensure point is not never
+                    if (!point || point.id === fixedOriginPoint.id) return null;
+                    
+                    const isSelectedAsArrival = selectedDestination?.id === point.id;
+                    const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
+                    
+                    // NOUVEAU : Calculer la couleur de fond selon la distance
+                    const distance = calculateDistance(
+                      fixedOriginPoint.lat, fixedOriginPoint.lng,
+                      point.lat, point.lng
+                    );
+                    const isNearby = distance <= 200;
+                    
+                    return (
+                    <div key={`list-point-${point.id}`} onClick={() => handlePointSelect(point)} className={`p-2.5 rounded-lg border transition-all duration-150 flex items-start gap-2.5 cursor-pointer ${isSelectedAsArrival ? 'bg-red-50 border-red-500' : isNearby ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' : 'hover:bg-gray-100 border-gray-200'}`}>
+                        <div className={`mt-0.5 w-8 h-8 shrink-0 rounded-md flex items-center justify-center text-sm ${isNearby ? 'bg-purple-200 text-purple-700' : 'bg-gray-200 text-gray-700'}`}>
+                          <TypeIcon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className={`font-semibold text-sm text-gray-800 truncate`}>{point.name}</h4>
+                          <p className="text-xs text-gray-600 truncate">{point.address}</p>
+                          <p className="text-xs text-gray-500">{Math.round(distance)}m du départ</p>
+                        </div>
+                        <ChevronRight size={18} className="text-gray-400 self-center shrink-0"/>
+                    </div>
+                    );
+                }) : <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>}
                 </div>
             )}
           </div>
