@@ -1,7 +1,7 @@
 // app/envoyer/ProcessExistingPackage.tsx
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCodeIcon, MagnifyingGlassIcon, CheckCircleIcon, BanknotesIcon, ArrowUturnLeftIcon, TruckIcon, InformationCircleIcon, UserCircleIcon, MapPinIcon, PhoneIcon, CubeIcon, ScaleIcon, ShieldCheckIcon, ClockIcon, XMarkIcon, CameraIcon } from '@heroicons/react/24/outline';
+import { QrCodeIcon, MagnifyingGlassIcon, CheckCircleIcon, BanknotesIcon, ArrowUturnLeftIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Package, Sparkles, AlertTriangle, Send } from 'lucide-react';
 
 interface ExistingPackageInfo {
@@ -18,7 +18,7 @@ interface ExistingPackageInfo {
   isPerishable: boolean;
   isInsured: boolean;
   declaredValue?: string;
-  status: 'En attente de dépôt' | 'En attente de paiement au dépôt' | 'Paiement par destinataire' | 'Déposé'; // Ajout 'Paiement par destinataire'
+  status: 'En attente de dépôt' | 'En attente de paiement au dépôt' | 'Paiement par destinataire' | 'Déposé';
   amountDueAtDeposit?: number;
 }
 
@@ -26,8 +26,6 @@ interface ProcessExistingPackageProps {
   onBackToSelection: () => void;
 }
 
-// Définir à nouveau l'interface Parcel pour type-safety lors de la mise à jour du localStorage
-// pour garantir la correspondance des données.
 type ParcelStatus = 'En attente' | 'Reçu' | 'Retiré';
 type ParcelType = 'Standard' | 'Express';
 
@@ -39,10 +37,20 @@ interface Parcel {
   withdrawalDate?: string;
   location: string;
   designation: string;
-  sender: { name: string; phone: string; company?: string; originAddress: string; };
-  recipient: { name: string; phone: string; deliveryAddress: string; };
+  sender: { 
+    name: string; 
+    phone: string; 
+    company?: string; 
+    originAddress: string; 
+  };
+  recipient: { 
+    name: string; 
+    phone: string; 
+    deliveryAddress: string; 
+  };
 }
-const INVENTORY_STORAGE_KEY = 'inventory_parcels'; // Utiliser la même clé que dans InventoryPage
+
+const INVENTORY_STORAGE_KEY = 'inventory_parcels';
 
 const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackToSelection }) => {
   const [searchInput, setSearchInput] = useState('');
@@ -61,17 +69,15 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Ce useEffect s'exécute une seule fois au montage pour vérifier s'il faut pré-remplir
+  // Vérifier s'il faut pré-remplir au montage
   useEffect(() => {
     const prefillId = localStorage.getItem('prefill_package_id');
     if (prefillId) {
       setSearchInput(prefillId);
-      // Lancer la recherche automatiquement
       handleSearchPackage(prefillId);
-      // Nettoyer pour que ça ne se reproduise pas si l'utilisateur navigue ailleurs
       localStorage.removeItem('prefill_package_id');
     }
-  }, []); // Le tableau vide [] signifie "exécuter une seule fois après le premier rendu"
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isScanning) {
@@ -90,20 +96,25 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
     canvas.height = video.videoHeight;
     try {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      // const imageData = context.getImageData(0, 0, canvas.width, canvas.height); // Pour une vraie lib de QR
       const mockDetection = Math.random() > 0.85;
       if (mockDetection) {
         const mockCodes = ['PAY123ABC', 'DEPOT456DEF', 'PDLPAYXYZ', 'CX789PAY', 'PDL169AZE'];
         return mockCodes[Math.floor(Math.random() * mockCodes.length)];
       }
-    } catch (e) { console.error("Canvas draw error:", e); return null; }
+    } catch (e) { 
+      console.error("Canvas draw error:", e); 
+      return null; 
+    }
     return null;
   };
 
   const startScanInterval = () => {
     if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
     scanIntervalRef.current = setInterval(() => {
-      if (!isScanning || !streamRef.current) { if(scanIntervalRef.current) clearInterval(scanIntervalRef.current); return; }
+      if (!isScanning || !streamRef.current) { 
+        if(scanIntervalRef.current) clearInterval(scanIntervalRef.current); 
+        return; 
+      }
       const detectedCode = decodeQRFromCanvas();
       if (detectedCode) {
         setSearchInput(detectedCode.toUpperCase());
@@ -115,9 +126,16 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
   };
 
   const handleScanQRCode = async () => {
-    setIsScanning(true); setError(null);
+    setIsScanning(true); 
+    setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 360 }, height: { ideal: 360 } } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: "environment", 
+          width: { ideal: 360 }, 
+          height: { ideal: 360 } 
+        } 
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -129,29 +147,36 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
             handleStopScan();
             if (!packageInfo) setError("Aucun QR code détecté. Réessayez ou saisissez manuellement.");
           }
-        }, 15000); // Réduit à 15s pour un test plus rapide
+        }, 15000);
       }
-    } catch (err) { /* ... gestion d'erreur caméra ... */ 
-        console.error("Erreur caméra:", err);
-        let msg = "Impossible d'accéder à la caméra. ";
-        if (err instanceof DOMException) {
-            if (err.name === "NotAllowedError") msg += "Veuillez autoriser l'accès.";
-            else if (err.name === "NotFoundError") msg += "Aucune caméra trouvée.";
-            else msg += "Erreur technique.";
-        }
-        setError(msg);
-        setIsScanning(false);
+    } catch (err) {
+      console.error("Erreur caméra:", err);
+      let msg = "Impossible d'accéder à la caméra. ";
+      if (err instanceof DOMException) {
+        if (err.name === "NotAllowedError") msg += "Veuillez autoriser l'accès.";
+        else if (err.name === "NotFoundError") msg += "Aucune caméra trouvée.";
+        else msg += "Erreur technique.";
+      }
+      setError(msg);
+      setIsScanning(false);
     }
   };
 
   const handleStopScan = (codeFound = false) => {
-    if (scanIntervalRef.current) { clearInterval(scanIntervalRef.current); scanIntervalRef.current = null; }
-    if (streamRef.current) { streamRef.current.getTracks().forEach(track => track.stop()); streamRef.current = null; if (videoRef.current) videoRef.current.srcObject = null; }
-    setIsScanning(false); setScanAnimation(0);
-    if (!codeFound && !packageInfo) { /* Optionnel: setError("Scan arrêté."); */ }
+    if (scanIntervalRef.current) { 
+      clearInterval(scanIntervalRef.current); 
+      scanIntervalRef.current = null; 
+    }
+    if (streamRef.current) { 
+      streamRef.current.getTracks().forEach(track => track.stop()); 
+      streamRef.current = null; 
+      if (videoRef.current) videoRef.current.srcObject = null; 
+    }
+    setIsScanning(false); 
+    setScanAnimation(0);
   };
 
-  useEffect(() => { // Nettoyage
+  useEffect(() => {
     return () => {
       if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
       if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
@@ -160,67 +185,127 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
 
   const handleSearchPackage = async (value?: string) => {
     const query = (value || searchInput).toUpperCase();
-    if (!query.trim()) { setError('Numéro de suivi requis.'); return; }
+    if (!query.trim()) { 
+      setError('Numéro de suivi requis.'); 
+      return; 
+    }
     
-    setIsLoading(true); setError(null); setPackageInfo(null); setPaymentValidated(false);
-    setAmountReceived(''); setChangeToGive(null); setShowSuccessMessage(null);
+    setIsLoading(true); 
+    setError(null); 
+    setPackageInfo(null); 
+    setPaymentValidated(false);
+    setAmountReceived(''); 
+    setChangeToGive(null); 
+    setShowSuccessMessage(null);
     if (value && searchInput !== value) setSearchInput(value);
 
-    await new Promise(resolve => setTimeout(resolve, 1200)); // Simulation API
+    await new Promise(resolve => setTimeout(resolve, 1200));
 
-    if (query === 'PAY123ABC') { // Scénario: Paiement attendu au dépôt
+    if (query === 'PAY123ABC') {
       setPackageInfo({
-        trackingNumber: query, senderName: 'Alice Mbarga', senderPhone: '+237 699000001',
-        recipientName: 'Bob Nkomo', recipientPhone: '+237 677000002',
-        departurePointName: 'Relais Mvan', arrivalPointName: 'Relais Bonamoussadi',
-        packageDescription: 'Documents importants', packageWeight: '2.5',
-        isFragile: false, isPerishable: false, isInsured: true, declaredValue: '25000',
-        status: 'En attente de paiement au dépôt', amountDueAtDeposit: 7500,
+        trackingNumber: query, 
+        senderName: 'Alice Mbarga', 
+        senderPhone: '+237 699000001',
+        recipientName: 'Bob Nkomo', 
+        recipientPhone: '+237 677000002',
+        departurePointName: 'Relais Mvan', 
+        arrivalPointName: 'Relais Bonamoussadi',
+        packageDescription: 'Documents importants', 
+        packageWeight: '2.5',
+        isFragile: false, 
+        isPerishable: false, 
+        isInsured: true, 
+        declaredValue: '25000',
+        status: 'En attente de paiement au dépôt', 
+        amountDueAtDeposit: 7500,
       });
-    } else if (query === 'PDLPAYXYZ') { // Scénario: Colis déjà payé en ligne
+    } else if (query === 'PDLPAYXYZ') {
        setPackageInfo({
-        trackingNumber: query, senderName: 'Eve Payeur', senderPhone: '+237 650123456',
-        recipientName: 'Frank Destin', recipientPhone: '+237 670654321',
-        departurePointName: 'Relais Logpom', arrivalPointName: 'Relais Deido',
-        packageDescription: 'Électronique fragile', packageWeight: '1.8',
-        isFragile: true, isPerishable: false, isInsured: true, declaredValue: '150000',
-        status: 'En attente de dépôt', amountDueAtDeposit: 0, // Déjà payé
+        trackingNumber: query, 
+        senderName: 'Eve Payeur', 
+        senderPhone: '+237 650123456',
+        recipientName: 'Frank Destin', 
+        recipientPhone: '+237 670654321',
+        departurePointName: 'Relais Logpom', 
+        arrivalPointName: 'Relais Deido',
+        packageDescription: 'Électronique fragile', 
+        packageWeight: '1.8',
+        isFragile: true, 
+        isPerishable: false, 
+        isInsured: true, 
+        declaredValue: '150000',
+        status: 'En attente de dépôt', 
+        amountDueAtDeposit: 0,
       });
-    } else if (query === 'PKD-92384') { // Scénario: Colis déjà payé en ligne
+    } else if (query === 'PKD-92384') {
        setPackageInfo({
-        trackingNumber: query, senderName: 'Eve Payeur', senderPhone: '+237 650123456',
-        recipientName: 'Frank Destin', recipientPhone: '+237 670654321',
-        departurePointName: 'Relais Logpom', arrivalPointName: 'Relais Deido',
-        packageDescription: 'Électronique fragile', packageWeight: '1.8',
-        isFragile: true, isPerishable: false, isInsured: true, declaredValue: '150000',
-        status: 'En attente de dépôt', amountDueAtDeposit: 0, // Déjà payé
+        trackingNumber: query, 
+        senderName: 'Eve Payeur', 
+        senderPhone: '+237 650123456',
+        recipientName: 'Frank Destin', 
+        recipientPhone: '+237 670654321',
+        departurePointName: 'Relais Logpom', 
+        arrivalPointName: 'Relais Deido',
+        packageDescription: 'Électronique fragile', 
+        packageWeight: '1.8',
+        isFragile: true, 
+        isPerishable: false, 
+        isInsured: true, 
+        declaredValue: '150000',
+        status: 'En attente de dépôt', 
+        amountDueAtDeposit: 0,
       });
-    } else if (query === 'PKD-58271') { // Scénario: Colis déjà payé en ligne
+    } else if (query === 'PKD-58271') {
        setPackageInfo({
-        trackingNumber: query, senderName: 'Eve Payeur', senderPhone: '+237 650123456',
-        recipientName: 'Frank Destin', recipientPhone: '+237 670654321',
-        departurePointName: 'Relais Logpom', arrivalPointName: 'Relais Deido',
-        packageDescription: 'Électronique fragile', packageWeight: '1.8',
-        isFragile: true, isPerishable: false, isInsured: true, declaredValue: '150000',
-        status: 'En attente de dépôt', amountDueAtDeposit: 0, // Déjà payé
+        trackingNumber: query, 
+        senderName: 'Eve Payeur', 
+        senderPhone: '+237 650123456',
+        recipientName: 'Frank Destin', 
+        recipientPhone: '+237 670654321',
+        departurePointName: 'Relais Logpom', 
+        arrivalPointName: 'Relais Deido',
+        packageDescription: 'Électronique fragile', 
+        packageWeight: '1.8',
+        isFragile: true, 
+        isPerishable: false, 
+        isInsured: true, 
+        declaredValue: '150000',
+        status: 'En attente de dépôt', 
+        amountDueAtDeposit: 0,
       });
-    } else if (query === 'CX789PAY') { // Scénario: Paiement par le destinataire
+    } else if (query === 'CX789PAY') {
        setPackageInfo({
-        trackingNumber: query, senderName: 'Grace Expéditeur', senderPhone: '+237 660987654',
-        recipientName: 'Henri Bénéficiaire', recipientPhone: '+237 680123789',
-        departurePointName: 'Relais Biyem-Assi', arrivalPointName: 'Relais Akwa',
-        packageDescription: 'Cadeau d\'anniversaire', packageWeight: '0.5',
-        isFragile: true, isPerishable: true, isInsured: false,
-        status: 'Paiement par destinataire', amountDueAtDeposit: 0, // L'expéditeur ne paie rien ici
+        trackingNumber: query, 
+        senderName: 'Grace Expéditeur', 
+        senderPhone: '+237 660987654',
+        recipientName: 'Henri Bénéficiaire', 
+        recipientPhone: '+237 680123789',
+        departurePointName: 'Relais Biyem-Assi', 
+        arrivalPointName: 'Relais Akwa',
+        packageDescription: 'Cadeau d\'anniversaire', 
+        packageWeight: '0.5',
+        isFragile: true, 
+        isPerishable: true, 
+        isInsured: false,
+        status: 'Paiement par destinataire', 
+        amountDueAtDeposit: 0,
       });
-    } else if (query.includes('DEPOT')) { // Colis standard à déposer
+    } else if (query.includes('DEPOT')) {
        setPackageInfo({
-        trackingNumber: query, senderName: 'Charles Fotso', senderPhone: '+237 655000003',
-        recipientName: 'Diana Kouam', recipientPhone: '+237 688000004',
-        departurePointName: 'Relais Omnisport', arrivalPointName: 'Relais Makepe',
-        packageDescription: 'Vêtements pour enfants', packageWeight: '1.2',
-        isFragile: true, isPerishable: false, isInsured: false,
-        status: 'En attente de dépôt', amountDueAtDeposit: 0,
+        trackingNumber: query, 
+        senderName: 'Charles Fotso', 
+        senderPhone: '+237 655000003',
+        recipientName: 'Diana Kouam', 
+        recipientPhone: '+237 688000004',
+        departurePointName: 'Relais Omnisport', 
+        arrivalPointName: 'Relais Makepe',
+        packageDescription: 'Vêtements pour enfants', 
+        packageWeight: '1.2',
+        isFragile: true, 
+        isPerishable: false, 
+        isInsured: false,
+        status: 'En attente de dépôt', 
+        amountDueAtDeposit: 0,
       });
     } else {
       setError(`❌ Aucun colis trouvé pour le N° : ${query}`);
@@ -242,43 +327,35 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
       setPaymentValidated(true);
       setShowSuccessMessage(`Paiement de ${packageInfo.amountDueAtDeposit.toLocaleString()} FCFA validé ! Monnaie : ${changeToGive !== null ? changeToGive.toLocaleString() : 0} FCFA.`);
       setTimeout(() => setShowSuccessMessage(null), 3500);
-    } else { setError("⚠️ Montant reçu insuffisant."); setTimeout(() => setError(null), 3000); }
+    } else { 
+      setError("⚠️ Montant reçu insuffisant."); 
+      setTimeout(() => setError(null), 3000); 
+    }
   };
   
-  // MODIFIÉ : La logique est étendue pour inclure l'ajout de nouveaux colis
   const handleFinalizeDeposit = () => {
-    // 1. Vérifier qu'on a bien les informations du colis à traiter
     if (!packageInfo) return;
 
-    // 2. Récupérer l'inventaire actuel depuis le localStorage
     const masterParcelsJSON = localStorage.getItem(INVENTORY_STORAGE_KEY);
-    // S'il n'y a rien, on part d'un tableau vide
     let masterParcels: Parcel[] = masterParcelsJSON ? JSON.parse(masterParcelsJSON) : [];
 
-    // 3. Chercher si un colis avec cet ID existe déjà
     const existingPackageIndex = masterParcels.findIndex(p => p.id === packageInfo.trackingNumber);
 
     if (existingPackageIndex !== -1) {
-      // ---- LOGIQUE DE MISE À JOUR (Le colis existe déjà) ----
-      // On met à jour le statut du colis existant.
       masterParcels[existingPackageIndex] = {
         ...masterParcels[existingPackageIndex],
         status: 'Reçu',
-        // On pourrait aussi mettre à jour la date d'arrivée si ce cas de figure est possible
         arrivalDate: new Date().toISOString(), 
       };
-       setShowSuccessMessage(`Statut du colis ${packageInfo.trackingNumber} mis à jour à "Reçu" !`);
-
+      setShowSuccessMessage(`Statut du colis ${packageInfo.trackingNumber} mis à jour à "Reçu" !`);
     } else {
-      // ---- LOGIQUE D'INSERTION (Le colis est nouveau pour l'inventaire) ----
-      // Créer un nouvel objet Parcel en mappant les champs de ExistingPackageInfo
       const newParcel: Parcel = {
         id: packageInfo.trackingNumber,
-        status: 'Reçu', // Statut final après le dépôt
-        type: packageInfo.isInsured || packageInfo.isFragile ? 'Express' : 'Standard', // On peut inférer le type
-        arrivalDate: new Date().toISOString(), // La date de dépôt est la date d'arrivée
-        withdrawalDate: undefined, // Pas encore retiré
-        location: 'RECEPT-01', // Un emplacement par défaut pour les nouveaux dépôts
+        status: 'Reçu',
+        type: packageInfo.isInsured || packageInfo.isFragile ? 'Express' : 'Standard',
+        arrivalDate: new Date().toISOString(),
+        withdrawalDate: undefined,
+        location: 'RECEPT-01',
         designation: packageInfo.packageDescription,
         sender: {
           name: packageInfo.senderName,
@@ -292,15 +369,12 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
         },
       };
 
-      // Ajouter le nouveau colis à notre inventaire
       masterParcels.push(newParcel);
       setShowSuccessMessage(`Colis ${packageInfo.trackingNumber} ajouté à l'inventaire !`);
     }
 
-    // 4. Sauvegarder la liste mise à jour (soit modifiée, soit augmentée)
     localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(masterParcels));
     
-    // 5. Réinitialiser l'interface utilisateur après un court délai
     setTimeout(() => {
       setPackageInfo(null);
       setSearchInput('');
@@ -312,7 +386,7 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 sm:p-4">
-      <div className="w-full max-w-3xl mx-auto"> {/* Max-width réduit pour compacité */}
+      <div className="w-full max-w-3xl mx-auto">
         <div className="mb-6">
           <button onClick={onBackToSelection} className="mb-4 group flex items-center text-green-600 hover:text-green-700 transition-colors text-sm">
             <ArrowUturnLeftIcon className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
@@ -334,7 +408,8 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
                 <div className="relative flex-grow">
                   <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
-                    type="text" value={searchInput}
+                    type="text" 
+                    value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
                     placeholder="N° de suivi (ex: PDL123ABC)"
                     className="w-full pl-10 pr-8 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-1 focus:ring-green-500 focus:border-green-500 text-sm transition-all"
@@ -350,15 +425,36 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
                   disabled={isLoading || !searchInput.trim()}
                   className="btn-primary text-sm py-2.5 px-5 w-full sm:w-auto"
                 >
-                  {isLoading ? <><div className="spinner-sm mr-2"></div>Recherche...</> : <><MagnifyingGlassIcon className="w-4 h-4 mr-1.5" />Vérifier</>}
+                  {isLoading ? (
+                    <>
+                      <div className="spinner-sm mr-2"></div>
+                      Recherche...
+                    </>
+                  ) : (
+                    <>
+                      <MagnifyingGlassIcon className="w-4 h-4 mr-1.5" />
+                      Vérifier
+                    </>
+                  )}
                 </button>
               </div>
               <div className="separator-text text-xs">OU</div>
               <button
-                onClick={handleScanQRCode} disabled={isLoading || isScanning}
+                onClick={handleScanQRCode} 
+                disabled={isLoading || isScanning}
                 className="btn-secondary border-gray-600 text-gray-700 hover:bg-gray-100 w-full text-sm py-2.5"
               >
-                {isScanning ? <><div className="spinner-sm mr-2"></div>Scan en cours...</> : <><QrCodeIcon className="w-5 h-5 mr-1.5" />Scanner Bordereau</>}
+                {isScanning ? (
+                  <>
+                    <div className="spinner-sm mr-2"></div>
+                    Scan en cours...
+                  </>
+                ) : (
+                  <>
+                    <QrCodeIcon className="w-5 h-5 mr-1.5" />
+                    Scanner Bordereau
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -381,18 +477,33 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
         )}
 
         {isLoading && !packageInfo && (
-          <div className="loading-state"><div className="spinner-lg"></div><p>Vérification du colis <span className="font-medium text-green-600">{searchInput}</span>...</p></div>
+          <div className="loading-state">
+            <div className="spinner-lg"></div>
+            <p>Vérification du colis <span className="font-medium text-green-600">{searchInput}</span>...</p>
+          </div>
         )}
-        {error && <div className="error-message"><AlertTriangle className="w-5 h-5 mr-2" />{error}</div>}
-        {showSuccessMessage && <div className="success-message"><CheckCircleIcon className="w-5 h-5 mr-2" />{showSuccessMessage}</div>}
+        
+        {error && (
+          <div className="error-message">
+            <AlertTriangle className="w-5 h-5 mr-2" />
+            {error}
+          </div>
+        )}
+        
+        {showSuccessMessage && (
+          <div className="success-message">
+            <CheckCircleIcon className="w-5 h-5 mr-2" />
+            {showSuccessMessage}
+          </div>
+        )}
 
         {packageInfo && (
           <div className="space-y-4 animate-fadeIn">
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
               <div className={`p-4 text-white ${
-                packageInfo.status === 'En attente de paiement au dépôt' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : // Vert pour paiement
-                packageInfo.status === 'Paiement par destinataire' ? 'bg-gradient-to-r from-purple-500 to-pink-500' : // Violet pour paiement destinataire
-                'bg-gradient-to-r from-green-600 to-teal-700' // Vert plus foncé pour autres
+                packageInfo.status === 'En attente de paiement au dépôt' ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                packageInfo.status === 'Paiement par destinataire' ? 'bg-gradient-to-r from-purple-500 to-pink-500' :
+                'bg-gradient-to-r from-green-600 to-teal-700'
               }`}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -412,7 +523,8 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
                 </div>
                 <div className="pt-2 border-t border-gray-100">
                   <p><strong className="text-gray-500">Desc:</strong> {packageInfo.packageDescription}</p>
-                  <p><strong className="text-gray-500">Poids:</strong> {packageInfo.packageWeight} kg
+                  <p>
+                    <strong className="text-gray-500">Poids:</strong> {packageInfo.packageWeight} kg
                     {packageInfo.isFragile && <span className="tag-package-sm bg-green-100 text-green-700 ml-2">Fragile</span>}
                     {packageInfo.isPerishable && <span className="tag-package-sm bg-green-100 text-green-700 ml-2">Périssable</span>}
                     {packageInfo.isInsured && <span className="tag-package-sm bg-green-100 text-green-700 ml-2">Assuré ({parseFloat(packageInfo.declaredValue || '0').toLocaleString()} FCFA)</span>}
@@ -423,46 +535,62 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
 
             {packageInfo.status === 'En attente de paiement au dépôt' && packageInfo.amountDueAtDeposit != null && packageInfo.amountDueAtDeposit > 0 && !paymentValidated && (
               <div className="bg-white rounded-xl shadow-lg border-l-4 border-green-500 p-4 space-y-3">
-                 <h3 className="text-md font-semibold text-green-700 flex items-center"><BanknotesIcon className="w-5 h-5 mr-1.5" /> Paiement Requis</h3>
-                <p className="text-center text-gray-600 text-sm">Montant à payer: <strong className="text-2xl text-green-600 ml-1">{packageInfo.amountDueAtDeposit.toLocaleString()} FCFA</strong></p>
+                 <h3 className="text-md font-semibold text-green-700 flex items-center">
+                   <BanknotesIcon className="w-5 h-5 mr-1.5" /> 
+                   Paiement Requis
+                 </h3>
+                <p className="text-center text-gray-600 text-sm">
+                  Montant à payer: <strong className="text-2xl text-green-600 ml-1">{packageInfo.amountDueAtDeposit.toLocaleString()} FCFA</strong>
+                </p>
                 <div>
                     <label htmlFor="amountReceived" className="block text-xs font-medium text-gray-600 mb-0.5">Montant reçu (FCFA)</label>
-                    <input type="number" id="amountReceived" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} placeholder="0"
-                           className="w-full py-2 px-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-green-500 focus:border-green-500 text-sm text-center"/>
+                    <input 
+                      type="number" 
+                      id="amountReceived" 
+                      value={amountReceived} 
+                      onChange={(e) => setAmountReceived(e.target.value)} 
+                      placeholder="0"
+                      className="w-full py-2 px-2.5 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-green-500 focus:border-green-500 text-sm text-center"
+                    />
                 </div>
                 {changeToGive !== null && changeToGive >= 0 && (
                     <p className="text-center text-green-700 text-sm">Monnaie: <strong className="text-md">{changeToGive.toLocaleString()} FCFA</strong></p>
                 )}
-                <button onClick={handleValidatePayment}
-                        disabled={!amountReceived || parseFloat(amountReceived) < packageInfo.amountDueAtDeposit}
-                        className="w-full btn-primary bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-sm py-2">
+                <button 
+                  onClick={handleValidatePayment}
+                  disabled={!amountReceived || parseFloat(amountReceived) < packageInfo.amountDueAtDeposit}
+                  className="w-full btn-primary bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-sm py-2"
+                >
                     <CheckCircleIcon className="w-4 h-4 mr-1" /> Valider Paiement
                 </button>
               </div>
             )}
             
             {paymentValidated && packageInfo.status === 'En attente de paiement au dépôt' && (
-              <div className="success-message text-sm"><CheckCircleIcon className="w-4 h-4 mr-1" />Paiement validé !</div>
+              <div className="success-message text-sm">
+                <CheckCircleIcon className="w-4 h-4 mr-1" />
+                Paiement validé !
+              </div>
             )}
 
-            {/* Cas où le colis est déjà payé en ligne ou paiement par destinataire */}
             {(packageInfo.status === 'En attente de dépôt' || packageInfo.status === 'Paiement par destinataire') && (
                 <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
                     <CheckCircleIcon className="w-5 h-5 text-green-600 mx-auto mb-1"/>
                     <p className="text-sm font-medium text-green-700">
                         {packageInfo.status === 'Paiement par destinataire' ? 
                             'Ce colis sera payé par le destinataire à la réception.' :
-                            'Ce colis est déjà payé  par l expéditeur.'
+                            'Ce colis est déjà payé par l\'expéditeur.'
                         }
                     </p>
-                    <p className="text-xs text-green-600">Aucun paiement requis de l'expéditeur au dépôt.</p>
+                    <p className="text-xs text-green-600">Aucun paiement requis de l&apos;expéditeur au dépôt.</p>
                 </div>
             )}
 
-
-            <button onClick={handleFinalizeDeposit}
-                    disabled={ (packageInfo.status === 'En attente de paiement au dépôt' && !paymentValidated) || isLoading }
-                    className="w-full btn-primary bg-green-600 hover:bg-green-700 text-md py-2.5 group disabled:opacity-60">
+            <button 
+              onClick={handleFinalizeDeposit}
+              disabled={ (packageInfo.status === 'En attente de paiement au dépôt' && !paymentValidated) || isLoading }
+              className="w-full btn-primary bg-green-600 hover:bg-green-700 text-md py-2.5 group disabled:opacity-60"
+            >
               <Send className="w-5 h-5 mr-1.5 group-hover:animate-pulse" />
               Confirmer Dépôt du Colis
               <Sparkles className="w-5 h-5 ml-1.5 text-yellow-300 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -470,28 +598,194 @@ const ProcessExistingPackage: React.FC<ProcessExistingPackageProps> = ({ onBackT
           </div>
         )}
       </div>
+      
       <style jsx global>{`
-        .tag-package-sm { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 500; }
-        @keyframes bounceIn { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); } }
-        .animate-bounceIn { animation: bounceIn 0.5s ease-out forwards; }
-        .spinner-sm { width: 1rem; height: 1rem; border-width: 2px; border-style: solid; border-radius: 9999px; animation: spin 1s linear infinite; border-color: white; border-top-color: transparent; }
-        .spinner-lg { width: 2rem; height: 2rem; border-width: 3px; border-style: solid; border-radius: 9999px; animation: spin 1s linear infinite; border-color: #a7f3d0; border-top-color: #10b981; } /* emerald-200 et emerald-500 */
-        .loading-state { background-color: white; border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; padding: 2rem; margin-bottom: 1.5rem; text-align: center; animation: fadeIn 0.3s ease-out; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
-        .error-message { background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 0.75rem 1rem; margin-bottom: 1.5rem; animation: fadeIn 0.3s ease-out; display: flex; align-items: flex-start; gap: 0.5rem; color: #b91c1c; font-size: 0.875rem; font-weight: 500; border-radius: 0 0.5rem 0.5rem 0; }
-        .success-message { background-color: #dcfce7; border-left: 4px solid #22c55e; padding: 0.75rem 1rem; margin-bottom: 1.5rem; animation: fadeIn 0.3s ease-out; display: flex; align-items: flex-start; gap: 0.5rem; color: #166534; font-size: 0.875rem; font-weight: 500; border-radius: 0 0.5rem 0.5rem 0; }
-        .separator-text { position: relative; text-align: center; font-size: 0.75rem; color: #6b7280; }
-        .separator-text::before, .separator-text::after { content: ""; position: absolute; top: 50%; width: calc(50% - 2rem); border-top: 1px solid #e5e7eb; }
-        .separator-text::before { right: calc(50% + 1.5rem); }
-        .separator-text::after { left: calc(50% + 1.5rem); }
-        .scanner-overlay { position: absolute; inset: 0; pointer-events: none; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; }
-        .scanner-overlay::before, .scanner-overlay::after { content: ''; position: absolute; background-color: rgba(0,0,0,0.4); }
-        .scanner-overlay::before { top: 0; bottom: 0; left: 0; width: 10%; } /* Bordures verticales */
-        .scanner-overlay::after { top: 0; bottom: 0; right: 0; width: 10%; }
-        /* Pour ajouter des bordures horizontales (si besoin) */
-        /* .scanner-overlay div::before { top:0; left:10%; right:10%; height:10%;} */
-        /* .scanner-overlay div::after { bottom:0; left:10%; right:10%; height:10%;} */
-        .scanner-line { position: absolute; left: 5%; right: 5%; height: 2px; background: linear-gradient(to right, transparent, rgba(0, 255, 150, 0.8), transparent); box-shadow: 0 0 8px rgba(0, 255, 150, 0.8); border-radius: 1px; transition: top 0.05s linear; }
-        .scanner-line div { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 4px; background-color: rgba(0, 255, 150, 0.9); border-radius: 2px; box-shadow: 0 0 10px rgba(0, 255, 150, 0.9); }
+        .tag-package-sm { 
+          display: inline-flex; 
+          align-items: center; 
+          padding: 0.15rem 0.5rem; 
+          border-radius: 9999px; 
+          font-size: 0.7rem; 
+          font-weight: 500; 
+        }
+        @keyframes fadeIn { 
+          0% { opacity: 0; transform: translateY(10px); } 
+          100% { opacity: 1; transform: translateY(0); } 
+        }
+        .animate-fadeIn { 
+          animation: fadeIn 0.3s ease-out; 
+        }
+        @keyframes bounceIn { 
+          0% { transform: scale(0.5); opacity: 0; } 
+          60% { transform: scale(1.05); opacity: 1; } 
+          100% { transform: scale(1); } 
+        }
+        .animate-bounceIn { 
+          animation: bounceIn 0.5s ease-out forwards; 
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .spinner-sm { 
+          width: 1rem; 
+          height: 1rem; 
+          border-width: 2px; 
+          border-style: solid; 
+          border-radius: 9999px; 
+          animation: spin 1s linear infinite; 
+          border-color: white; 
+          border-top-color: transparent; 
+        }
+        .spinner-lg { 
+          width: 2rem; 
+          height: 2rem; 
+          border-width: 3px; 
+          border-style: solid; 
+          border-radius: 9999px; 
+          animation: spin 1s linear infinite; 
+          border-color: #a7f3d0; 
+          border-top-color: #10b981; 
+        }
+        .loading-state { 
+          background-color: white; 
+          border-radius: 1rem; 
+          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); 
+          border: 1px solid #e5e7eb; 
+          padding: 2rem; 
+          margin-bottom: 1.5rem; 
+          text-align: center; 
+          animation: fadeIn 0.3s ease-out; 
+          display: flex; 
+          flex-direction: column; 
+          align-items: center; 
+          gap: 0.75rem; 
+        }
+        .error-message { 
+          background-color: #fee2e2; 
+          border-left: 4px solid #ef4444; 
+          padding: 0.75rem 1rem; 
+          margin-bottom: 1.5rem; 
+          animation: fadeIn 0.3s ease-out; 
+          display: flex; 
+          align-items: flex-start; 
+          gap: 0.5rem; 
+          color: #b91c1c; 
+          font-size: 0.875rem; 
+          font-weight: 500; 
+          border-radius: 0 0.5rem 0.5rem 0; 
+        }
+        .success-message { 
+          background-color: #dcfce7; 
+          border-left: 4px solid #22c55e; 
+          padding: 0.75rem 1rem; 
+          margin-bottom: 1.5rem; 
+          animation: fadeIn 0.3s ease-out; 
+          display: flex; 
+          align-items: flex-start; 
+          gap: 0.5rem; 
+          color: #166534; 
+          font-size: 0.875rem; 
+          font-weight: 500; 
+          border-radius: 0 0.5rem 0.5rem 0; 
+        }
+        .separator-text { 
+          position: relative; 
+          text-align: center; 
+          font-size: 0.75rem; 
+          color: #6b7280; 
+        }
+        .separator-text::before, .separator-text::after { 
+          content: ""; 
+          position: absolute; 
+          top: 50%; 
+          width: calc(50% - 2rem); 
+          border-top: 1px solid #e5e7eb; 
+        }
+        .separator-text::before { 
+          right: calc(50% + 1.5rem); 
+        }
+        .separator-text::after { 
+          left: calc(50% + 1.5rem); 
+        }
+        .scanner-overlay { 
+          position: absolute; 
+          inset: 0; 
+          pointer-events: none; 
+          border-radius: 0.375rem; 
+          display: flex; 
+          align-items: center; 
+          justify-content: center; 
+        }
+        .scanner-overlay::before, .scanner-overlay::after { 
+          content: ''; 
+          position: absolute; 
+          background-color: rgba(0,0,0,0.4); 
+        }
+        .scanner-overlay::before { 
+          top: 0; 
+          bottom: 0; 
+          left: 0; 
+          width: 10%; 
+        }
+        .scanner-overlay::after { 
+          top: 0; 
+          bottom: 0; 
+          right: 0; 
+          width: 10%; 
+        }
+        .scanner-line { 
+          position: absolute; 
+          left: 5%; 
+          right: 5%; 
+          height: 2px; 
+          background: linear-gradient(to right, transparent, rgba(0, 255, 150, 0.8), transparent); 
+          box-shadow: 0 0 8px rgba(0, 255, 150, 0.8); 
+          border-radius: 1px; 
+          transition: top 0.05s linear; 
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          border: none;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          cursor: pointer;
+        }
+        .btn-primary:hover:not(:disabled) {
+          background: linear-gradient(135deg, #059669 0%, #047857 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        .btn-primary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+        .btn-secondary {
+          background: white;
+          color: #374151;
+          border: 1px solid #d1d5db;
+          border-radius: 0.5rem;
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          cursor: pointer;
+        }
+        .btn-secondary:hover:not(:disabled) {
+          background: #f9fafb;
+          border-color: #9ca3af;
+        }
+        .btn-secondary:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
       `}</style>
     </div>
   );

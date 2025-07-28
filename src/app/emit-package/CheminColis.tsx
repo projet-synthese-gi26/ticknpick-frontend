@@ -42,7 +42,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 // Fonction pour obtenir un itinéraire via l'API Mapbox/OpenRouteService
-const getRoute = async (start: [number, number], end: [number, number]) => {
+const getRoute = async (start: [number, number], end: [number, number]): Promise<[number, number][]> => {
   try {
     // Utilisation de l'API OpenRouteService (gratuite avec clé API)
     // Vous devrez remplacer 'YOUR_API_KEY' par votre vraie clé API
@@ -277,10 +277,12 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
             [selectedDestination.lat, selectedDestination.lng]
           );
           
+          // CORRIGÉ : Ajout de la propriété 'properties' requise pour GeoJSON Feature
           map.addSource('route', { 
             type: 'geojson', 
             data: { 
               type: 'Feature', 
+              properties: {}, // Propriété requise pour GeoJSON Feature
               geometry: { 
                 type: 'LineString', 
                 coordinates: routeCoordinates 
