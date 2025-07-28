@@ -58,6 +58,15 @@ interface AttendanceRecord {
   breaks: { start: string; end: string }[];
 }
 
+//--- Définition de l'interface pour les props du composant KPI
+interface StaffKpiCardProps {
+  icon: React.ReactNode;
+  title: string;
+  value: string;
+  detail?: string; // Le '?' rend cette prop optionnelle
+  colorClass: string;
+}
+
 interface PerformanceMetrics {
   parcelsProcessed: number;
   successRate: number; // en %
@@ -155,7 +164,7 @@ const TEAM_AVERAGE_PERFORMANCE = {
 //==============================================================================
 
 //--- Cartes KPI pour la section Personnel
-const StaffKpiCard = ({ icon, title, value, detail, colorClass }) => (
+const StaffKpiCard = ({ icon, title, value, detail, colorClass }: StaffKpiCardProps) => (
   <div className={`bg-gradient-to-br ${colorClass} p-5 rounded-2xl shadow-lg text-white`}>
     <div className="flex items-center space-x-4">
       <div className="bg-white/20 p-3 rounded-xl">{icon}</div>
