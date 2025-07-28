@@ -433,9 +433,9 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                       <span>Autres points relais</span>
                     </div>
                   </div>
-                  {displayedPoints.length > 0 ? displayedPoints.map(point => {
-                      if (point.id === fixedOriginPoint.id) return null; // Ne pas afficher le point de départ dans la liste de choix
-                      const isSelectedAsArrival = selectedDestination?.id === point.id;
+    {displayedPoints.length > 0 ? displayedPoints.map((point: PointRelais) => {
+        if (point.id === fixedOriginPoint.id) return null;
+        const isSelectedAsArrival = selectedDestination?.id === point.id;
                       const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
                       
                       // NOUVEAU : Calculer la couleur de fond selon la distance
