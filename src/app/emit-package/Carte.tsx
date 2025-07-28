@@ -4,6 +4,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapPinIcon, TruckIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
+// Déclaration du type global pour maplibregl
+declare global {
+  interface Window {
+    maplibregl: any;
+  }
+}
+
 // Interface pour les données de points relais
 interface RelayPoint {
   id: string;
@@ -48,6 +55,9 @@ const MapRelayPointSelector: React.FC<MapRelayPointSelectorProps> = ({
   // État pour le suivi de l'itinéraire
   const [routeInfo, setRouteInfo] = useState<{distance: string, duration: string} | null>(null);
 
+  // État pour les coordonnées de la route
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
+
   // Données simulées des points relais à Yaoundé
   const relayPoints: RelayPoint[] = [
     {
@@ -87,10 +97,10 @@ const MapRelayPointSelector: React.FC<MapRelayPointSelectorProps> = ({
     }
   ];
 
-    // NOUVEAU: useEffect pour tracer la route
+  // useEffect pour tracer la route
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
+    const map = mapRef.current;
+    if (!map || !window.maplibregl) return;
 
     const routeSource = map.getSource('route');
     if (routeSource) {
@@ -122,12 +132,11 @@ const MapRelayPointSelector: React.FC<MapRelayPointSelectorProps> = ({
       // Ajuster la vue pour montrer toute la route
       const bounds = routeCoordinates.reduce(
         (bounds, coord) => bounds.extend(coord as [number, number]),
-        new maplibregl.LngLatBounds(routeCoordinates[0] as [number, number], routeCoordinates[0] as [number, number])
+        new window.maplibregl.LngLatBounds(routeCoordinates[0] as [number, number], routeCoordinates[0] as [number, number])
       );
       map.fitBounds(bounds, { padding: 60, duration: 1500 });
     }
   }, [routeCoordinates]); // Se redéclenche quand les coordonnées de la route changent
-
 
   // Fonction pour charger la carte MapLibre GL
   useEffect(() => {
@@ -136,6 +145,12 @@ const MapRelayPointSelector: React.FC<MapRelayPointSelectorProps> = ({
 
     // Charger le script MapLibre GL JS
     const loadMapScript = () => {
+      // Vérifier si le script est déjà chargé
+      if (window.maplibregl) {
+        initializeMap();
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/3.6.2/maplibre-gl.js';
       script.async = true;
@@ -273,17 +288,23 @@ const MapRelayPointSelector: React.FC<MapRelayPointSelectorProps> = ({
     // Dans une application réelle, ces points proviendraient d'un service d'itinéraire
     const intermediatePoints = generateIntermediatePoints(origin.coordinates, destination.coordinates);
     
+    // Créer les coordonnées de la route
+    const coordinates: [number, number][] = [
+      origin.coordinates,
+      ...intermediatePoints,
+      destination.coordinates
+    ];
+    
+    // Mettre à jour l'état des coordonnées de la route
+    setRouteCoordinates(coordinates);
+    
     // Créer un objet LineString GeoJSON pour l'itinéraire
     const routeData = {
       type: 'Feature',
       properties: {},
       geometry: {
         type: 'LineString',
-        coordinates: [
-          origin.coordinates,
-          ...intermediatePoints,
-          destination.coordinates
-        ]
+        coordinates: coordinates
       }
     };
     
