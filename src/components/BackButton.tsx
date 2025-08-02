@@ -23,11 +23,11 @@ export default function FloatingBackButton() {
   }
   
   return (
-    <div className="fixed left-6 top-1/2 -translate-y-1/2 z-50">
+    <div className="fixed left-6 top-3/4 -translate-y-1/2 z-50">
       <Link
         href="/"
         className="group flex items-center bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white rounded-full shadow-2xl hover:shadow-emerald-500/25 focus:outline-none focus:ring-4 focus:ring-emerald-300/50 transition-all duration-300 ease-out transform hover:scale-105 hover:-translate-x-1 active:scale-95 backdrop-blur-sm border border-white/20"
-        aria-label="Retour à l'accueil Pick & Drop"
+        aria-label="Retour à l'accueil PicknDrop"
       >
         {/* Partie icône - toujours visible */}
         <div className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-white/20 to-transparent">
@@ -40,7 +40,7 @@ export default function FloatingBackButton() {
         {/* Partie texte - se déploie au hover */}
         <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-all duration-300 ease-out">
           <span className="inline-block px-4 py-2 text-sm font-semibold tracking-wide whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">
-            Retour à Pick&Drop
+            Retour à PicknDrop
           </span>
         </div>
         

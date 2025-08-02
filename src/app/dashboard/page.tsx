@@ -29,6 +29,7 @@ import {
   Phone,
   Calendar,
   MapPin,
+  Settings,
 } from 'lucide-react';
 
 // Chart.js pour les graphiques
@@ -48,6 +49,7 @@ import {
 import InventoryPage from './Inventaire';
 import Link from 'next/link';
 import PersonnelPage from './Personnel';
+import RelayPointServiceCard from './ServiceCard';
 
 ChartJS.register(
   CategoryScale,
@@ -174,8 +176,8 @@ const navigationItems = [
   { id: 'inventory', label: 'Suivi de Colis', icon: Package, active: false },
   { id: 'statistics', label: 'Statistiques', icon: BarChart3, active: false },
   { id: 'staff', label: 'Personnel', icon: Users, active: false },
-  { id: 'logistics', label: 'Logistique', icon: Truck, active: false },
   { id: 'tasks', label: 'Tâches', icon: CheckSquare, active: false },
+  { id: 'settings', label: 'Paramètres', icon: Settings, active: false }
 ];
 
 const Sidebar = ({ activeTab, setActiveTab }: { activeTab: string; setActiveTab: (tab: string) => void }) => (
@@ -668,6 +670,8 @@ export default function ModernDashboard() {
         return <LogisticsPage />;
       case 'tasks':
         return <TasksPage />;
+      case 'settings':
+        return <RelayPointServiceCard />;
       default:
         return null;
     }

@@ -18,7 +18,8 @@ import {
   Truck,
   Send,
   MapPinHouse,
-  Warehouse, // Icône pour le logo
+  Warehouse,
+  User, // Icône pour le logo
 } from 'lucide-react';
 
 interface NavItem {
@@ -31,8 +32,7 @@ const navItems: NavItem[] = [
   { href: '/home', label: 'Accueil', icon: Home },
   { href: '/emit-package', label: 'Dépôt', icon: PackagePlus },
   { href: '/withdraw-package', label: 'Retrait', icon: PackageOpen },
-  { href: '/register-delivery', label: 'Inventaire', icon: Warehouse },
-  { href: '/dashboard', label: 'Mon Compte', icon: Settings },
+  { href: '/dashboard', label: 'Mon Compte', icon: User },
 ];
 
 export default function Navbar() {

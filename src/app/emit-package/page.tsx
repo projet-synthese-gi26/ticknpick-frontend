@@ -8,6 +8,7 @@ import {
   CreditCardIcon,
   ArrowRightCircleIcon,
   XMarkIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import { ChatBubbleOvalLeftEllipsisIcon, CheckCircleIcon as SolidCheckCircleIcon } from '@heroicons/react/24/solid';
 import { CheckCircleIcon, PackagePlus, ScanSearch } from 'lucide-react';
@@ -49,6 +50,10 @@ interface ShippingFormDataGlobal {
   country: string;
   signatureData?: string | null;
   totalPrice?: number;
+}
+
+interface ShippingPageProps {
+  onBackToSelection: () => void;
 }
 
 const ShippingSteps = ({ currentStep = 1 }: { currentStep?: number }) => {
@@ -169,7 +174,7 @@ const NotificationComponent = ({
   );
 };
 
-const ShippingPage = () => {
+const ShippingPage: React.FC<ShippingPageProps> = ({ onBackToSelection }) => {
   const router = useRouter();
   
   // État pour gérer le type de flux
@@ -587,7 +592,7 @@ const ShippingPage = () => {
   return (
     <div className="min-h-screen bg-slate-100">
       <Head>
-        <title>Expédier un colis - Pick & Drop Link</title>
+        <title>Expédier un colis - Pick n Drop Link</title>
         <meta name="description" content="Service d'expédition de colis via notre réseau de points relais au Cameroun" />
       </Head>
       <Navbar/>
@@ -607,6 +612,10 @@ const ShippingPage = () => {
       <main className="container mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-8">
         {flowType === 'new_package' && (
           <div className="text-center mb-8 sm:mb-10">
+          <button onClick={onBackToSelection} className="mb-4 group flex items-center text-green-600 hover:text-green-700 transition-colors text-sm">
+            <ArrowUturnLeftIcon className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
+            Retour
+          </button>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-800">
               Envoyez vos colis <span className="text-green-600">facilement</span> et en <span className="text-green-600">toute sécurité</span>.
             </h1>
