@@ -11,6 +11,23 @@ interface StaffMember {
   role: string;
 }
 
+interface Vehicle {
+  nom: string;
+  marque: string;
+  couleur: string;
+  immatriculation: string;
+  dimensions: {
+    l: string | number;
+    w: string | number;
+    h: string | number;
+  };
+}
+
+interface Tarif {
+  service: string;
+  prix: string;
+}
+
 const initialStaffMembers = [
   { id: 'emp-001', name: 'Essono Cédric', avatar: '/avatars/essono.png', role: 'Manutentionnaire' },
   { id: 'emp-002', name: 'Mballa Alice', avatar: '/avatars/mballa.png', role: 'Responsable Stock' },
@@ -19,35 +36,71 @@ const initialStaffMembers = [
 ];
 
 // STORAGE SIMULATION (remplace localStorage)
-let memoryStorage = {};
+let memoryStorage: Record<string, string> = {};
 
-const saveToMemory = (key, data) => { memoryStorage[key] = JSON.stringify(data); };
-const loadFromMemory = (key, defaultValue) => { 
-  try { return memoryStorage[key] ? JSON.parse(memoryStorage[key]) : defaultValue; } 
-  catch { return defaultValue; }
+const saveToMemory = (key: string, data: any) => { 
+  memoryStorage[key] = JSON.stringify(data); 
+};
+
+const loadFromMemory = (key: string, defaultValue: any) => { 
+  try { 
+    return memoryStorage[key] ? JSON.parse(memoryStorage[key]) : defaultValue; 
+  } 
+  catch { 
+    return defaultValue; 
+  }
 };
 
 // SOUS-COMPOSANTS
-const InputField = ({ label, value, onChange, placeholder, icon: Icon, readOnly }) => (
+interface InputFieldProps {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  icon?: React.ElementType;
+  readOnly: boolean;
+}
+
+const InputField = ({ label, value, onChange, placeholder, icon: Icon, readOnly }: InputFieldProps) => (
   <div className="group">
     <label className="block text-sm font-bold text-slate-700 mb-2 transition-colors group-focus-within:text-emerald-600">{label}</label>
     <div className="relative">
       <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
         {Icon && <Icon className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-emerald-500" />}
       </div>
-      <input type="text" value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} className={`w-full pl-12 pr-4 py-3 rounded-xl border-2 transition-all duration-300 backdrop-blur-sm ${readOnly ? 'bg-slate-50/80 border-slate-200 cursor-not-allowed' : 'bg-white/80 border-slate-200 hover:border-emerald-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20'} shadow-sm`} />
+      <input 
+        type="text" 
+        value={value} 
+        onChange={onChange} 
+        placeholder={placeholder} 
+        readOnly={readOnly} 
+        className={`w-full pl-12 pr-4 py-3 rounded-xl border-2 transition-all duration-300 backdrop-blur-sm ${readOnly ? 'bg-slate-50/80 border-slate-200 cursor-not-allowed' : 'bg-white/80 border-slate-200 hover:border-emerald-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20'} shadow-sm`} 
+      />
     </div>
   </div>
 );
 
-const ColorPalette = ({ selectedColor, onSelect, readOnly }) => {
+interface ColorPaletteProps {
+  selectedColor: string;
+  onSelect: (color: string) => void;
+  readOnly?: boolean;
+}
+
+const ColorPalette = ({ selectedColor, onSelect, readOnly = false }: ColorPaletteProps) => {
   const colors = ['#FFFFFF', '#1F2937', '#EF4444', '#F97316', '#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'];
   return (
     <div>
       <label className="block text-sm font-bold text-slate-700 mb-2">Couleur</label>
       <div className="flex flex-wrap gap-2">
         {colors.map(color => (
-          <button key={color} type="button" onClick={() => !readOnly && onSelect(color)} className={`h-10 w-10 rounded-full border-4 transition-all duration-200 shadow-lg ${selectedColor === color ? 'border-emerald-500 scale-110 shadow-emerald-500/30' : 'border-white hover:scale-105'} ${!readOnly ? 'cursor-pointer' : 'cursor-not-allowed'}`} style={{ backgroundColor: color }} disabled={readOnly} />
+          <button 
+            key={color} 
+            type="button" 
+            onClick={() => !readOnly && onSelect(color)} 
+            className={`h-10 w-10 rounded-full border-4 transition-all duration-200 shadow-lg ${selectedColor === color ? 'border-emerald-500 scale-110 shadow-emerald-500/30' : 'border-white hover:scale-105'} ${!readOnly ? 'cursor-pointer' : 'cursor-not-allowed'}`} 
+            style={{ backgroundColor: color }} 
+            disabled={readOnly} 
+          />
         ))}
       </div>
     </div>
@@ -58,7 +111,7 @@ const RelayPointServiceCard = () => {
   // ÉTATS PERSISTANTS
   const [isEditing, setIsEditing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [backupData, setBackupData] = useState(null);
+  const [backupData, setBackupData] = useState<any>(null);
 
   const [nom, setNom] = useState(() => loadFromMemory('nom', "Pick & Drop - Agence du Lac"));
   const [adresseGps, setAdresseGps] = useState(() => loadFromMemory('adresseGps', ""));
@@ -66,19 +119,21 @@ const RelayPointServiceCard = () => {
   const [description, setDescription] = useState(() => loadFromMemory('description', "Votre point relais de confiance au coeur de la ville. Nous combinons sécurité, rapidité et un service client exceptionnel pour tous vos besoins logistiques."));
   const [photoPreview, setPhotoPreview] = useState(() => loadFromMemory('photoPreview', "/images/relay-point-placeholder.jpg"));
 
-  const [vehicules, setVehicules] = useState(() => loadFromMemory('vehicules', [{ nom: 'Van Utilitaire', marque: 'Toyota Hiace', couleur: '#10B981', immatriculation: 'LT 589-AI', dimensions: { l: 450, w: 180, h: 190 } }]));
-  const [newVehicule, setNewVehicule] = useState({ nom: '', marque: '', couleur: '#10B981', immatriculation: '', dimensions: { l: '', w: '', h: '' } });
+  const [vehicules, setVehicules] = useState<Vehicle[]>(() => loadFromMemory('vehicules', [{ nom: 'Van Utilitaire', marque: 'Toyota Hiace', couleur: '#10B981', immatriculation: 'LT 589-AI', dimensions: { l: 450, w: 180, h: 190 } }]));
+  const [newVehicule, setNewVehicule] = useState<Vehicle>({ nom: '', marque: '', couleur: '#10B981', immatriculation: '', dimensions: { l: '', w: '', h: '' } });
   
-  const [services, setServices] = useState(() => loadFromMemory('services', ['Aide au chargement sur demande', 'Emballages éco-responsables', 'Stockage sécurisé 24/7']));
+  const [services, setServices] = useState<string[]>(() => loadFromMemory('services', ['Aide au chargement sur demande', 'Emballages éco-responsables', 'Stockage sécurisé 24/7']));
   const [newService, setNewService] = useState('');
   
-  const [personnel, setPersonnel] = useState([]);
+  const [personnel, setPersonnel] = useState<StaffMember[]>([]);
   const [devise, setDevise] = useState(() => loadFromMemory('devise', 'XAF'));
-  const [tarifs, setTarifs] = useState(() => loadFromMemory('tarifs', [{ service: 'Réception Colis Standard (< 5kg)', prix: '1500' }, { service: 'Réception Colis Large (5-15kg)', prix: '3000' }, { service: 'Gardiennage / jour (après 7 jours)', prix: '500' }]));
-  const [newTarif, setNewTarif] = useState({ service: '', prix: '' });
+  const [tarifs, setTarifs] = useState<Tarif[]>(() => loadFromMemory('tarifs', [{ service: 'Réception Colis Standard (< 5kg)', prix: '1500' }, { service: 'Réception Colis Large (5-15kg)', prix: '3000' }, { service: 'Gardiennage / jour (après 7 jours)', prix: '500' }]));
+  const [newTarif, setNewTarif] = useState<Tarif>({ service: '', prix: '' });
   const [promo, setPromo] = useState(() => loadFromMemory('promo', "BIENVENUE ! Votre première réception de colis direct est GRATUITE !"));
 
-  useEffect(() => { setPersonnel(initialStaffMembers.map(m => ({ id: m.id, name: m.name, role: m.role }))); }, []);
+  useEffect(() => { 
+    setPersonnel(initialStaffMembers.map(m => ({ id: m.id, name: m.name, role: m.role, avatar: m.avatar }))); 
+  }, []);
 
   // SAUVEGARDE AUTOMATIQUE
   useEffect(() => { saveToMemory('nom', nom); }, [nom]);
@@ -94,19 +149,31 @@ const RelayPointServiceCard = () => {
 
   // GESTIONNAIRES
   const handleEditToggle = () => {
-    if (!isEditing) { setBackupData({ nom, adresseGps, adresseInformelle, description, vehicules, services, tarifs, promo, devise }); }
+    if (!isEditing) { 
+      setBackupData({ nom, adresseGps, adresseInformelle, description, vehicules, services, tarifs, promo, devise }); 
+    }
     setIsEditing(!isEditing);
   };
 
-  const handleSaveChanges = () => { setIsEditing(false); setBackupData(null); };
+  const handleSaveChanges = () => { 
+    setIsEditing(false); 
+    setBackupData(null); 
+  };
 
   const handleCancelChanges = () => {
     if (backupData) {
-      setNom(backupData.nom); setAdresseGps(backupData.adresseGps); setAdresseInformelle(backupData.adresseInformelle);
-      setDescription(backupData.description); setVehicules(backupData.vehicules); setServices(backupData.services);
-      setTarifs(backupData.tarifs); setPromo(backupData.promo); setDevise(backupData.devise);
+      setNom(backupData.nom); 
+      setAdresseGps(backupData.adresseGps); 
+      setAdresseInformelle(backupData.adresseInformelle);
+      setDescription(backupData.description); 
+      setVehicules(backupData.vehicules); 
+      setServices(backupData.services);
+      setTarifs(backupData.tarifs); 
+      setPromo(backupData.promo); 
+      setDevise(backupData.devise);
     }
-    setIsEditing(false); setBackupData(null);
+    setIsEditing(false); 
+    setBackupData(null);
   };
 
   const handleGetLocation = () => {
@@ -123,12 +190,17 @@ const RelayPointServiceCard = () => {
     }
   };
 
-  const handlePhotoChange = (e) => {
-    if (e.target.files && e.target.files[0]) { setPhotoPreview(URL.createObjectURL(e.target.files[0])); }
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) { 
+      setPhotoPreview(URL.createObjectURL(e.target.files[0])); 
+    }
   };
 
-  const handleAddItem = (list, setList, newItem, setNewItem) => {
-    if (typeof newItem === 'string' && newItem.trim() !== '') { setList([...list, newItem.trim()]); setNewItem(''); }
+  const handleAddItem = <T,>(list: T[], setList: (items: T[]) => void, newItem: T, setNewItem: (item: T) => void) => {
+    if (typeof newItem === 'string' && (newItem as string).trim() !== '') { 
+      setList([...list, (newItem as string).trim() as T]); 
+      setNewItem('' as T); 
+    }
     else if (typeof newItem === 'object' && newItem) {
       setList([...list, newItem]);
       if ('marque' in newItem) setNewVehicule({ nom: '', marque: '', couleur: '#10B981', immatriculation: '', dimensions: { l: '', w: '', h: '' } });
@@ -136,11 +208,19 @@ const RelayPointServiceCard = () => {
     }
   };
 
-  const handleRemoveItem = (list, setList, index) => { setList(list.filter((_, i) => i !== index)); };
+  const handleRemoveItem = <T,>(list: T[], setList: (items: T[]) => void, index: number) => { 
+    setList(list.filter((_, i) => i !== index)); 
+  };
 
-  const handleDimensionChange = (e, dim) => {
+  const handleDimensionChange = (e: React.ChangeEvent<HTMLInputElement>, dim: string) => {
     const value = e.target.value.replace(/[^0-9]/g, '');
-    setNewVehicule(prev => ({ ...prev, dimensions: { ...prev.dimensions, [dim]: value } }));
+    setNewVehicule(prev => ({ 
+      ...prev, 
+      dimensions: { 
+        ...prev.dimensions, 
+        [dim]: value 
+      } 
+    }));
   };
 
   // APERÇU MODERNE
@@ -228,7 +308,7 @@ const RelayPointServiceCard = () => {
               {tarifs.map((t,i) => (
                 <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
                   <span className="text-slate-700 font-medium text-sm">{t.service}</span>
-                  <span className="font-black text-emerald-600 text-lg">{new Intl.NumberFormat().format(t.prix)}</span>
+                  <span className="font-black text-emerald-600 text-lg">{new Intl.NumberFormat().format(parseInt(t.prix))}</span>
                 </div>
               ))}
             </div>
@@ -454,7 +534,7 @@ const RelayPointServiceCard = () => {
                 <div key={index} className="group flex justify-between items-center p-5 rounded-2xl bg-gradient-to-r from-slate-50 to-slate-100 hover:from-emerald-50 hover:to-green-50 border border-slate-200 hover:border-emerald-300 transition-all duration-300 hover:shadow-lg">
                   <span className="text-slate-700 font-medium group-hover:text-slate-800 transition-colors">{t.service}</span>
                   <div className="flex items-center gap-3">
-                    <span className="font-black text-xl text-emerald-600 group-hover:text-emerald-700 transition-colors">{new Intl.NumberFormat().format(t.prix)}</span>
+                    <span className="font-black text-xl text-emerald-600 group-hover:text-emerald-700 transition-colors">{new Intl.NumberFormat().format(parseInt(t.prix))}</span>
                     {isEditing && (
                       <button onClick={() => handleRemoveItem(tarifs, setTarifs, index)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all duration-300 p-2 hover:bg-red-50 rounded-xl">
                         <X className="w-5 h-5"/>
