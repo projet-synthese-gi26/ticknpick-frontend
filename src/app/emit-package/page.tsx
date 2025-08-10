@@ -52,10 +52,6 @@ interface ShippingFormDataGlobal {
   totalPrice?: number;
 }
 
-interface ShippingPageProps {
-  onBackToSelection: () => void;
-}
-
 const ShippingSteps = ({ currentStep = 1 }: { currentStep?: number }) => {
   const steps = [
     { number: 1, title: ["Description", "du colis"], icon: <TruckIcon className="w-7 h-7" /> },
@@ -174,7 +170,8 @@ const NotificationComponent = ({
   );
 };
 
-const ShippingPage: React.FC<ShippingPageProps> = ({ onBackToSelection }) => {
+// Page component - NO PROPS REQUIRED for Next.js pages
+const ShippingPage: React.FC = () => {
   const router = useRouter();
   
   // État pour gérer le type de flux
@@ -612,7 +609,7 @@ const ShippingPage: React.FC<ShippingPageProps> = ({ onBackToSelection }) => {
       <main className="container mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-8">
         {flowType === 'new_package' && (
           <div className="text-center mb-8 sm:mb-10">
-          <button onClick={onBackToSelection} className="mb-4 group flex items-center text-green-600 hover:text-green-700 transition-colors text-sm">
+          <button onClick={handleBackToSelection} className="mb-4 group flex items-center text-green-600 hover:text-green-700 transition-colors text-sm">
             <ArrowUturnLeftIcon className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
             Retour
           </button>
