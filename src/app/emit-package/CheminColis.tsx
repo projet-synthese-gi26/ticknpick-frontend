@@ -434,8 +434,8 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                     </div>
                   </div>
                   {displayedPoints.length > 0 ? displayedPoints
-                    .filter((point: PointRelais) => point && point.id !== fixedOriginPoint.id)
-                    .map((point: PointRelais) => {
+                    .filter(point => point.id !== fixedOriginPoint.id)
+                    .map(point => {
                     // CORRIGÉ : TypeScript assure maintenant que point est défini et de type PointRelais
                     const isSelectedAsArrival = selectedDestination?.id === point.id;
                     const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
