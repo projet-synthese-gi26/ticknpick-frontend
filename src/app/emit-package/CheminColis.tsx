@@ -447,8 +447,8 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                         return <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>;
                     }
 
-                    // Step 3: Map over the new variable. TypeScript now correctly infers the type of 'point'.
-                    return destinationPoints.map(point => {
+                    // Step 3: Map over the new variable with an explicit type annotation for 'point'.
+                    return destinationPoints.map((point: PointRelais) => { // <<< CORRECTION APPLIQUÉE ICI
                         const isSelectedAsArrival = selectedDestination?.id === point.id;
                         const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
                         
