@@ -414,54 +414,66 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                 </div>
               </form>
             ) : (
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                  <p className="text-xs text-gray-500 px-1 pb-1 border-b border-dashed">
-                     Votre point de départ est : <strong className="text-red-600">{fixedOriginPoint.name}</strong>. Veuillez choisir une destination.
-                  </p>
-                  {/* NOUVEAU : Légende des couleurs */}
-                  <div className="text-xs text-gray-500 px-1 pb-2 border-b border-dashed space-y-1">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+                <p className="text-xs text-gray-500 px-1 pb-1 border-b border-dashed">
+                    Votre point de départ est : <strong className="text-red-600">{fixedOriginPoint.name}</strong>. Veuillez choisir une destination.
+                </p>
+                {/* NOUVEAU : Légende des couleurs */}
+                <div className="text-xs text-gray-500 px-1 pb-2 border-b border-dashed space-y-1">
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                      <span>Point de départ (origine)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                      <span>Points à proximité (&lt; 200m)</span>
+                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                        <span>Point de départ (origine)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <span>Autres points relais</span>
+                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                        <span>Points à proximité (&lt; 200m)</span>
                     </div>
-                  </div>
-                  {displayedPoints.length > 0 ? displayedPoints
-                    .filter(point => point.id !== fixedOriginPoint.id)
-                    .map(point => {
-                    // CORRIGÉ : TypeScript assure maintenant que point est défini et de type PointRelais
-                    const isSelectedAsArrival = selectedDestination?.id === point.id;
-                    const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
-                    
-                    // NOUVEAU : Calculer la couleur de fond selon la distance
-                    const distance = calculateDistance(
-                      fixedOriginPoint.lat, fixedOriginPoint.lng,
-                      point.lat, point.lng
-                    );
-                    const isNearby = distance <= 200;
-                    
-                    return (
-                    <div key={`list-point-${point.id}`} onClick={() => handlePointSelect(point)} className={`p-2.5 rounded-lg border transition-all duration-150 flex items-start gap-2.5 cursor-pointer ${isSelectedAsArrival ? 'bg-red-50 border-red-500' : isNearby ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' : 'hover:bg-gray-100 border-gray-200'}`}>
-                        <div className={`mt-0.5 w-8 h-8 shrink-0 rounded-md flex items-center justify-center text-sm ${isNearby ? 'bg-purple-200 text-purple-700' : 'bg-gray-200 text-gray-700'}`}>
-                          <TypeIcon size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`font-semibold text-sm text-gray-800 truncate`}>{point.name}</h4>
-                          <p className="text-xs text-gray-600 truncate">{point.address}</p>
-                          <p className="text-xs text-gray-500">{Math.round(distance)}m du départ</p>
-                        </div>
-                        <ChevronRight size={18} className="text-gray-400 self-center shrink-0"/>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span>Autres points relais</span>
                     </div>
-                    );
-                }) : <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>}
                 </div>
+
+                {/* -- START OF MODIFIED BLOCK -- */}
+                {(() => {
+                    // Step 1: Filter the points into a new, clearly-typed variable.
+                    const destinationPoints = displayedPoints.filter(
+                        point => point.id !== fixedOriginPoint.id
+                    );
+
+                    // Step 2: Check if the new variable is empty.
+                    if (destinationPoints.length === 0) {
+                        return <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>;
+                    }
+
+                    // Step 3: Map over the new variable. TypeScript now correctly infers the type of 'point'.
+                    return destinationPoints.map(point => {
+                        const isSelectedAsArrival = selectedDestination?.id === point.id;
+                        const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
+                        
+                        const distance = calculateDistance(
+                            fixedOriginPoint.lat, fixedOriginPoint.lng,
+                            point.lat, point.lng
+                        );
+                        const isNearby = distance <= 200;
+                        
+                        return (
+                            <div key={`list-point-${point.id}`} onClick={() => handlePointSelect(point)} className={`p-2.5 rounded-lg border transition-all duration-150 flex items-start gap-2.5 cursor-pointer ${isSelectedAsArrival ? 'bg-red-50 border-red-500' : isNearby ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' : 'hover:bg-gray-100 border-gray-200'}`}>
+                                <div className={`mt-0.5 w-8 h-8 shrink-0 rounded-md flex items-center justify-center text-sm ${isNearby ? 'bg-purple-200 text-purple-700' : 'bg-gray-200 text-gray-700'}`}>
+                                  <TypeIcon size={16} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className={`font-semibold text-sm text-gray-800 truncate`}>{point.name}</h4>
+                                  <p className="text-xs text-gray-600 truncate">{point.address}</p>
+                                  <p className="text-xs text-gray-500">{Math.round(distance)}m du départ</p>
+                                </div>
+                                <ChevronRight size={18} className="text-gray-400 self-center shrink-0"/>
+                            </div>
+                        );
+                    });
+                })()}
+                {/* -- END OF MODIFIED BLOCK -- */}
+            </div>
             )}
           </div>
         </aside>
