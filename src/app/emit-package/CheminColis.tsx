@@ -433,10 +433,9 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                       <span>Autres points relais</span>
                     </div>
                   </div>
-                  {displayedPoints.length > 0 ? displayedPoints.map((point: PointRelais) => {
-                    // Fixed: Add type assertion to ensure point is not never
-                    if (!point || point.id === fixedOriginPoint.id) return null;
-                    
+                  {displayedPoints.length > 0 ? displayedPoints
+                    .filter((point: PointRelais) => point && point.id !== fixedOriginPoint.id)
+                    .map((point: PointRelais) => {
                     const isSelectedAsArrival = selectedDestination?.id === point.id;
                     const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
                     
