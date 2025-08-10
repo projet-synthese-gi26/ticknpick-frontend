@@ -436,8 +436,8 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                   {displayedPoints.length > 0 ? displayedPoints
                     .filter((point: PointRelais) => point && point.id !== fixedOriginPoint.id)
                     .map((point: PointRelais) => {
-                    // FIXED: Added null check for selectedDestination before accessing id
-                    const isSelectedAsArrival = selectedDestination !== null && selectedDestination.id === point.id;
+                    // CORRIGÉ : TypeScript assure maintenant que point est défini et de type PointRelais
+                    const isSelectedAsArrival = selectedDestination?.id === point.id;
                     const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
                     
                     // NOUVEAU : Calculer la couleur de fond selon la distance
