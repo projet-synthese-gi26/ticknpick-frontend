@@ -67,7 +67,7 @@ export default function Navbar() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/PickDropPoint/app/home" className="flex items-center space-x-2 group">
+          <Link href="/home" className="flex items-center space-x-2 group">
             <MapPinHouse className={`h-8 w-8 transition-colors duration-300 ${isScrolled || isOpen ? 'text-green-600' : 'text-gray-700 group-hover:text-green-600'}`} />
             <span
               className={`text-3xl font-bold transition-colors duration-300 

@@ -59,7 +59,7 @@ export default function HomePage() {
           <div className={`text-center transform transition-all duration-1000 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}> {/* translate-y réduit */}
             <div className="inline-block mb-4"> {/* mb réduit */}
               <h1 className="text-5xl sm:text-6xl font-bold bg-gradient-to-r from-gray-800 via-green-600 to-emerald-700 bg-clip-text text-transparent">
-                Pick n Drop Point
+                PicknDrop Point
               </h1>
               <div className="h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent rounded-full mt-2"></div> {/* animate-pulse enlevé */}
             </div>
