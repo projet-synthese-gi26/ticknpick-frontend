@@ -92,7 +92,8 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
   };
 
   const fixedOriginPoint = allPoints[1];
-  const selectedDestination = getPointById(formData.arrivalPointId );
+  // FIX: Handle undefined by providing null as fallback
+  const selectedDestination = getPointById(formData.arrivalPointId ?? null);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
