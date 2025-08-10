@@ -437,8 +437,8 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                 {/* -- START OF MODIFIED BLOCK -- */}
                 {(() => {
                     // Step 1: Filter the points into a new, clearly-typed variable.
-                    const destinationPoints = displayedPoints.filter(
-                        point => point.id !== fixedOriginPoint.id
+                    const destinationPoints: PointRelais[] = displayedPoints.filter(
+                        (point): point is PointRelais => point.id !== fixedOriginPoint.id
                     );
 
                     // Step 2: Check if the new variable is empty.
