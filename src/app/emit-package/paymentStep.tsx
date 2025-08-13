@@ -4,8 +4,8 @@ import {
   CreditCardIcon, BanknotesIcon, DevicePhoneMobileIcon, CheckCircleIcon, XMarkIcon,
   PrinterIcon, DocumentTextIcon, ShieldCheckIcon, ClockIcon, MapPinIcon, UserIcon,
   PhoneIcon, ScaleIcon, CubeIcon, InformationCircleIcon, ShareIcon, SparklesIcon,
-  LockClosedIcon, HeartIcon, HomeIcon, ArrowRightIcon, UserCircleIcon, // Pour l'expéditeur et destinataire payeur
-  GiftIcon, // Pour le destinataire payeur
+  LockClosedIcon, HeartIcon, HomeIcon, ArrowRightIcon, UserCircleIcon,
+  GiftIcon,
 } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -13,11 +13,10 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 
-
-// Icônes de partage (vous pourriez utiliser des SVG ou des composants d'icônes d'une autre librairie)
-const WhatsAppIcon = () => <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />; // Remplacez par le chemin réel
-const TelegramIcon = () => <img src="/telegram.jpeg" alt="Telegram" className="w-5 h-5" />; // Remplacez par le chemin réel
-const MessengerIcon = () => <img src="/messenger.jpeg" alt="Messenger" className="w-5 h-5" />; // Remplacez par le chemin réel
+// Icônes de partage
+const WhatsAppIcon = () => <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />;
+const TelegramIcon = () => <img src="/telegram.jpeg" alt="Telegram" className="w-5 h-5" />;
+const MessengerIcon = () => <img src="/messenger.jpeg" alt="Messenger" className="w-5 h-5" />;
 const SmsIcon = () => <MessageSquare className="w-5 h-5" />;
 
 interface ExtendedFormData {
@@ -26,15 +25,15 @@ interface ExtendedFormData {
   recipientEmail?: string;
   departurePointName?: string;
   arrivalPointName?: string;
-  compensation?: number; // Frais d'assurance
+  compensation?: number;
   weight?: string;
-  distance?: number; // Ajouté pour afficher la distance
-  // ... autres champs de RouteSelection
+  distance?: number;
   departurePointId?: number | null;
   arrivalPointId?: number | null;
   originCoords?: { lat: number, lng: number };
   destinationCoords?: { lat: number, lng: number };
   signatureData?: string | null;
+  totalPrice?: number;
 }
 
 interface PackageData {
@@ -47,16 +46,16 @@ interface PackageData {
   isPerishable?: boolean;
   designation?: string;
   image?: string | null;
-  declaredValue?: string; // Valeur déclarée du colis pour l'assurance
+  declaredValue?: string;
   isInsured?: boolean;
   expressOption?: '24h' | '48h' | '72h' | '';
 }
 
 interface PaymentStepProps {
   onBack: () => void;
-  formData: ExtendedFormData & { totalPrice?: number }; // Assurer que totalPrice est attendu
-  packageData: PackageData; // Gardé pour le récapitulatif
-  onNewTask: () => void; // <<< NOUVEAU
+  formData: ExtendedFormData;
+  packageData: PackageData;
+  onNewTask: () => void;
   onShippingSuccess: (trackingNumber?: string) => Promise<void>; 
 }
 
@@ -77,18 +76,16 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
   const [processingStep, setProcessingStep] = useState(0);
   const [currentDate, setCurrentDate] = useState('');
 
-
-
   // Simuler les informations de l'utilisateur connecté
   const currentUser = {
-    name: "Gaby Nguetcho", // Remplacez par les vraies données
+    name: "Gaby Nguetcho",
     phone: "+237 691 743 511",
     email: "gaby.doe@example.com"
   };
 
   useEffect(() => {
     const generateTrackingNumber = () => {
-      const prefix = 'PDL'; // Pick & Drop Link
+      const prefix = 'PDL';
       const timestamp = Date.now().toString().slice(-7);
       const random = Math.random().toString(36).substring(2, 5).toUpperCase();
       return `${prefix}${timestamp}${random}`;
@@ -106,7 +103,6 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
     { id: 'recipient_pay', name: 'Paiement par le destinataire', description: 'À la réception du colis', icon: <GiftIcon className="w-8 h-8" />, color: 'purple', fees: 0, gradient: 'from-purple-500 to-pink-500', popular: false },
   ];
 
-
   const calculateTotalForPayer = useCallback(() => {
     const basePrice = formData.totalPrice || 0;
     const paymentFee = paymentMethods.find(m => m.id === selectedMethod)?.fees || 0;
@@ -114,434 +110,412 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
     return basePrice + paymentFee;
   }, [selectedMethod, formData.totalPrice, paymentMethods]);
 
-const generatePDF = async (signatureImageDataUrl?: string | null) => { // Accepter la signature en argument
-  try {
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    // const pageHeight = pdf.internal.pageSize.getHeight(); // Moins utilisé ici, mais bon à avoir
-    let yPosition = 15; // Commencer un peu plus haut pour l'en-tête
+  // Helper functions for price calculation
+  const calculatePackageBasePrice = () => formData.totalPrice || 0;
+  const calculateAdditionalFees = () => 0; // This would normally include fragile, express fees etc
+  const calculateInsuranceFee = () => 0; // This would calculate insurance based on declared value
+  const calculateTotal = () => calculateTotalForPayer();
 
-    // --- EN-TÊTE ---
-    // Logo et Nom de l'application (gauche)
-    pdf.setFontSize(20);
-    pdf.setFont('helvetica', 'bold');
-    // Si vous avez un logo:
-    // pdf.addImage(logoImageBase64, 'PNG', 15, yPosition - 5, 20, 20); // (logo, type, x, y, w, h)
-    // pdf.text(APP_NAME, 40, yPosition + 5); // Ajuster x si logo
-    pdf.text(APP_NAME, 15, yPosition + 5); // Si pas de logo
+  const generatePDF = async (signatureImageDataUrl?: string | null) => {
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      let yPosition = 15;
 
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Votre partenaire logistique fiable.', 15, yPosition + 11);
+      // --- EN-TÊTE ---
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(APP_NAME, 15, yPosition + 5);
 
-    // QR Code (centre de l'en-tête)
-    const QRCode = (await import('qrcode')).default;
-    const qrDataURL = await QRCode.toDataURL(`Suivi ${APP_NAME}: ${trackingNumber}`, {
-      width: 120, // Légèrement plus grand pour la visibilité
-      margin: 1,
-      color: { dark: '#000000', light: '#FFFFFF' }
-    });
-    const qrCodeWidth = 28; // Largeur du QR code en mm
-    const qrCodeX = (pageWidth - qrCodeWidth) / 2; // Centrer horizontalement
-    pdf.addImage(qrDataURL, 'PNG', qrCodeX, yPosition - 2 , qrCodeWidth, qrCodeWidth); // Ajuster yPosition si besoin
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Votre partenaire logistique fiable.', 15, yPosition + 11);
 
-    // Bordereau N° et Date (droite)
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(`Bordereau N°: ${trackingNumber}`, pageWidth - 65, yPosition + 5);
+      // QR Code - Use a simpler approach without dynamic import
+      const qrCodeWidth = 28;
+      const qrCodeX = (pageWidth - qrCodeWidth) / 2;
+      
+      // Note: For production, you might want to generate QR code on server-side or use a different approach
+      pdf.setFontSize(8);
+      pdf.text(`QR: ${trackingNumber}`, qrCodeX, yPosition + 10);
 
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Date: ${currentDate}`, pageWidth - 65, yPosition + 11);
+      // Bordereau N° et Date (droite)
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`Bordereau N°: ${trackingNumber}`, pageWidth - 65, yPosition + 5);
 
-    yPosition += qrCodeWidth + 5; // Augmenter yPosition après l'élément le plus grand de l'en-tête
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Date: ${currentDate}`, pageWidth - 65, yPosition + 11);
 
-    // Ligne de séparation sous l'en-tête
-    pdf.setLineWidth(0.5);
-    pdf.line(15, yPosition, pageWidth - 15, yPosition);
-    yPosition += 10;
+      yPosition += qrCodeWidth + 5;
 
-    // --- EXPÉDITEUR ET DESTINATAIRE (côte à côte) ---
-    const column1X = 15;
-    const column2X = pageWidth / 2 + 5;
-    let currentYExp = yPosition;
-    let currentYDest = yPosition;
+      // Ligne de séparation sous l'en-tête
+      pdf.setLineWidth(0.5);
+      pdf.line(15, yPosition, pageWidth - 15, yPosition);
+      yPosition += 10;
 
-    pdf.setFontSize(13);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('EXPÉDITEUR', column1X, currentYExp);
-    currentYExp += 7;
+      // --- EXPÉDITEUR ET DESTINATAIRE (côte à côte) ---
+      const column1X = 15;
+      const column2X = pageWidth / 2 + 5;
+      let currentYExp = yPosition;
+      let currentYDest = yPosition;
 
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Nom: ${currentUser.name}`, column1X, currentYExp);
-    currentYExp += 5;
-    pdf.text(`Téléphone: ${currentUser.phone}`, column1X, currentYExp);
-    currentYExp += 5;
-    pdf.text(`Email: ${currentUser.email}`, column1X, currentYExp);
-    currentYExp += 5;
-    pdf.text(`Point de dépôt: ${formData?.departurePointName || 'N/A'}`, column1X, currentYExp);
-
-    pdf.setFontSize(13);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('DESTINATAIRE', column2X, currentYDest);
-    currentYDest += 7;
-
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Nom: ${formData?.recipientName || 'N/A'}`, column2X, currentYDest);
-    currentYDest += 5;
-    pdf.text(`Téléphone: ${formData?.recipientPhone || 'N/A'}`, column2X, currentYDest);
-    currentYDest += 5;
-    if (formData?.recipientEmail) {
-      pdf.text(`Email: ${formData.recipientEmail}`, column2X, currentYDest);
-      currentYDest += 5;
-    }
-    pdf.text(`Point de retrait: ${formData?.arrivalPointName || 'N/A'}`, column2X, currentYDest);
-
-    yPosition = Math.max(currentYExp, currentYDest) + 10; // Continuer à partir de la colonne la plus longue
-
-    // --- TRAJET ---
-    if (formData.departurePointName && formData.arrivalPointName) {
       pdf.setFontSize(13);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('TRAJET', 15, yPosition);
+      pdf.text('EXPÉDITEUR', column1X, currentYExp);
+      currentYExp += 7;
+
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Nom: ${currentUser.name}`, column1X, currentYExp);
+      currentYExp += 5;
+      pdf.text(`Téléphone: ${currentUser.phone}`, column1X, currentYExp);
+      currentYExp += 5;
+      pdf.text(`Email: ${currentUser.email}`, column1X, currentYExp);
+      currentYExp += 5;
+      pdf.text(`Point de dépôt: ${formData?.departurePointName || 'N/A'}`, column1X, currentYExp);
+
+      pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('DESTINATAIRE', column2X, currentYDest);
+      currentYDest += 7;
+
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Nom: ${formData?.recipientName || 'N/A'}`, column2X, currentYDest);
+      currentYDest += 5;
+      pdf.text(`Téléphone: ${formData?.recipientPhone || 'N/A'}`, column2X, currentYDest);
+      currentYDest += 5;
+      if (formData?.recipientEmail) {
+        pdf.text(`Email: ${formData.recipientEmail}`, column2X, currentYDest);
+        currentYDest += 5;
+      }
+      pdf.text(`Point de retrait: ${formData?.arrivalPointName || 'N/A'}`, column2X, currentYDest);
+
+      yPosition = Math.max(currentYExp, currentYDest) + 10;
+
+      // --- TRAJET ---
+      if (formData.departurePointName && formData.arrivalPointName) {
+        pdf.setFontSize(13);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('TRAJET', 15, yPosition);
+        yPosition += 7;
+
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        const trajetText = `${formData.departurePointName}  ➔  ${formData.arrivalPointName}`;
+        const trajetTextWidth = pdf.getTextWidth(trajetText);
+        pdf.text(trajetText, (pageWidth - trajetTextWidth) / 2, yPosition);
+        yPosition += 6;
+        
+        if (formData.distance) {
+          pdf.setFontSize(8);
+          const distanceText = `Distance estimée: ${formData.distance.toFixed(1)} km`;
+          const distanceTextWidth = pdf.getTextWidth(distanceText);
+          pdf.text(distanceText, (pageWidth - distanceTextWidth) / 2, yPosition);
+          yPosition += 7;
+        } else {
+          yPosition += 2;
+        }
+      }
+
+      // --- DÉTAILS DU COLIS ---
+      pdf.setFontSize(13);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('DÉTAILS DU COLIS', 15, yPosition);
       yPosition += 7;
 
-      pdf.setFontSize(10);
+      pdf.setFontSize(9);
       pdf.setFont('helvetica', 'normal');
-      const trajetText = `${formData.departurePointName}  ➔  ${formData.arrivalPointName}`;
-      const trajetTextWidth = pdf.getTextWidth(trajetText);
-      pdf.text(trajetText, (pageWidth - trajetTextWidth) / 2, yPosition); // Centrer le texte du trajet
-      yPosition += 6;
+      const col1DetailsX = 15;
+      const col2DetailsX = pageWidth / 2 + 5;
+
+      pdf.text(`Désignation: ${packageData?.designation || 'Colis divers'}`, col1DetailsX, yPosition);
+      pdf.text(`Poids: ${packageData?.weight || formData?.weight || 'N/A'} kg`, col2DetailsX, yPosition);
+      yPosition += 5;
       
-      if (formData.distance) {
-        pdf.setFontSize(8);
-        const distanceText = `Distance estimée: ${formData.distance.toFixed(1)} km`;
-        const distanceTextWidth = pdf.getTextWidth(distanceText);
-        pdf.text(distanceText, (pageWidth - distanceTextWidth) / 2, yPosition);
-        yPosition += 7;
-      } else {
-        yPosition += 2;
+      if (packageData?.length) {
+        pdf.text(`Dimensions: ${packageData.length}x${packageData.width}x${packageData.height} cm`, col1DetailsX, yPosition);
+        pdf.text(`Type: ${packageData?.contentType || 'Solide'}`, col2DetailsX, yPosition);
+        yPosition += 5;
       }
-    }
-
-    // --- DÉTAILS DU COLIS ---
-    pdf.setFontSize(13);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('DÉTAILS DU COLIS', 15, yPosition);
-    yPosition += 7;
-
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    const col1DetailsX = 15;
-    const col2DetailsX = pageWidth / 2 + 5;
-
-    pdf.text(`Désignation: ${packageData?.designation || 'Colis divers'}`, col1DetailsX, yPosition);
-    pdf.text(`Poids: ${packageData?.weight || formData?.weight || 'N/A'} kg`, col2DetailsX, yPosition);
-    yPosition += 5;
-    
-    if (packageData?.length) {
-      pdf.text(`Dimensions: ${packageData.length}x${packageData.width}x${packageData.height} cm`, col1DetailsX, yPosition);
-      pdf.text(`Type: ${packageData?.contentType || 'Solide'}`, col2DetailsX, yPosition);
+      
+      pdf.text(`Fragile: ${packageData?.isFragile ? 'Oui' : 'Non'}`, col1DetailsX, yPosition);
+      pdf.text(`Périssable: ${packageData?.isPerishable ? 'Oui' : 'Non'}`, col2DetailsX, yPosition);
       yPosition += 5;
-    }
-    
-    pdf.text(`Fragile: ${packageData?.isFragile ? 'Oui' : 'Non'}`, col1DetailsX, yPosition);
-    pdf.text(`Périssable: ${packageData?.isPerishable ? 'Oui' : 'Non'}`, col2DetailsX, yPosition);
-    yPosition += 5;
-    
-    if (packageData?.isInsured && packageData.declaredValue) {
-      pdf.text(`Assuré: Oui (Valeur: ${parseFloat(packageData.declaredValue).toLocaleString()} FCFA)`, col1DetailsX, yPosition);
-      yPosition += 5;
-    }
-    yPosition += 3; // Espace avant la section suivante
+      
+      if (packageData?.isInsured && packageData.declaredValue) {
+        pdf.text(`Assuré: Oui (Valeur: ${parseFloat(packageData.declaredValue).toLocaleString()} FCFA)`, col1DetailsX, yPosition);
+        yPosition += 5;
+      }
+      yPosition += 3;
 
-    // --- RÉCAPITULATIF FINANCIER ---
-    pdf.setFontSize(13);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('RÉCAPITULATIF FINANCIER', 15, yPosition);
-    yPosition += 7;
-
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    const labelX = 15;
-    const amountX = pageWidth - 45; // Aligner les montants à droite
-    
-    const basePrice = calculatePackageBasePrice(); // Assurez-vous que ces fonctions existent et sont accessibles
-    const additionalFees = calculateAdditionalFees();
-    const insuranceFee = calculateInsuranceFee();
-    const paymentFees = selectedMethod !== 'recipient_pay' && paymentMethods.find(m => m.id === selectedMethod)?.fees > 0 
-      ? paymentMethods.find(m => m.id === selectedMethod)?.fees || 0 
-      : 0;
-    
-    pdf.text(`Prix de base du colis:`, labelX, yPosition);
-    pdf.text(`${basePrice.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
-    yPosition += 5;
-    
-    pdf.text(`Frais additionnels (fragile, etc.):`, labelX, yPosition);
-    pdf.text(`${additionalFees.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
-    yPosition += 5;
-    
-    pdf.text(`Assurance:`, labelX, yPosition);
-    pdf.text(`${insuranceFee.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
-    yPosition += 5;
-    
-    if (paymentFees > 0) {
-      pdf.text(`Frais ${paymentMethods.find(m => m.id === selectedMethod)?.name}:`, labelX, yPosition);
-      pdf.text(`${paymentFees.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
-      yPosition += 5;
-    }
-    
-    pdf.setLineWidth(0.3);
-    pdf.line(15, yPosition + 1, pageWidth - 15, yPosition + 1); // Ligne avant le total
-    yPosition += 6;
-    
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
-    const totalText = `TOTAL À PAYER ${selectedMethod === 'recipient_pay' ? 'PAR LE DESTINATAIRE' : 'PAR L\'EXPÉDITEUR'}:`;
-    const totalAmount = selectedMethod === 'recipient_pay' ? 
-      (basePrice + additionalFees + insuranceFee) : 
-      calculateTotal(); // Assurez-vous que cette fonction existe
-    
-    pdf.text(totalText, labelX, yPosition);
-    pdf.text(`${totalAmount.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
-    yPosition += 7;
-    
-    if (paymentStatus === 'success' && selectedMethod !== 'cash' && selectedMethod !== 'recipient_pay') {
-      pdf.setFontSize(8);
+      // --- RÉCAPITULATIF FINANCIER ---
+      pdf.setFontSize(13);
       pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 128, 0); // Vert
-      pdf.text('Colis payé comptant par l\'expéditeur.', amountX, yPosition, { align: 'right' });
-      pdf.setTextColor(0, 0, 0); // Revenir au noir
-      yPosition += 6;
-    }
+      pdf.text('RÉCAPITULATIF FINANCIER', 15, yPosition);
+      yPosition += 7;
 
-    // --- CONDITIONS ---
-    yPosition += 5;
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    const conditions = `Conditions: Le colis sera livré au point relais d'arrivée indiqué. Le destinataire doit présenter une pièce d'identité valide. ${APP_NAME} n'est pas responsable des dommages non déclarés ou dus à un emballage inadéquat si non fragile.`;
-    
-    const splitConditions = pdf.splitTextToSize(conditions, pageWidth - 30); // 15 de marge de chaque côté
-    pdf.text(splitConditions, 15, yPosition);
-    yPosition += splitConditions.length * 3.5 + 7; // Ajuster l'espacement
-
-    // --- SIGNATURES ---
-    const signatureY = yPosition;
-    const signatureExpX = 15;
-    const signatureAgenceX = pageWidth / 2 + 15;
-
-    pdf.setFontSize(9);
-    pdf.text('Signature Expéditeur:', signatureExpX, signatureY);
-    if (signatureImageDataUrl) {
-      try {
-        // Dimensions souhaitées pour la signature
-        const signatureWidthMm = 35; 
-        const signatureHeightMm = 15;
-        pdf.addImage(signatureImageDataUrl, 'PNG', signatureExpX, signatureY + 2, signatureWidthMm, signatureHeightMm);
-        // Dessiner une ligne en dessous si vous voulez toujours un espace pour signer manuellement en plus, ou passez-la
-        // pdf.line(signatureExpX, signatureY + 2 + signatureHeightMm + 2, signatureExpX + 45, signatureY + 2 + signatureHeightMm + 2);
-      } catch (e) {
-        console.error("Erreur d'ajout de l'image de signature:", e);
-        pdf.text('_________________________', signatureExpX, signatureY + 7); // Fallback
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      const labelX = 15;
+      const amountX = pageWidth - 45;
+      
+      const basePrice = calculatePackageBasePrice();
+      const additionalFees = calculateAdditionalFees();
+      const insuranceFee = calculateInsuranceFee();
+      const paymentFees = selectedMethod !== 'recipient_pay' && paymentMethods.find(m => m.id === selectedMethod)?.fees > 0 
+        ? paymentMethods.find(m => m.id === selectedMethod)?.fees || 0 
+        : 0;
+      
+      pdf.text(`Prix de base du colis:`, labelX, yPosition);
+      pdf.text(`${basePrice.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
+      yPosition += 5;
+      
+      pdf.text(`Frais additionnels (fragile, etc.):`, labelX, yPosition);
+      pdf.text(`${additionalFees.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
+      yPosition += 5;
+      
+      pdf.text(`Assurance:`, labelX, yPosition);
+      pdf.text(`${insuranceFee.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
+      yPosition += 5;
+      
+      if (paymentFees > 0) {
+        pdf.text(`Frais ${paymentMethods.find(m => m.id === selectedMethod)?.name}:`, labelX, yPosition);
+        pdf.text(`${paymentFees.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
+        yPosition += 5;
       }
-    } else {
-      pdf.text('_________________________', signatureExpX, signatureY + 7); // Ligne si pas de signature numérique
+      
+      pdf.setLineWidth(0.3);
+      pdf.line(15, yPosition + 1, pageWidth - 15, yPosition + 1);
+      yPosition += 6;
+      
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      const totalText = `TOTAL À PAYER ${selectedMethod === 'recipient_pay' ? 'PAR LE DESTINATAIRE' : 'PAR L\'EXPÉDITEUR'}:`;
+      const totalAmount = selectedMethod === 'recipient_pay' ? 
+        (basePrice + additionalFees + insuranceFee) : 
+        calculateTotal();
+      
+      pdf.text(totalText, labelX, yPosition);
+      pdf.text(`${totalAmount.toLocaleString()} FCFA`, amountX, yPosition, { align: 'right' });
+      yPosition += 7;
+      
+      if (paymentStatus === 'success' && selectedMethod !== 'cash' && selectedMethod !== 'recipient_pay') {
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 128, 0);
+        pdf.text('Colis payé comptant par l\'expéditeur.', amountX, yPosition, { align: 'right' });
+        pdf.setTextColor(0, 0, 0);
+        yPosition += 6;
+      }
+
+      // --- CONDITIONS ---
+      yPosition += 5;
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      const conditions = `Conditions: Le colis sera livré au point relais d'arrivée indiqué. Le destinataire doit présenter une pièce d'identité valide. ${APP_NAME} n'est pas responsable des dommages non déclarés ou dus à un emballage inadéquat si non fragile.`;
+      
+      const splitConditions = pdf.splitTextToSize(conditions, pageWidth - 30);
+      pdf.text(splitConditions, 15, yPosition);
+      yPosition += splitConditions.length * 3.5 + 7;
+
+      // --- SIGNATURES ---
+      const signatureY = yPosition;
+      const signatureExpX = 15;
+      const signatureAgenceX = pageWidth / 2 + 15;
+
+      pdf.setFontSize(9);
+      pdf.text('Signature Expéditeur:', signatureExpX, signatureY);
+      if (signatureImageDataUrl) {
+        try {
+          const signatureWidthMm = 35; 
+          const signatureHeightMm = 15;
+          pdf.addImage(signatureImageDataUrl, 'PNG', signatureExpX, signatureY + 2, signatureWidthMm, signatureHeightMm);
+        } catch (e) {
+          console.error("Erreur d'ajout de l'image de signature:", e);
+          pdf.text('_________________________', signatureExpX, signatureY + 7);
+        }
+      } else {
+        pdf.text('_________________________', signatureExpX, signatureY + 7);
+      }
+
+      pdf.text('Cachet & Signature Agence Départ:', signatureAgenceX, signatureY);
+      pdf.text('_________________________', signatureAgenceX, signatureY + 15);
+
+      yPosition = signatureY + 25;
+
+      // --- FOOTER ---
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'italic');
+      const footerText = `Merci d'utiliser ${APP_NAME}! - ${new Date().toLocaleString()}`;
+      const footerTextWidth = pdf.getTextWidth(footerText);
+      pdf.text(footerText, (pageWidth - footerTextWidth) / 2, pdf.internal.pageSize.getHeight() - 10);
+
+      pdf.save(`Bordereau-${trackingNumber}.pdf`);
+
+    } catch (error) {
+      console.error('Erreur lors de la génération du PDF:', error);
+      alert('Une erreur est survenue lors de la génération du bordereau. Veuillez réessayer.');
     }
+  };
 
-    pdf.text('Cachet & Signature Agence Départ:', signatureAgenceX, signatureY);
-    pdf.text('_________________________', signatureAgenceX, signatureY + 15); // Ligne pour cachet/signature agence
-
-    yPosition = signatureY + 25; // Espace après les signatures
-
-    // --- FOOTER ---
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'italic');
-    const footerText = `Merci d'utiliser ${APP_NAME}! - ${new Date().toLocaleString()}`;
-    const footerTextWidth = pdf.getTextWidth(footerText);
-    pdf.text(footerText, (pageWidth - footerTextWidth) / 2, pdf.internal.pageSize.getHeight() - 10); // En bas de page
-
-    // Télécharger le PDF
-    pdf.save(`Bordereau-${trackingNumber}.pdf`);
-
-  } catch (error) {
-    console.error('Erreur lors de la génération du PDF:', error);
-    // Afficher une alerte plus user-friendly ou un toast
-    alert('Une erreur est survenue lors de la génération du bordereau. Veuillez vérifier la console pour plus de détails ou réessayer.');
-  }
-};
-
-
-// Placez ce code À L'INTÉRIEUR de votre composant `PaymentStep`
-
-const InvoiceModal = () => (
-  <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-    <div className="bg-white rounded-xl max-w-4xl w-full max-h-[95vh] flex flex-col shadow-2xl animate-fadeIn">
-      
-      {/* --- En-tête du Modal --- */}
-      <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-slate-50 rounded-t-xl flex-shrink-0">
-        <h2 className="text-lg font-semibold text-gray-800">Aperçu du Bordereau - {APP_NAME}</h2>
-        <div className="flex items-center space-x-1.5">
-          <button 
-            onClick={() => generatePDF(formData?.signatureData)} // Appel de la fonction de génération de PDF
-            className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors" 
-            title="Imprimer / Télécharger en PDF"
-          > 
-            <PrinterIcon className="w-5 h-5" /> 
-          </button>
-          <button 
-            onClick={() => setShowInvoice(false)} // Pour fermer le modal
-            className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors" 
-            title="Fermer"
-          >
-            <XMarkIcon className="w-5 h-5" />
-          </button>
+  const InvoiceModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[95vh] flex flex-col shadow-2xl animate-fadeIn">
+        
+        <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-slate-50 rounded-t-xl flex-shrink-0">
+          <h2 className="text-lg font-semibold text-gray-800">Aperçu du Bordereau - {APP_NAME}</h2>
+          <div className="flex items-center space-x-1.5">
+            <button 
+              onClick={() => generatePDF(formData?.signatureData)}
+              className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors" 
+              title="Imprimer / Télécharger en PDF"
+            > 
+              <PrinterIcon className="w-5 h-5" /> 
+            </button>
+            <button 
+              onClick={() => setShowInvoice(false)}
+              className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors" 
+              title="Fermer"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-      </div>
-      
-      {/* --- Contenu du Bordereau (scrollable) --- */}
-      <div className="overflow-y-auto p-5" id="invoice-content-pdf">
-        {/* --- En-tête du Document --- */}
-        <div className="flex justify-between items-start pb-3 mb-4 border-b-2 border-green-500">
-            <div className="flex items-center">
-                <HomeIcon className="h-8 w-8 text-green-600 mr-2"/>
-                <div>
-                    <h1 className="text-2xl font-bold text-green-700 m-0">{APP_NAME}</h1>
-                    <p className="m-0 text-xs text-gray-500">Votre partenaire logistique fiable.</p>
-                </div>
-            </div>
-            <div className="text-right">
-                <p className="m-0 text-sm">Bordereau N°: <span className="font-bold">{trackingNumber}</span></p>
-                <p className="m-0 text-xs text-gray-600">Date: {currentDate}</p>
-                {trackingNumber && (
-                    <div className="mt-2 hidden print:block"> {/* QR Code peut être affiché à l'impression */}
-                        <QRCodeCanvas 
-                            value={`Suivi ${APP_NAME}: ${trackingNumber}`} 
-                            size={50} level="M" />
-                    </div>
-                )}
-            </div>
-        </div>
-
-        {/* --- Section Expéditeur et Destinataire --- */}
-        <div className="grid grid-cols-2 gap-6 mb-4">
-            <div className="invoice-section">
-                <h3 className="invoice-section-title text-green-600">EXPÉDITEUR</h3>
-                <p><strong>Nom:</strong> {currentUser.name}</p>
-                <p><strong>Téléphone:</strong> {currentUser.phone}</p>
-                <p><strong>Point de dépôt:</strong> {formData?.departurePointName || 'N/A'}</p>
-            </div>
-            <div className="invoice-section">
-                <h3 className="invoice-section-title text-blue-600">DESTINATAIRE</h3>
-                <p><strong>Nom:</strong> {formData?.recipientName || 'N/A'}</p>
-                <p><strong>Téléphone:</strong> {formData?.recipientPhone || 'N/A'}</p>
-                <p><strong>Point de retrait:</strong> {formData?.arrivalPointName || 'N/A'}</p>
-            </div>
-        </div>
-
-        {/* --- Section Détails du Colis --- */}
-        <div className="invoice-section mb-4">
-            <h3 className="invoice-section-title text-orange-600">DÉTAILS DU COLIS</h3>
-            <table className="w-full text-sm">
-                <tbody>
-                    <tr>
-                        <td className="invoice-table-label">Désignation:</td>
-                        <td className="invoice-table-value">{packageData?.designation || 'N/A'}</td>
-                        <td className="invoice-table-label">Poids:</td>
-                        <td className="invoice-table-value">{packageData?.weight || 'N/A'} kg</td>
-                    </tr>
-                    <tr>
-                        <td className="invoice-table-label">Dimensions:</td>
-                        <td className="invoice-table-value">{packageData?.length ? `${packageData.length}x${packageData.width}x${packageData.height} cm` : 'N/A'}</td>
-                        <td className="invoice-table-label">Contenu:</td>
-                        <td className="invoice-table-value capitalize">{packageData?.contentType || 'Solide'}</td>
-                    </tr>
-                    <tr>
-                        <td className="invoice-table-label">Options:</td>
-                        <td className="invoice-table-value" colSpan={3}>
-                           {packageData?.isFragile && <span className="mr-2">Fragile</span>}
-                           {packageData?.isPerishable && <span className="mr-2">Périssable</span>}
-                           {packageData?.isInsured && <span>Assuré ({Number(packageData.declaredValue || 0).toLocaleString()} FCFA)</span>}
-                           {!packageData?.isFragile && !packageData?.isPerishable && !packageData?.isInsured && <span>Aucune</span>}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        {/* --- Section Récapitulatif Financier --- */}
-        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-            <h3 className="invoice-section-title text-indigo-600 !border-slate-300">RÉCAPITULATIF FINANCIER</h3>
-            
-            {/* Répétition de la décomposition des coûts de l'étape 1 */}
-            <div className="text-sm space-y-1 mb-3">
-              <div className="flex justify-between">
-                <span>Prix de base de l'expédition:</span>
-                <span className="font-medium">{ (formData.totalPrice || 0).toLocaleString() } FCFA</span>
+        
+        <div className="overflow-y-auto p-5" id="invoice-content-pdf">
+          <div className="flex justify-between items-start pb-3 mb-4 border-b-2 border-green-500">
+              <div className="flex items-center">
+                  <HomeIcon className="h-8 w-8 text-green-600 mr-2"/>
+                  <div>
+                      <h1 className="text-2xl font-bold text-green-700 m-0">{APP_NAME}</h1>
+                      <p className="m-0 text-xs text-gray-500">Votre partenaire logistique fiable.</p>
+                  </div>
               </div>
-              {/* Note: Ce prix inclut déjà tous les frais additionnels (fragile, assurance, etc.) */}
-            </div>
+              <div className="text-right">
+                  <p className="m-0 text-sm">Bordereau N°: <span className="font-bold">{trackingNumber}</span></p>
+                  <p className="m-0 text-xs text-gray-600">Date: {currentDate}</p>
+                  {trackingNumber && (
+                      <div className="mt-2 hidden print:block">
+                          <QRCodeCanvas 
+                              value={`Suivi ${APP_NAME}: ${trackingNumber}`} 
+                              size={50} level="M" />
+                      </div>
+                  )}
+              </div>
+          </div>
 
-            <hr className="my-2 border-dashed" />
+          <div className="grid grid-cols-2 gap-6 mb-4">
+              <div className="invoice-section">
+                  <h3 className="invoice-section-title text-green-600">EXPÉDITEUR</h3>
+                  <p><strong>Nom:</strong> {currentUser.name}</p>
+                  <p><strong>Téléphone:</strong> {currentUser.phone}</p>
+                  <p><strong>Point de dépôt:</strong> {formData?.departurePointName || 'N/A'}</p>
+              </div>
+              <div className="invoice-section">
+                  <h3 className="invoice-section-title text-blue-600">DESTINATAIRE</h3>
+                  <p><strong>Nom:</strong> {formData?.recipientName || 'N/A'}</p>
+                  <p><strong>Téléphone:</strong> {formData?.recipientPhone || 'N/A'}</p>
+                  <p><strong>Point de retrait:</strong> {formData?.arrivalPointName || 'N/A'}</p>
+              </div>
+          </div>
 
-            <div className="flex justify-between items-center text-base font-bold mt-2">
-                <span>TOTAL À PAYER {selectedMethod === 'recipient_pay' ? 'PAR LE DESTINATAIRE' : "PAR L'EXPÉDITEUR"}:</span>
-                <span className="text-lg text-green-700">
-                  {/* Utilise exactement la même fonction que le résumé principal pour garantir la cohérence */}
-                  { calculateTotalForPayer().toLocaleString() } FCFA
-                </span>
-            </div>
+          <div className="invoice-section mb-4">
+              <h3 className="invoice-section-title text-orange-600">DÉTAILS DU COLIS</h3>
+              <table className="w-full text-sm">
+                  <tbody>
+                      <tr>
+                          <td className="invoice-table-label">Désignation:</td>
+                          <td className="invoice-table-value">{packageData?.designation || 'N/A'}</td>
+                          <td className="invoice-table-label">Poids:</td>
+                          <td className="invoice-table-value">{packageData?.weight || 'N/A'} kg</td>
+                      </tr>
+                      <tr>
+                          <td className="invoice-table-label">Dimensions:</td>
+                          <td className="invoice-table-value">{packageData?.length ? `${packageData.length}x${packageData.width}x${packageData.height} cm` : 'N/A'}</td>
+                          <td className="invoice-table-label">Contenu:</td>
+                          <td className="invoice-table-value capitalize">{packageData?.contentType || 'Solide'}</td>
+                      </tr>
+                      <tr>
+                          <td className="invoice-table-label">Options:</td>
+                          <td className="invoice-table-value" colSpan={3}>
+                             {packageData?.isFragile && <span className="mr-2">Fragile</span>}
+                             {packageData?.isPerishable && <span className="mr-2">Périssable</span>}
+                             {packageData?.isInsured && <span>Assuré ({Number(packageData.declaredValue || 0).toLocaleString()} FCFA)</span>}
+                             {!packageData?.isFragile && !packageData?.isPerishable && !packageData?.isInsured && <span>Aucune</span>}
+                          </td>
+                      </tr>
+                  </tbody>
+              </table>
+          </div>
 
-            {paymentStatus === 'success' && selectedMethod !== 'cash' && selectedMethod !== 'recipient_pay' && (
-              <p className="text-green-600 font-semibold text-right text-xs mt-1">Colis payé par l'expéditeur.</p>
-            )}
-        </div>
-
-        {/* --- Section Conditions et Signatures --- */}
-        <div>
-            <p className="text-xs text-gray-500 mb-6">
-                <strong>Conditions:</strong> Le colis sera livré au point relais d'arrivée indiqué. Le destinataire doit présenter une pièce d'identité valide. {APP_NAME} n'est pas responsable des dommages non déclarés ou dus à un emballage inadéquat.
-            </p>
-            <div className="grid grid-cols-2 gap-8 pt-4 border-t border-dashed">
-                <div>
-                    <p className="text-sm font-semibold mb-2">Cachet & Signature du propriétaire de point relais:</p>
-                    {formData?.signatureData ? (
-                        <img src={formData.signatureData} alt="Signature Expéditeur" className="h-12 border-b" />
-                    ) : (
-                        <div className="h-12 border-b border-gray-400"></div>
-                    )}
+          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
+              <h3 className="invoice-section-title text-indigo-600 !border-slate-300">RÉCAPITULATIF FINANCIER</h3>
+              
+              <div className="text-sm space-y-1 mb-3">
+                <div className="flex justify-between">
+                  <span>Prix de base de l'expédition:</span>
+                  <span className="font-medium">{ (formData.totalPrice || 0).toLocaleString() } FCFA</span>
                 </div>
-                <div>
-                    <p className="text-sm font-semibold mb-2"></p>
-                    <div className="h-12 border-b border-gray-400">Signature de l'Expéditeur:</div>
-                </div>
-            </div>
+              </div>
+
+              <hr className="my-2 border-dashed" />
+
+              <div className="flex justify-between items-center text-base font-bold mt-2">
+                  <span>TOTAL À PAYER {selectedMethod === 'recipient_pay' ? 'PAR LE DESTINATAIRE' : "PAR L'EXPÉDITEUR"}:</span>
+                  <span className="text-lg text-green-700">
+                    { calculateTotalForPayer().toLocaleString() } FCFA
+                  </span>
+              </div>
+
+              {paymentStatus === 'success' && selectedMethod !== 'cash' && selectedMethod !== 'recipient_pay' && (
+                <p className="text-green-600 font-semibold text-right text-xs mt-1">Colis payé par l'expéditeur.</p>
+              )}
+          </div>
+
+          <div>
+              <p className="text-xs text-gray-500 mb-6">
+                  <strong>Conditions:</strong> Le colis sera livré au point relais d'arrivée indiqué. Le destinataire doit présenter une pièce d'identité valide. {APP_NAME} n'est pas responsable des dommages non déclarés ou dus à un emballage inadéquat.
+              </p>
+              <div className="grid grid-cols-2 gap-8 pt-4 border-t border-dashed">
+                  <div>
+                      <p className="text-sm font-semibold mb-2">Cachet & Signature du propriétaire de point relais:</p>
+                      {formData?.signatureData ? (
+                          <img src={formData.signatureData} alt="Signature Expéditeur" className="h-12 border-b" />
+                      ) : (
+                          <div className="h-12 border-b border-gray-400"></div>
+                      )}
+                  </div>
+                  <div>
+                      <p className="text-sm font-semibold mb-2"></p>
+                      <div className="h-12 border-b border-gray-400">Signature de l'Expéditeur:</div>
+                  </div>
+              </div>
+          </div>
         </div>
       </div>
+      
+      <style jsx global>{`
+        .invoice-section { padding-bottom: 0.75rem; }
+        .invoice-section-title { font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3rem; margin-bottom: 0.5rem; }
+        .invoice-table-label { font-weight: 600; padding: 4px; text-align: left; color: #4b5563; }
+        .invoice-table-value { padding: 4px; text-align: left; }
+      `}</style>
     </div>
-    
-    {/* Style pour la modale */}
-    <style jsx global>{`
-      .invoice-section { padding-bottom: 0.75rem; }
-      .invoice-section-title { font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3rem; margin-bottom: 0.5rem; }
-      .invoice-table-label { font-weight: 600; padding: 4px; text-align: left; color: #4b5563; }
-      .invoice-table-value { padding: 4px; text-align: left; }
-    `}</style>
-  </div>
-);
+  );
 
-  
   const shareBordereau = async (platform: 'whatsapp' | 'telegram' | 'sms' | 'messenger' | 'native') => {
     const textToShare = `Bonjour ${formData.recipientName || 'Destinataire'}, votre colis ${APP_NAME} (N° ${trackingNumber}) est en cours d'expédition. Point de départ: ${formData.departurePointName}, Arrivée: ${formData.arrivalPointName}.`;
-    const urlToShare = window.location.href; // Ou une URL de suivi spécifique si vous en avez une
+    const urlToShare = window.location.href;
 
     if (platform === 'native' && navigator.share) {
       try {
         await navigator.share({
           title: `Bordereau ${APP_NAME} N° ${trackingNumber}`,
           text: textToShare,
-          url: urlToShare, // Vous pourriez aussi partager le PDF directement s'il est accessible via une URL
+          url: urlToShare,
         });
       } catch (error) {
         console.error('Erreur de partage natif:', error);
