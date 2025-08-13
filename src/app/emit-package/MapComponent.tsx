@@ -250,7 +250,6 @@ const MapComponentMapLibre: React.FC<MapComponentProps> = ({
         zoom: Math.max(initialZoom, 12),
         interactive: interactive,
         attributionControl: false,
-        logoControl: false,
       });
 
       // Ajouter les contrôles si interactif
