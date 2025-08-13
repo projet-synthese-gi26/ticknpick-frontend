@@ -9,7 +9,7 @@ import {
 import maplibregl from 'maplibre-gl';
 
 // 1. IMPORTATION DIRECTE DE VOS DONNÉES LOCALES
-import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from '../point-de-relais/RelaisData';
+import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from './RelaisData';
 
 // INTERFACES (pour les données du formulaire)
 export interface ShippingFormDataGlobal {
