@@ -514,7 +514,7 @@ const ShippingPage: React.FC = () => {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
-        return <PackageRegistration onContinue={handlePackageSubmit} />;
+        return <PackageRegistration onContinue={handlePackageSubmit} initialData={packageDataForParent} />;
       case 2:
         return (
           <RouteSelection
@@ -559,7 +559,7 @@ const ShippingPage: React.FC = () => {
           />
         );
       default:
-        return <PackageRegistration onContinue={handlePackageSubmit} />;
+        return <PackageRegistration onContinue={handlePackageSubmit} initialData={packageDataForParent} />;
     }
   };
 
