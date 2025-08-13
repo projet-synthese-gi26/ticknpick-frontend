@@ -9,7 +9,7 @@ import {
 import maplibregl from 'maplibre-gl';
 
 // 1. IMPORTATION DIRECTE DE VOS DONNÉES LOCALES
-import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM }  from '../point-de-relais/RelaisData'; // Assurez-vous que le chemin est correct
+import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from '../point-de-relais/RelaisData';
 
 // INTERFACES (pour les données du formulaire)
 interface ShippingFormData {
@@ -64,7 +64,7 @@ const getRoute = async (start: [number, number], end: [number, number]): Promise
 };
 
 // Import dynamique du composant de carte
-const MapComponent = dynamic(() => import('./MapComponent'), { // Assurez-vous que le chemin vers votre MapComponent est correct
+const MapComponent = dynamic(() => import('./MapComponent'), {
   ssr: false,
   loading: () => (
     <div className="h-full w-full flex items-center justify-center bg-gray-100">
@@ -86,10 +86,10 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
   const [selectionMode, setSelectionMode] = useState<'origin' | 'destination'>('origin');
 
   // 3. FONCTION LOCALE POUR OBTENIR UN POINT PAR SON ID
-  const getPointById = (id: number | null): PointRelais | null => {
+  const getPointById = useCallback((id: number | null): PointRelais | null => {
     if (id === null) return null;
     return allPoints.find(point => point.id === id) || null;
-  };
+  }, [allPoints]);
 
   const fixedOriginPoint = allPoints[1];
   // FIX: Handle undefined by providing null as fallback
@@ -102,12 +102,14 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
 
   // NOUVEAU : Effet pour définir le point de départ fixe au chargement du composant.
   useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      departurePointId: fixedOriginPoint.id,
-      departurePointName: fixedOriginPoint.name,
-    }));
-  }, [fixedOriginPoint.id, fixedOriginPoint.name, setFormData]);
+    if (fixedOriginPoint) {
+      setFormData(prev => ({
+        ...prev,
+        departurePointId: fixedOriginPoint.id,
+        departurePointName: fixedOriginPoint.name,
+      }));
+    }
+  }, [fixedOriginPoint, setFormData]);
 
   // NOUVEAU : Initialiser displayedPoints avec tous les points au chargement
   useEffect(() => {
@@ -161,6 +163,8 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
 
   // MODIFIÉ : La logique de sélection est simplifiée pour ne gérer que la destination.
   const handlePointSelect = useCallback((point: PointRelais) => {
+    if (!fixedOriginPoint) return;
+    
     if (point.id === fixedOriginPoint.id) {
       alert("Le point de destination ne peut pas être le même que le point de départ.");
       return;
@@ -174,12 +178,12 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
     const map = mapInstanceRef.current;
     if (map) map.flyTo({ center: [point.lng, point.lat], zoom: 15 });
 
-  }, [fixedOriginPoint.id, setFormData]);
+  }, [fixedOriginPoint, setFormData]);
 
   // MODIFIÉ : Logique principale de mise à jour de la carte avec nouvelles couleurs
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map) return;
+    if (!map || !fixedOriginPoint) return;
 
     // 1. Nettoyer les marqueurs précédents
     markersRef.current.forEach(marker => marker.remove());
@@ -339,21 +343,100 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
     }
   };
 
+  const handleRecipientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, recipientName: e.target.value });
+  };
+
+  const handleRecipientPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, recipientPhone: e.target.value });
+  };
+
+  const handleRecipientEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, recipientEmail: e.target.value });
+  };
+
+  const renderDestinationPoints = () => {
+    if (!fixedOriginPoint) return null;
+
+    // Step 1: Filter the points into a new, clearly-typed variable.
+    const destinationPoints: PointRelais[] = displayedPoints.filter(
+        (point): point is PointRelais => point.id !== fixedOriginPoint.id
+    );
+
+    // Step 2: Check if the new variable is empty.
+    if (destinationPoints.length === 0) {
+        return <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>;
+    }
+
+    // Step 3: Map over the new variable with an explicit type annotation for 'point'.
+    return destinationPoints.map((point: PointRelais) => {
+        const isSelectedAsArrival = selectedDestination?.id === point.id;
+        const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
+        
+        const distance = calculateDistance(
+            fixedOriginPoint.lat, fixedOriginPoint.lng,
+            point.lat, point.lng
+        );
+        const isNearby = distance <= 200;
+        
+        return (
+            <div 
+              key={`list-point-${point.id}`} 
+              onClick={() => handlePointSelect(point)} 
+              className={`p-2.5 rounded-lg border transition-all duration-150 flex items-start gap-2.5 cursor-pointer ${
+                isSelectedAsArrival 
+                  ? 'bg-red-50 border-red-500' 
+                  : isNearby 
+                    ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' 
+                    : 'hover:bg-gray-100 border-gray-200'
+              }`}
+            >
+                <div className={`mt-0.5 w-8 h-8 shrink-0 rounded-md flex items-center justify-center text-sm ${
+                  isNearby ? 'bg-purple-200 text-purple-700' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  <TypeIcon size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-sm text-gray-800 truncate">{point.name}</h4>
+                  <p className="text-xs text-gray-600 truncate">{point.address}</p>
+                  <p className="text-xs text-gray-500">{Math.round(distance)}m du départ</p>
+                </div>
+                <ChevronRight size={18} className="text-gray-400 self-center shrink-0"/>
+            </div>
+        );
+    });
+  };
+
+  if (!fixedOriginPoint) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin h-10 w-10 text-green-600" />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <header className="bg-white shadow-sm p-3 z-20 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
           <h2 className="text-md sm:text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
               {!selectedDestination ? "1. Choisissez le point d'arrivée" : "2. Infos du destinataire"}
-            </h2>
-            <div className="relative w-full sm:w-auto max-w-xs">
-             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Rechercher un relais..." value={searchQuery}
+          </h2>
+          <div className="relative w-full sm:w-auto max-w-xs">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Rechercher un relais..." 
+              value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-green-500 focus:border-green-500 shadow-sm"
             />
           </div>
-          <button onClick={() => setIsSidebarVisible(!isSidebarVisible)} className="sm:hidden p-2 text-gray-600 hover:text-green-600" title="Afficher la liste">
+          <button 
+            onClick={() => setIsSidebarVisible(!isSidebarVisible)} 
+            className="sm:hidden p-2 text-gray-600 hover:text-green-600" 
+            title="Afficher la liste"
+          >
             {isSidebarVisible ? <X className="w-5 h-5"/> : <List className="w-5 h-5" />}
           </button>
         </div>
@@ -375,52 +458,96 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
           flex flex-col border-l border-gray-200
           ${isSidebarVisible ? 'translate-x-0' : 'translate-x-full sm:translate-x-0'}
         `}>
-           <div className="p-3.5 border-b flex justify-between items-center bg-gray-50">
+          <div className="p-3.5 border-b flex justify-between items-center bg-gray-50">
             <h3 className="text-md font-semibold text-gray-800">
               {selectedDestination ? "Infos Destinataire" : "Points Relais"}
             </h3>
-            <button onClick={() => setIsSidebarVisible(false)} className="sm:hidden p-1 text-gray-500 hover:text-gray-700"> <X className="w-5 h-5" /> </button>
+            <button 
+              onClick={() => setIsSidebarVisible(false)} 
+              className="sm:hidden p-1 text-gray-500 hover:text-gray-700"
+            > 
+              <X className="w-5 h-5" /> 
+            </button>
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            { selectedDestination ? (
-              <form onSubmit={handleFormSubmit} className="p-4 space-y-3.5 border-b border-gray-200 custom-scrollbar">
+            {selectedDestination ? (
+              <form onSubmit={handleFormSubmit} className="p-4 space-y-3.5 border-b border-gray-200 overflow-y-auto">
                 <p className="text-xs text-gray-500 mb-2">Remplissez ces informations pour finaliser la sélection du trajet.</p>
                 <div>
-                  <label htmlFor="recipientName" className="label-form">Nom complet du destinataire <span className="text-red-500">*</span></label>
-                  <div className="input-group-form">
-                      <User size={16} className="input-icon-form" />
-                      <input id="recipientName" type="text" placeholder="Ex: Alima C." value={formData.recipientName} onChange={e => setFormData({...formData, recipientName: e.target.value})} className="input-form pl-8" required />
+                  <label htmlFor="recipientName" className="block text-xs font-medium text-gray-700 mb-1">
+                    Nom complet du destinataire <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <User size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input 
+                      id="recipientName" 
+                      type="text" 
+                      placeholder="Ex: Alima C." 
+                      value={formData.recipientName} 
+                      onChange={handleRecipientNameChange} 
+                      className="w-full pl-10 pr-3 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
+                      required 
+                    />
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="recipientPhone" className="label-form">Téléphone du destinataire <span className="text-red-500">*</span></label>
-                   <div className="input-group-form">
-                      <Phone size={16} className="input-icon-form" />
-                      <input id="recipientPhone" type="tel" placeholder="Ex: 6XX XXX XXX" value={formData.recipientPhone} onChange={e => setFormData({...formData, recipientPhone: e.target.value})} className="input-form pl-8" required />
+                  <label htmlFor="recipientPhone" className="block text-xs font-medium text-gray-700 mb-1">
+                    Téléphone du destinataire <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input 
+                      id="recipientPhone" 
+                      type="tel" 
+                      placeholder="Ex: 6XX XXX XXX" 
+                      value={formData.recipientPhone} 
+                      onChange={handleRecipientPhoneChange} 
+                      className="w-full pl-10 pr-3 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
+                      required 
+                    />
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="recipientEmail" className="label-form">E-mail du destinataire (Optionnel)</label>
-                  <div className="input-group-form">
-                      <Mail size={16} className="input-icon-form" />
-                      <input id="recipientEmail" type="email" placeholder="Ex: email@example.com" value={formData.recipientEmail} onChange={e => setFormData({...formData, recipientEmail: e.target.value})} className="input-form pl-8" />
+                  <label htmlFor="recipientEmail" className="block text-xs font-medium text-gray-700 mb-1">
+                    E-mail du destinataire (Optionnel)
+                  </label>
+                  <div className="relative">
+                    <Mail size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input 
+                      id="recipientEmail" 
+                      type="email" 
+                      placeholder="Ex: email@example.com" 
+                      value={formData.recipientEmail} 
+                      onChange={handleRecipientEmailChange} 
+                      className="w-full pl-10 pr-3 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
+                    />
                   </div>
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={onBack} className="form-button-secondary flex-1">Précédent</button>
-                   <button type="submit" disabled={!isRecipientFormValid} className="form-button-primary flex-1 disabled:opacity-60">
-                     Suivant <ArrowRight size={16} className="ml-1" />
-                   </button>
+                  <button 
+                    type="button" 
+                    onClick={onBack} 
+                    className="flex-1 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-md font-medium text-sm transition-all hover:bg-gray-50"
+                  >
+                    Précédent
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={!isRecipientFormValid} 
+                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-md font-medium text-sm transition-all hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    Suivant <ArrowRight size={16} className="ml-1" />
+                  </button>
                 </div>
               </form>
             ) : (
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                <p className="text-xs text-gray-500 px-1 pb-1 border-b border-dashed">
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                <p className="text-xs text-gray-500 px-1 pb-1 border-b border-dashed border-gray-300">
                     Votre point de départ est : <strong className="text-red-600">{fixedOriginPoint.name}</strong>. Veuillez choisir une destination.
                 </p>
                 {/* NOUVEAU : Légende des couleurs */}
-                <div className="text-xs text-gray-500 px-1 pb-2 border-b border-dashed space-y-1">
+                <div className="text-xs text-gray-500 px-1 pb-2 border-b border-dashed border-gray-300 space-y-1">
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
                         <span>Point de départ (origine)</span>
@@ -435,67 +562,12 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
                     </div>
                 </div>
 
-                {/* -- START OF MODIFIED BLOCK -- */}
-                {(() => {
-                    // Step 1: Filter the points into a new, clearly-typed variable.
-                    const destinationPoints: PointRelais[] = displayedPoints.filter(
-                        (point): point is PointRelais => point.id !== fixedOriginPoint.id
-                    );
-
-                    // Step 2: Check if the new variable is empty.
-                    if (destinationPoints.length === 0) {
-                        return <p className="text-center text-gray-500 text-sm py-6">Aucun point relais trouvé.</p>;
-                    }
-
-                    // Step 3: Map over the new variable with an explicit type annotation for 'point'.
-                    return destinationPoints.map((point: PointRelais) => { // <<< CORRECTION APPLIQUÉE ICI
-                        const isSelectedAsArrival = selectedDestination?.id === point.id;
-                        const TypeIcon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
-                        
-                        const distance = calculateDistance(
-                            fixedOriginPoint.lat, fixedOriginPoint.lng,
-                            point.lat, point.lng
-                        );
-                        const isNearby = distance <= 200;
-                        
-                        return (
-                            <div key={`list-point-${point.id}`} onClick={() => handlePointSelect(point)} className={`p-2.5 rounded-lg border transition-all duration-150 flex items-start gap-2.5 cursor-pointer ${isSelectedAsArrival ? 'bg-red-50 border-red-500' : isNearby ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' : 'hover:bg-gray-100 border-gray-200'}`}>
-                                <div className={`mt-0.5 w-8 h-8 shrink-0 rounded-md flex items-center justify-center text-sm ${isNearby ? 'bg-purple-200 text-purple-700' : 'bg-gray-200 text-gray-700'}`}>
-                                  <TypeIcon size={16} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h4 className={`font-semibold text-sm text-gray-800 truncate`}>{point.name}</h4>
-                                  <p className="text-xs text-gray-600 truncate">{point.address}</p>
-                                  <p className="text-xs text-gray-500">{Math.round(distance)}m du départ</p>
-                                </div>
-                                <ChevronRight size={18} className="text-gray-400 self-center shrink-0"/>
-                            </div>
-                        );
-                    });
-                })()}
-                {/* -- END OF MODIFIED BLOCK -- */}
-            </div>
+                {renderDestinationPoints()}
+              </div>
             )}
           </div>
         </aside>
       </div>
-      <style jsx global>{`
-        /* Styles pour les formulaires, la scrollbar, etc. */
-        .label-form { display: block; font-size: 0.8rem; font-weight: 500; color: #374151; margin-bottom: 0.3rem; }
-        .input-group-form { position: relative; }
-        .input-icon-form { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: #9ca3af; }
-        .input-form { width: 100%; padding: 0.625rem 0.75rem; padding-left: 2.25rem; font-size: 0.875rem; color: #1f2937; background-color: #f9fafb; border: 1px solid #d1d5db; border-radius: 0.375rem; transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out; }
-        .input-form:focus { outline: none; border-color: #10b981; background-color: white; box-shadow: 0 0 0 2.5px rgba(16, 185, 129, 0.25); }
-        .form-button-primary { padding: 0.65rem 1.1rem; background-color: #10b981; color: white; border-radius: 0.375rem; font-weight: 500; font-size: 0.875rem; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
-        .form-button-primary:hover:not(:disabled) { background-color: #059669; }
-        .form-button-primary:disabled { background-color: #9ca3af; cursor: not-allowed; }
-        .form-button-secondary { padding: 0.65rem 1.1rem; background-color: white; color: #374151; border: 1px solid #d1d5db; border-radius: 0.375rem; font-weight: 500; font-size: 0.875rem; transition: all 0.15s; }
-        .form-button-secondary:hover { background-color: #f3f4f6; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-      `}</style>
     </div>
   );
 };
