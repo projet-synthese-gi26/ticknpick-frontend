@@ -41,7 +41,7 @@ import {
   DollarSign,
   Building,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '../../components/Navbar';
@@ -87,7 +87,7 @@ interface RetirantInfo {
 
 interface WithdrawPackagePageProps {}
 
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
   exit: { opacity: 0, y: -20, transition: { duration: 0.3, ease: 'easeIn' } },
