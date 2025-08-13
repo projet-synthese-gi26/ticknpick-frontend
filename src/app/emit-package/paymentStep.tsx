@@ -151,7 +151,8 @@ const PaymentStep: React.FC<PaymentStepProps> = ({
 
   const calculateTotalForPayer = useCallback(() => {
     const basePrice = formData.totalPrice || 0;
-    const paymentFee = paymentMethods.find(m => m.id === selectedMethod)?.fees || 0;
+    const selectedPaymentMethod = paymentMethods.find(m => m.id === selectedMethod);
+    const paymentFee = selectedPaymentMethod?.fees || 0;
     if (selectedMethod === 'recipient_pay') return basePrice;
     return basePrice + paymentFee;
   }, [selectedMethod, formData.totalPrice, paymentMethods]);
