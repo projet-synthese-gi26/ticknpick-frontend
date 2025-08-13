@@ -22,9 +22,41 @@ import {
   MapPinIcon,     // Pour la livraison à la destination finale
   UsersIcon,      // Pour la section livreur
 } from '@heroicons/react/24/outline';
-import { FullShippingData } from './page';
 
 // --- Interfaces et Types ---
+interface FullShippingData {
+  // Package data
+  image: string | null;
+  designation: string;
+  weight: string;
+  length: string;
+  width: string;
+  height: string;
+  isFragile: boolean;
+  contentType: 'solid' | 'liquid' | '';
+  isPerishable: boolean;
+  description: string;
+  declaredValue: string;
+  isInsured: boolean;
+  deliveryAtOrigin: boolean;
+  deliveryAtDestination: boolean;
+  expressOption: ExpressOption;
+  
+  // Additional shipping data that might be added later
+  originAddress?: string;
+  destinationAddress?: string;
+  senderInfo?: {
+    name: string;
+    phone: string;
+    email: string;
+  };
+  recipientInfo?: {
+    name: string;
+    phone: string;
+    email: string;
+  };
+}
+
 interface PackageData {
   image: string | null;
   designation: string;
@@ -44,7 +76,7 @@ interface PackageData {
 
 interface PackageRegistrationProps {
   initialData: Partial<FullShippingData>;
-    onContinue: (data: PackageData & { expressOption: ExpressOption }, totalPrice: number) => void;
+  onContinue: (data: PackageData & { expressOption: ExpressOption }, totalPrice: number) => void;
 }
 
 type ExpressOption = '' | '24h' | '48h' | '72h';
@@ -106,7 +138,7 @@ const OptionCard = ({
   </div>
 );
 
-const PackageRegistration: React.FC<PackageRegistrationProps> = ({ onContinue }) => {
+const PackageRegistration: React.FC<PackageRegistrationProps> = ({ onContinue, initialData = {} }) => {
   const [packageData, setPackageData] = useState<PackageData>({
     image: null,
     designation: '',
@@ -122,9 +154,10 @@ const PackageRegistration: React.FC<PackageRegistrationProps> = ({ onContinue })
     isInsured: false,
     deliveryAtOrigin: false,
     deliveryAtDestination: false,
+    ...initialData, // Apply any initial data passed from props
   });
 
-  const [expressOption, setExpressOption] = useState<ExpressOption>('');
+  const [expressOption, setExpressOption] = useState<ExpressOption>(initialData.expressOption || '');
   const [priceLoading, setPriceLoading] = useState(false);
   const [price, setPrice] = useState<number | null>(null);
   const [basePriceForCalc, setBasePriceForCalc] = useState<number | null>(null);
