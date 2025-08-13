@@ -13,7 +13,7 @@ import { type ShippingFormDataGlobal } from './page';
 import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from '../point-de-relais/RelaisData';
 
 // INTERFACES (pour les données du formulaire)
-interface ShippingFormData {
+export interface ShippingFormData {
   departurePointName: string;
   arrivalPointName: string;
   recipientName: string;
