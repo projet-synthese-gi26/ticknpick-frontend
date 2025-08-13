@@ -57,6 +57,7 @@ interface PaymentStepProps {
   formData: ExtendedFormData & { totalPrice?: number }; // Assurer que totalPrice est attendu
   packageData: PackageData; // Gardé pour le récapitulatif
   onNewTask: () => void; // <<< NOUVEAU
+  onShippingSuccess: (trackingNumber?: string) => Promise<void>; 
 }
 
 const APP_NAME = "Pick n Drop Link";
