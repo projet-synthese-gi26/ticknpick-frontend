@@ -265,7 +265,7 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
       const basePrice = calculatePackageBasePrice();
       const additionalFees = calculateAdditionalFees();
       const insuranceFee = calculateInsuranceFee();
-      const paymentFees = selectedMethod !== 'recipient_pay' && paymentMethods.find(m => m.id === selectedMethod)?.fees > 0 
+      const paymentFees = selectedMethod !== 'recipient_pay' && paymentMethods.find(m => m.id === selectedMethod)!.fees > 0  
         ? paymentMethods.find(m => m.id === selectedMethod)?.fees || 0 
         : 0;
       
