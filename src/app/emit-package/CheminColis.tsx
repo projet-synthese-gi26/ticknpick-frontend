@@ -20,6 +20,11 @@ export interface ShippingFormDataGlobal {
   recipientEmail: string;
   departurePointId?: number | null;
   arrivalPointId?: number | null;
+  distance?: number;
+  compensation: number;
+  country: string;
+  signatureData?: string | null;
+  totalPrice?: number;
 }
 interface RouteSelectionProps {
   formData: ShippingFormDataGlobal; // <- CORRIGÉ
