@@ -46,7 +46,7 @@ interface PackageData {
   contentType?: 'solid' | 'liquid' | '';
   isPerishable?: boolean;
   designation?: string;
-  image?: string;
+  image?: string | null;
   declaredValue?: string; // Valeur déclarée du colis pour l'assurance
   isInsured?: boolean;
   expressOption?: '24h' | '48h' | '72h' | '';
