@@ -1,10 +1,10 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation' // Pour App Router
+import { useRouter } from 'next/navigation'; // Pour App Router
 import {
   TruckIcon,
   MapPinIcon,
-  PencilIcon as SignatureIcon,
+  PencilIcon,
   CreditCardIcon,
   ArrowRightCircleIcon,
   XMarkIcon,
@@ -22,7 +22,7 @@ import ProcessExistingPackage from './Existing';
 
 // Interface pour les données du colis
 interface PackageDataForParent {
-  image: string | null;
+  image?: string | null;
   designation: string;
   weight: string;
   length: string;
@@ -56,7 +56,7 @@ const ShippingSteps = ({ currentStep = 1 }: { currentStep?: number }) => {
   const steps = [
     { number: 1, title: ["Description", "du colis"], icon: <TruckIcon className="w-7 h-7" /> },
     { number: 2, title: ["Choix", "du trajet"], icon: <MapPinIcon className="w-7 h-7" /> },
-    { number: 3, title: ["Votre", "Signature"], icon: <SignatureIcon className="w-7 h-7" /> },
+    { number: 3, title: ["Votre", "Signature"], icon: <PencilIcon className="w-7 h-7" /> },
     { number: 4, title: ["Paiement", "& Confirmation"], icon: <CreditCardIcon className="w-7 h-7" /> },
   ];
 
@@ -71,7 +71,11 @@ const ShippingSteps = ({ currentStep = 1 }: { currentStep?: number }) => {
                 rounded-full w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center transition-all duration-300 mb-2
                 group-hover:scale-110 shadow-md
               `}>
-                {step.number < currentStep ? <SolidCheckCircleIcon className="w-7 h-7 sm:w-8 sm:h-8" /> : React.cloneElement(step.icon, { className: "w-6 h-6 sm:w-7 sm:h-7"})}
+                {step.number < currentStep ? (
+                  <SolidCheckCircleIcon className="w-7 h-7 sm:w-8 sm:h-8" />
+                ) : (
+                  React.cloneElement(step.icon, { className: "w-6 h-6 sm:w-7 sm:h-7" })
+                )}
               </div>
               {step.title.map((line, i) => (
                 <p key={i} className={`text-xs sm:text-sm font-medium leading-tight ${
@@ -142,7 +146,7 @@ const NotificationComponent = ({
   };
 
   return (
-    <div className={`fixed top-20 right-5 z-50 max-w-md w-full mx-auto`}>
+    <div className="fixed top-20 right-5 z-50 max-w-md w-full mx-auto">
       <div className={`rounded-lg border p-4 shadow-lg ${getNotificationStyles()} animate-fadeIn`}>
         <div className="flex items-start">
           <div className="flex-shrink-0">
@@ -514,7 +518,7 @@ const ShippingPage: React.FC = () => {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
-        return <PackageRegistration onContinue={handlePackageSubmit}  initialData={packageDataForParent || {}} />;
+        return <PackageRegistration onContinue={handlePackageSubmit} initialData={packageDataForParent || {}} />;
       case 2:
         return (
           <RouteSelection
@@ -559,7 +563,7 @@ const ShippingPage: React.FC = () => {
           />
         );
       default:
-        return <PackageRegistration onContinue={handlePackageSubmit}  initialData={packageDataForParent || {}} />;
+        return <PackageRegistration onContinue={handlePackageSubmit} initialData={packageDataForParent || {}} />;
     }
   };
 
@@ -609,10 +613,10 @@ const ShippingPage: React.FC = () => {
       <main className="container mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-8">
         {flowType === 'new_package' && (
           <div className="text-center mb-8 sm:mb-10">
-          <button onClick={handleBackToSelection} className="mb-4 group flex items-center text-green-600 hover:text-green-700 transition-colors text-sm">
-            <ArrowUturnLeftIcon className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
-            Retour
-          </button>
+            <button onClick={handleBackToSelection} className="mb-4 group flex items-center text-green-600 hover:text-green-700 transition-colors text-sm">
+              <ArrowUturnLeftIcon className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
+              Retour
+            </button>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-800">
               Envoyez vos colis <span className="text-green-600">facilement</span> et en <span className="text-green-600">toute sécurité</span>.
             </h1>
