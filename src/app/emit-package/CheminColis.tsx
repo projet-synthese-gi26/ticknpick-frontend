@@ -7,7 +7,7 @@ import {
   CheckCircle, CircleDot, Mail, Phone, Loader2, List
 } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
-import { type ShippingFormDataGlobal } from './page';
+import ShippingFormDataGlobal from './page';
 
 // 1. IMPORTATION DIRECTE DE VOS DONNÉES LOCALES
 import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from '../point-de-relais/RelaisData';
