@@ -115,7 +115,12 @@ const OptionCard = ({
     onClick={onClick}
   >
     <div className={`p-2 rounded-full mb-2 ${isSelected ? 'bg-green-100' : 'bg-gray-100'}`}>
-      {React.cloneElement(icon as React.ReactElement, { className: `w-6 h-6 ${isSelected ? 'text-green-600' : 'text-gray-500'}` })}
+      {React.isValidElement(icon) 
+        ? React.cloneElement(icon as React.ReactElement<{className?: string}>, { 
+            className: `w-6 h-6 ${isSelected ? 'text-green-600' : 'text-gray-500'}` 
+          })
+        : icon
+      }
     </div>
     <span className={`text-sm font-semibold ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>
       {title}
