@@ -20,7 +20,8 @@ import DigitalSignature from './Signature';
 import PaymentStep from './paymentStep';
 import ProcessExistingPackage from './Existing';
 
-// Interface pour les données du colis
+// Interface pour les données du coliss
+
 interface PackageDataForParent {
   image?: string | null;
   designation: string;
