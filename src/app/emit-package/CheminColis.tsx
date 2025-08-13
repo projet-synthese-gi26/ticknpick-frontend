@@ -7,13 +7,12 @@ import {
   CheckCircle, CircleDot, Mail, Phone, Loader2, List
 } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
-import ShippingFormDataGlobal from './page';
 
 // 1. IMPORTATION DIRECTE DE VOS DONNÉES LOCALES
 import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from '../point-de-relais/RelaisData';
 
 // INTERFACES (pour les données du formulaire)
-export interface ShippingFormData {
+export interface ShippingFormDataGlobal {
   departurePointName: string;
   arrivalPointName: string;
   recipientName: string;
@@ -23,8 +22,8 @@ export interface ShippingFormData {
   arrivalPointId?: number | null;
 }
 interface RouteSelectionProps {
-  formData: typeof ShippingFormDataGlobal; // <- CORRIGÉ
-  setFormData: React.Dispatch<React.SetStateAction<typeof ShippingFormDataGlobal>>; // <- CORRIGÉ
+  formData: ShippingFormDataGlobal; // <- CORRIGÉ
+  setFormData: React.Dispatch<React.SetStateAction<ShippingFormDataGlobal>>; // <- CORRIGÉ
   onNext: () => void;
   onBack: () => void;
 }
