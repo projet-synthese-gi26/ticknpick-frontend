@@ -23,8 +23,8 @@ export interface ShippingFormData {
   arrivalPointId?: number | null;
 }
 interface RouteSelectionProps {
-  formData: ShippingFormDataGlobal; // <- CORRIGÉ
-  setFormData: React.Dispatch<React.SetStateAction<ShippingFormDataGlobal>>; // <- CORRIGÉ
+  formData: typeof ShippingFormDataGlobal; // <- CORRIGÉ
+  setFormData: React.Dispatch<React.SetStateAction<typeof ShippingFormDataGlobal>>; // <- CORRIGÉ
   onNext: () => void;
   onBack: () => void;
 }
