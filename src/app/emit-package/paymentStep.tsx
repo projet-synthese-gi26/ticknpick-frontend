@@ -41,6 +41,7 @@ interface CurrentUser {
     id: string;
     full_name: string | null;
     phone: string | null;
+    email?: string;
 }
 interface PackageData {
   weight?: string;
