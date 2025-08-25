@@ -234,41 +234,50 @@ export default function InventoryPage() {
                         arrivalDate:created_at,
                         withdrawalDate:updated_at,
                         location:arrivalPointId(name),
+                        origin:departurePointId(name), 
                         designation:description,
-                        sender:senderName,
-                        recipient:recipientName,
-                        phone:recipientPhone
+                        senderName,                   
+                        senderPhone,                  
+                        recipientName,                
+                        recipientPhone               
                     `) // Le select est adapté pour se rapprocher de votre interface 'Parcel'
                     .order('created_at', { ascending: false });
 
                 if (dbError) throw dbError;
 
-                // Mapper les données de Supabase à votre interface `Parcel`
+                // Mapper les données avec les nouvelles informations
                 const formattedParcels: Parcel[] = data.map((p: any) => ({
                     id: p.id,
-                    status: mapStatusForDashboard(p.status), // EN_ATTENTE -> 'En attente'
-                    type: p.type > 3000 ? 'Express' : 'Standard', // Logique d'exemple
+                    status: mapStatusForDashboard(p.status),
+                    type: p.type > 3000 ? 'Express' : 'Standard',
                     arrivalDate: p.arrivalDate,
                     withdrawalDate: p.status === 'RECU' ? p.withdrawalDate : undefined,
                     location: p.location.name,
                     designation: p.designation,
-                    sender: { name: p.sender, phone: 'N/A' }, // Simplifié, à enrichir
-                    recipient: { name: p.recipient, phone: p.phone },
+                    sender: { 
+                        name: p.senderName, 
+                        phone: p.senderPhone || 'N/A', // Fournir une valeur par défaut
+                        originAddress: p.origin.name    // <-- LIGNE AJOUTÉE/MODIFIÉE 
+                    }, 
+                    recipient: { 
+                        name: p.recipientName, 
+                        phone: p.recipientPhone,
+                        deliveryAddress: p.location.name // L'adresse de livraison est le point de retrait
+                    },
                 }));
 
                 setParcels(formattedParcels);
 
-            } catch (err) {
+            } catch (err: any) {
                 console.error(err);
-                setError("Impossible de charger l'inventaire.");
+                setError(`Impossible de charger l'inventaire : ${err.message}`);
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchParcels();
-    }, []); // Le tableau vide [] assure que l'effet ne s'exécute qu'une fois.
-
+    }, []);
 
     // MODIFIÉ : Sauvegarder les modifications des colis dans le localStorage
   useEffect(() => {
