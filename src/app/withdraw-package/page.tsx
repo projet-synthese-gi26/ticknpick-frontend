@@ -63,7 +63,7 @@ interface PackageInfo {
   isPerishable: boolean;
   isInsured: boolean;
   declaredValue?: string;
-  status: 'Au départ' | 'En transit' | 'Arrivé au relais' | 'Reçu';
+  status: 'Au départ' | 'En transit' | 'Arrivé au relais' | 'Reçu' | 'Annulé';
   estimatedArrivalDate?: string;
   pickupDate?: string;
   retirantName?: string;

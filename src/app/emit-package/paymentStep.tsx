@@ -570,7 +570,7 @@ const handlePayment = async () => {
             // --- CORRECTION MAJEURE : On complète l'objet à insérer ---
             const shipmentData = {
                 trackingNumber: newTrackingNumber,
-                status: 'RECU' as const, 
+                status: 'ARRIVE_AU_RELAIS' as const, 
                 
                 // Données de l'expéditeur
                 senderName: currentUser.full_name || 'Non renseigné',
