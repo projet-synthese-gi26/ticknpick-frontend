@@ -10,8 +10,12 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@prisma/client": "^6.14.0",
+    "@supabase/supabase-js": "^2.56.0",
     "@tanstack/react-table": "^8.21.3",
     "chart.js": "^4.5.0",
+    "dexie": "^4.2.0",
+    "dexie-react-hooks": "^4.2.0",
     "framer-motion": "^12.23.9",
     "jspdf": "^3.0.1",
     "leaflet": "^1.9.4",
@@ -35,6 +39,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-leaflet": "^2.8.3",
+    "prisma": "^6.14.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

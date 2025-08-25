@@ -3,6 +3,9 @@
 import React, { useState, useMemo, useEffect, useCallback, MouseEvent } from 'react';
 import { Package, Search, Filter, Eye, CheckCircle, AlertTriangle, X, MapPin, Phone, User, Barcode, Send, Archive, Receipt, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+
+
 type ParcelStatus = 'En attente' | 'Reçu' | 'Retiré';
 type ParcelType = 'Standard' | 'Express';
 
@@ -197,6 +200,8 @@ export default function InventoryPage() {
     }
     return initialParcels;
   });
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ParcelStatus | 'Tous'>('Tous');
@@ -213,6 +218,58 @@ export default function InventoryPage() {
     }).sort((a, b) => new Date(b.arrivalDate).getTime() - new Date(a.arrivalDate).getTime());
   }, [parcels, searchQuery, statusFilter]);
 
+      // 3. Charger les données au montage du composant
+    useEffect(() => {
+        const fetchParcels = async () => {
+            setIsLoading(true);
+            setError(null);
+            
+            try {
+                const { data, error: dbError } = await supabase
+                    .from('Shipment')
+                    .select(`
+                        id:trackingNumber,
+                        status,
+                        type:shippingCost,
+                        arrivalDate:created_at,
+                        withdrawalDate:updated_at,
+                        location:arrivalPointId(name),
+                        designation:description,
+                        sender:senderName,
+                        recipient:recipientName,
+                        phone:recipientPhone
+                    `) // Le select est adapté pour se rapprocher de votre interface 'Parcel'
+                    .order('created_at', { ascending: false });
+
+                if (dbError) throw dbError;
+
+                // Mapper les données de Supabase à votre interface `Parcel`
+                const formattedParcels: Parcel[] = data.map((p: any) => ({
+                    id: p.id,
+                    status: mapStatusForDashboard(p.status), // EN_ATTENTE -> 'En attente'
+                    type: p.type > 3000 ? 'Express' : 'Standard', // Logique d'exemple
+                    arrivalDate: p.arrivalDate,
+                    withdrawalDate: p.status === 'RECU' ? p.withdrawalDate : undefined,
+                    location: p.location.name,
+                    designation: p.designation,
+                    sender: { name: p.sender, phone: 'N/A' }, // Simplifié, à enrichir
+                    recipient: { name: p.recipient, phone: p.phone },
+                }));
+
+                setParcels(formattedParcels);
+
+            } catch (err) {
+                console.error(err);
+                setError("Impossible de charger l'inventaire.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchParcels();
+    }, []); // Le tableau vide [] assure que l'effet ne s'exécute qu'une fois.
+
+
     // MODIFIÉ : Sauvegarder les modifications des colis dans le localStorage
   useEffect(() => {
     localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(parcels));
@@ -221,6 +278,13 @@ export default function InventoryPage() {
   const statusCounts = useMemo(() => {
     return parcels.reduce((acc, p) => { acc[p.status] = (acc[p.status] || 0) + 1; return acc; }, {} as Record<ParcelStatus, number>);
   }, [parcels]);
+
+      // Helper pour mapper les statuts DB -> Frontend
+    const mapStatusForDashboard = (status: string): ParcelStatus => {
+        if (status === 'RECU' || status === 'RETIRÉ') return 'Retiré';
+        if (status === 'EN_ATTENTE_DE_DEPOT') return 'En attente';
+        return 'Reçu'; // 'AU_DEPART', 'EN_TRANSIT', 'ARRIVE_AU_RELAIS'
+    };
 
   const handleRightClick = (event: MouseEvent<HTMLTableRowElement>, parcel: Parcel) => {
     event.preventDefault();
@@ -258,6 +322,15 @@ export default function InventoryPage() {
   const viewDetails = (parcel: Parcel) => { setSelectedParcel(parcel); setIsModalOpen(true); closeContextMenu(); };
   const closeModal = () => { setIsModalOpen(false); setSelectedParcel(null); };
   
+      // Afficher un état de chargement
+    if (isLoading) {
+      return <div>Chargement de l'inventaire...</div>;
+    }
+    
+    // Gérer les erreurs
+    if (error) {
+      return <div className="text-red-500">{error}</div>;
+    }
   
 
 

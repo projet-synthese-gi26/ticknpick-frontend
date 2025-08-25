@@ -19,6 +19,7 @@ import RouteSelection from './CheminColis';
 import DigitalSignature from './Signature';
 import PaymentStep from './paymentStep';
 import ProcessExistingPackage from './Existing';
+import { supabase } from '@/lib/supabase'; // <--- Importer Supabase
 
 // Interface pour les données du coliss
 
@@ -35,6 +36,12 @@ interface PackageDataForParent {
   description: string;
   declaredValue: string;
   isInsured: boolean;
+}
+
+interface LoggedInUser {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
 }
 
 // Interface pour les données globales du formulaire d'expédition
@@ -178,6 +185,10 @@ const NotificationComponent = ({
 // Page component - NO PROPS REQUIRED for Next.js pages
 const ShippingPage: React.FC = () => {
   const router = useRouter();
+
+      // ---- NOUVEL ÉTAT POUR L'UTILISATEUR ET LE CHARGEMENT ----
+    const [user, setUser] = useState<LoggedInUser | null>(null);
+    const [isLoadingUser, setIsLoadingUser] = useState(true);
   
   // État pour gérer le type de flux
   const [flowType, setFlowType] = useState<'initial_selection' | 'new_package' | 'existing_package'>('initial_selection');
@@ -187,6 +198,8 @@ const ShippingPage: React.FC = () => {
   
   // État pour les notifications
   const [notifications, setNotifications] = useState<Notification[]>([]);
+    // Variable pour contrôler si on doit charger depuis localStorage
+  const [shouldLoadFromStorage, setShouldLoadFromStorage] = useState(true);
 
   const [formDataGlobal, setFormDataGlobal] = useState<ShippingFormDataGlobal>({
     departurePointName: '',
@@ -202,6 +215,70 @@ const ShippingPage: React.FC = () => {
     signatureData: null,
     totalPrice: 0,
   });
+  
+  // --- HOOK DE SÉCURITÉ ET DE CHARGEMENT UTILISATEUR (CORRIGÉ) ---
+  useEffect(() => {
+    const checkUserSession = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+          console.log("Aucune session Supabase trouvée, redirection...");
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone, email')
+          .eq('id', session.user.id)
+          .maybeSingle();
+          
+        if (profileError || !profile) {
+          // Cette erreur est maintenant beaucoup moins probable grâce au trigger SQL.
+          // Elle peut arriver si la DB est inconsistante ou si l'utilisateur est supprimé manuellement.
+          console.error("Profil non trouvé pour l'utilisateur, déconnexion et redirection...", profileError || 'Aucun profil retourné');
+          await supabase.auth.signOut();
+
+          return;
+        }
+        
+        setUser(profile);
+      
+      } catch (e) {
+          console.error("Erreur inattendue lors de la vérification de session:", e);
+          router.push('/');
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+    
+    checkUserSession();
+  }, [router]);
+
+  const handlePackageSubmit = (data: PackageDataForParent, totalPrice: number) => {
+    setPackageDataForParent(data);
+    setFormDataGlobal(prev => ({ 
+      ...prev, 
+      totalPrice: totalPrice
+    }));
+    setCurrentStep(2);
+  };
+
+    useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
+
+  
 
   // Fonction pour ajouter une notification
   const addNotification = (notification: Omit<Notification, 'id'>) => {
@@ -250,11 +327,6 @@ const ShippingPage: React.FC = () => {
       setFlowType('initial_selection');
       setShouldLoadFromStorage(false);
 
-      // 4. Rediriger vers la page d'accueil après un délai
-      setTimeout(() => {
-        router.push('/');
-      }, 2000);
-
     } catch (error) {
       console.error('Erreur lors de l\'enregistrement de l\'envoi:', error);
       addNotification({
@@ -266,8 +338,6 @@ const ShippingPage: React.FC = () => {
     }
   };
 
-  // Variable pour contrôler si on doit charger depuis localStorage
-  const [shouldLoadFromStorage, setShouldLoadFromStorage] = useState(true);
 
   // Fonction pour réinitialiser les états du flux
   const resetFlowStates = () => {
@@ -297,109 +367,7 @@ const ShippingPage: React.FC = () => {
       localStorage.removeItem('packageRegistrationData');
       localStorage.removeItem('shippingFlowType');
     }
-  };
-
-  // Charger les données depuis localStorage au montage - SEULEMENT si on doit le faire
-  useEffect(() => {
-    if (!shouldLoadFromStorage || typeof window === 'undefined') return;
-
-    // Vérifier s'il y a une instruction pour enregistrer un dépôt
-    const depositInstructionJSON = localStorage.getItem('redirect_to_deposit');
-    if (depositInstructionJSON) {
-      try {
-        const { packageId } = JSON.parse(depositInstructionJSON);
-        if (packageId) {
-          // 1. Définir le flux pour "Colis Existant"
-          setFlowType('existing_package');
-          
-          // 2. Transmettre l'ID au composant enfant via localStorage (simple et efficace ici)
-          localStorage.setItem('prefill_package_id', packageId);
-          
-          // 3. Nettoyer l'instruction pour ne pas la ré-exécuter
-          localStorage.removeItem('redirect_to_deposit');
-
-          // Marquer le chargement comme terminé et arrêter le reste du useEffect
-          setShouldLoadFromStorage(false);
-          return;
-        }
-      } catch (e) {
-        console.error("Erreur de parsing de l'instruction de dépôt:", e);
-        localStorage.removeItem('redirect_to_deposit'); // Nettoyer en cas d'erreur
-      }
-    }
-    const savedFlowType = localStorage.getItem('shippingFlowType');
-    const savedPackageDataString = localStorage.getItem('packageData');
-    const savedShippingFormDataString = localStorage.getItem('shippingFormDataGlobal');
-    const savedCurrentStep = localStorage.getItem('shippingCurrentStep');
-
-    // Si on a un flux sauvegardé et qu'il n'est pas initial_selection, on le restore
-    if (savedFlowType && savedFlowType !== 'initial_selection') {
-      setFlowType(savedFlowType as 'new_package' | 'existing_package');
-
-      if (savedPackageDataString) {
-        try { 
-          setPackageDataForParent(JSON.parse(savedPackageDataString)); 
-        }
-        catch (e) { 
-          console.error("Erreur parsing packageData:", e); 
-        }
-      }
-
-      if (savedShippingFormDataString) {
-        try {
-          const parsedFormData = JSON.parse(savedShippingFormDataString);
-          setFormDataGlobal(prev => ({
-            ...prev,
-            ...parsedFormData,
-            compensation: parsedFormData.compensation || 0,
-            signatureData: parsedFormData.signatureData || null,
-          }));
-        } catch (e) { 
-          console.error("Erreur parsing shippingFormDataGlobal:", e); 
-        }
-      }
-
-      if (savedCurrentStep) {
-        const step = parseInt(savedCurrentStep, 10);
-        if (step >= 1 && step <= 4) {
-          setCurrentStep(step);
-        }
-      }
-    }
-
-    // Marquer que le chargement initial est terminé
-    setShouldLoadFromStorage(false);
-  }, [shouldLoadFromStorage]);
-
-  // Sauvegarder formDataGlobal, currentStep et flowType dans localStorage
-  // SEULEMENT si on n'est pas en train de charger depuis le storage
-  useEffect(() => {
-    if (shouldLoadFromStorage || typeof window === 'undefined') return;
-
-    if (Object.values(formDataGlobal).some(value => value !== '' && value !== null && value !== 0)) {
-      localStorage.setItem('shippingFormDataGlobal', JSON.stringify(formDataGlobal));
-    }
-    localStorage.setItem('shippingCurrentStep', currentStep.toString());
-    localStorage.setItem('shippingFlowType', flowType);
-  }, [formDataGlobal, currentStep, flowType, shouldLoadFromStorage]);
-
-  // Sauvegarder packageDataForParent dans localStorage
-  useEffect(() => {
-    if (shouldLoadFromStorage || typeof window === 'undefined') return;
-
-    if (packageDataForParent) {
-      localStorage.setItem('packageData', JSON.stringify(packageDataForParent));
-    }
-  }, [packageDataForParent, shouldLoadFromStorage]);
-
-  const handlePackageSubmit = (data: PackageDataForParent, totalPrice: number) => {
-    setPackageDataForParent(data);
-    setFormDataGlobal(prev => ({ 
-      ...prev, 
-      totalPrice: totalPrice
-    }));
-    setCurrentStep(2);
-  };
+    }; 
 
   const handleNewTask = () => {
     resetFlowStates();
@@ -447,19 +415,6 @@ const ShippingPage: React.FC = () => {
     setFlowType('existing_package');
     setShouldLoadFromStorage(false);
   };
-
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.innerHTML = `
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
-    `;
-    document.head.appendChild(style);
-    return () => { document.head.removeChild(style); };
-  }, []);
 
   // Écran de sélection initiale
   const renderInitialSelection = () => {
@@ -517,6 +472,10 @@ const ShippingPage: React.FC = () => {
   };
 
   const renderCurrentStep = () => {
+            if (!user) { // Protection supplémentaire
+            return <div>Chargement des informations utilisateur...</div>;
+        }
+
     switch (currentStep) {
       case 1:
         return <PackageRegistration onContinue={handlePackageSubmit} initialData={packageDataForParent || {}} />;
@@ -529,30 +488,13 @@ const ShippingPage: React.FC = () => {
             onBack={handleBackStep}
           />
         );
-      case 3:
-        const customerNameForSignature = "Cher Client";
-        return (
-          <DigitalSignature
-            onBack={handleBackStep}
-            onSubmit={handleSignatureSubmit}
-            customerName={customerNameForSignature}
-          />
-        );
-      case 4:
-        if (!packageDataForParent) {
+                   case 3:
+            const customerNameForSignature = user.full_name || "Cher Client";
+            return <DigitalSignature onBack={handleBackStep} onSubmit={handleSignatureSubmit} customerName={customerNameForSignature} />;      case 4:
+        if (!packageDataForParent  || !user) {
           console.warn("Données du colis manquantes pour l'étape de paiement. Retour à l'étape 1.");
-          setCurrentStep(1);
-          return <p className="text-center text-red-500">Données du colis manquantes. Veuillez recommencer.</p>;
-        }
-        if (!formDataGlobal.departurePointId || !formDataGlobal.arrivalPointId) {
-          console.warn("Points de départ/arrivée manquants pour l'étape de paiement. Retour à l'étape 2.");
-          setCurrentStep(2);
-          return <p className="text-center text-red-500">Sélection des points relais incomplète. Veuillez recommencer.</p>;
-        }
-        if (!formDataGlobal.signatureData) {
-          console.warn("Signature manquante pour l'étape de paiement. Retour à l'étape 3.");
           setCurrentStep(3);
-          return <p className="text-center text-red-500">Signature manquante. Veuillez signer avant de procéder au paiement.</p>;
+          return <p className="text-center text-red-500">Données du colis manquantes. Veuillez recommencer.</p>;
         }
         return (
           <PaymentStep
@@ -561,6 +503,7 @@ const ShippingPage: React.FC = () => {
             formData={formDataGlobal}
             onNewTask={handleNewTask}
             onShippingSuccess={handleShippingSuccess}
+            currentUser={user}
           />
         );
       default:
@@ -641,5 +584,6 @@ const ShippingPage: React.FC = () => {
     </div>
   );
 };
+
 
 export default ShippingPage;

@@ -48,10 +48,10 @@ import Navbar from '../../components/Navbar';
 // import DigitalSignature from '../emit-package/Sign'; // Signature component removed
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; // Renamed to avoid conflict with HeroIcon
-
+import { supabase } from '@/lib/supabase';  
 interface PackageInfo {
   trackingNumber: string;
-  senderName: string;
+  senderName: string; 
   senderPhone: string;
   recipientName: string;
   recipientPhone: string;
@@ -207,119 +207,78 @@ const WithdrawPackagePage: React.FC<WithdrawPackagePageProps> = ({}) => {
     setAmountPaid(''); setChangeAmount('0');
   };
 
-  const handleSearchPackage = async (value?: string) => {
-    if (isScanning) handleStopScan(true);
+const handleSearchPackage = async (value?: string) => {
     const query = (value || searchInput).trim().toUpperCase();
-    if (!query) { setError('Veuillez entrer un numéro de suivi pour la recherche.'); return; }
-    setIsLoading(true); setError(null); setPackageInfo(null); resetWithdrawState();
-    if (value && searchInput !== value) setSearchInput(value);
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    const shippingHistoryString = localStorage.getItem('shippingHistory');
-    let foundPackageFromStorage = null;
-    
-    if (shippingHistoryString) {
-      try {
-        const shippingHistory = JSON.parse(shippingHistoryString);
-        foundPackageFromStorage = shippingHistory.find(
-          (entry: any) => entry.trackingNumber === query
-        );
-      } catch (e) {
-        console.error("Erreur lors de l'analyse du shippingHistory depuis localStorage", e);
-      }
+    if (!query) {
+      setError('Veuillez entrer un numéro de suivi.');
+      return;
     }
-      if (shippingHistoryString) {
-      try {
-        const shippingHistory = JSON.parse(shippingHistoryString);
-        foundPackageFromStorage = shippingHistory.find(
-          (entry: any) => entry.trackingNumber === query
-        );
-      } catch (e) {
-        console.error("Erreur lors de l'analyse du shippingHistory depuis localStorage", e);
-      }
-    } else {
-    if (query === 'WDR001XYZ') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Émilie Dubois', senderPhone: '+237690112233', recipientName: 'Gaston Lagaffe', recipientPhone: '+237670445566',
-        departurePointName: 'Agence Principale (Douala)', arrivalPointName: 'Relais Bastos (Yaoundé)', packageDescription: 'Livres et matériel de dessin', packageWeight: '3.1',
-        isFragile: false, isPerishable: false, isInsured: false, status: 'Arrivé au relais', estimatedArrivalDate: '01 Juin 2025',
-        isPaid: true,
-      });
-    } else if (query === 'WDR002PQR') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-    } else if (query === 'PKD-58271') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-            } else if (query === 'PKD-58271') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-            } else if (query === 'PKD-85743') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-            } else if (query === 'PKD-92384') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-    } else if (query === 'PKD-10398') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-    } else if (query === '  PDLPAYXZY') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Fatima Zahra', senderPhone: '+237650998877', recipientName: 'Idriss Deby Jr.', recipientPhone: '+237680123456',
-        departurePointName: 'Agence Akwa (Douala)', arrivalPointName: 'Relais Logbessou (Douala)', packageDescription: 'Équipement sportif haute performance', packageWeight: '5.5',
-        isFragile: false, isPerishable: true, isInsured: true, declaredValue: '75000', status: 'Arrivé au relais',
-        isPaid: false, shippingCost: '2500',
-      });
-    } else if (query === 'PKGOLDDEP') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'David Atanga', senderPhone: '+237691112233', recipientName: 'Sophie K.', recipientPhone: '+237672223344',
-        departurePointName: 'Agence Centrale (Yaoundé)', arrivalPointName: 'Relais Biyem-Assi (Yaoundé)', packageDescription: 'Ordinateur portable et accessoires', packageWeight: '2.8',
-        isFragile: true, isPerishable: false, isInsured: true, declaredValue: '350000', status: 'Au départ', estimatedArrivalDate: '05 Juin 2025',
-        isPaid: true,
-      });
-    } else if (query === 'PKGOLDTRN') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Linda N.', senderPhone: '+237653334455', recipientName: 'Paul Biya Jr.', recipientPhone: '+237684445566',
-        departurePointName: 'Relais Mbouda (Ouest)', arrivalPointName: 'Agence Bonaberi (Douala)', packageDescription: 'Pièces automobiles spécifiques', packageWeight: '12.0',
-        isFragile: false, isPerishable: false, isInsured: false, status: 'En transit', estimatedArrivalDate: '03 Juin 2025',
-        isPaid: false, shippingCost: '4800',
-      });
-    } else if (query === 'PKGOLDREC') {
-      setPackageInfo({
-        trackingNumber: query, senderName: 'Marie Claire', senderPhone: '+237677889900', recipientName: 'Jean Baptiste', recipientPhone: '+237655443322',
-        departurePointName: 'Agence Douala Port', arrivalPointName: 'Relais Yaoundé Centre Ville', packageDescription: 'Documents officiels urgents', packageWeight: '0.5',
-        isFragile: false, isPerishable: false, isInsured: true, declaredValue: '50000', status: 'Reçu', pickupDate: '28 Mai 2025 à 14:30',
-        retirantName: 'Jean Baptiste (Lui-même)', retirantCni: '987654321CE', retirantCniDate: '2019-03-10', retirantPhone: '+237655443322',
-        isPaid: true, amountPaid: '1500', shippingCost: '1500', changeAmount: '0'
-      });
-    } else { setError(`Aucun colis trouvé pour le numéro de suivi : ${query}. Veuillez vérifier et réessayer.`); }
-    setIsLoading(false);
-  };
-  };
+
+    setIsLoading(true);
+    setError(null);
+    setPackageInfo(null);
+    resetWithdrawState();
+    if (value && searchInput !== value) setSearchInput(value);
+    
+    try {
+        // ---- Début de la logique Supabase ----
+        const { data: shipment, error: dbError } = await supabase
+            .from('Shipment')
+            .select(`
+                *,
+                departurePoint:departurePointId(id, name),
+                arrivalPoint:arrivalPointId(id, name),
+                WithdrawalLog(*)
+            `)
+            .eq('trackingNumber', query)
+            .single(); // Attendre un seul résultat
+            
+        if (dbError || !shipment) {
+            // Utiliser le message de l'erreur ou un message par défaut
+            throw new Error(dbError?.message.includes("0 rows") ? "Colis non trouvé." : dbError?.message);
+        }
+        // ---- Fin de la logique Supabase ----
+
+        // On transforme les données de Supabase en un format que votre UI comprend (PackageInfo)
+        const statusMap: Record<string, PackageInfo['status']> = {
+            'EN_ATTENTE_DE_DEPOT': 'Au départ',
+            'AU_DEPART': 'Au départ',
+            'EN_TRANSIT': 'En transit',
+            'ARRIVE_AU_RELAIS': 'Arrivé au relais',
+            'RECU': 'Reçu',
+            'ANNULE': 'Annulé', // Ajoutez les statuts manquants si nécessaire
+        };
+
+        const formattedPackage: PackageInfo = {
+            trackingNumber: shipment.trackingNumber,
+            senderName: shipment.senderName,
+            senderPhone: shipment.senderPhone,
+            recipientName: shipment.recipientName,
+            recipientPhone: shipment.recipientPhone,
+            departurePointName: (shipment.departurePoint as any).name || 'Inconnu', // `as any` est un contournement, un type correct serait mieux
+            arrivalPointName: (shipment.arrivalPoint as any).name || 'Inconnu',
+            packageDescription: shipment.description,
+            packageWeight: String(shipment.weight),
+            isFragile: shipment.isFragile,
+            isPerishable: shipment.isPerishable,
+            isInsured: shipment.isInsured,
+            declaredValue: String(shipment.declaredValue || ''),
+            status: statusMap[shipment.status],
+            isPaid: shipment.isPaidAtDeparture || shipment.status === 'RECU',
+            shippingCost: String(shipment.shippingCost),
+            // Infos du retrait si déjà fait
+            pickupDate: shipment.WithdrawalLog ? new Date(shipment.WithdrawalLog.created_at).toLocaleString('fr-CM') : undefined,
+            retirantName: shipment.WithdrawalLog?.retirantName,
+        };
+
+        setPackageInfo(formattedPackage);
+        
+    } catch (err: any) {
+        setError(`Erreur de recherche pour "${query}": ${err.message}`);
+    } finally {
+        setIsLoading(false);
+    }
+};
 
     // --- NOUVELLE LOGIQUE AU CHARGEMENT ---
   // Ce useEffect s'exécute une seule fois pour vérifier l'instruction de redirection.
@@ -506,57 +465,60 @@ const WithdrawPackagePage: React.FC<WithdrawPackagePageProps> = ({}) => {
     }
   };
 
-  const handleConfirmWithdrawal = async () => {
-    if (!packageInfo) return; 
-    setIsConfirmingWithdrawal(true); 
+
+const handleConfirmWithdrawal = async () => {
+    if (!packageInfo) return;
+    setIsConfirmingWithdrawal(true);
     setError(null);
-    
-    const finalRetirantInfo = { ...retirantInfo }; 
-    
+
+    const finalRetirantInfo = { ...retirantInfo };
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const updatedPackageInfo: PackageInfo = {
-        // ... (votre logique de mise à jour de updatedPackageInfo reste inchangée)
-        ...packageInfo, 
-        status: 'Reçu',
-        // ... etc.
-      };
-      
-      setPackageInfo(updatedPackageInfo); 
-      await generateWithdrawalPDF(updatedPackageInfo, finalRetirantInfo);
-      
-      // ---- NOUVELLE LOGIQUE DE MISE À JOUR DE L'INVENTAIRE ----
-      // Récupérer l'inventaire principal depuis localStorage
-      const masterParcelsJSON = localStorage.getItem(INVENTORY_STORAGE_KEY);
-      if (masterParcelsJSON) {
-          let masterParcels: Parcel[] = JSON.parse(masterParcelsJSON);
+        // ---- Début de la logique Supabase ----
+        // Supabase gère automatiquement les transactions dans les fonctions RPC
+        // C'est pourquoi nous avons créé la fonction `handle_package_withdrawal`
+        
+        const { error } = await supabase.rpc('handle_package_withdrawal', {
+            p_tracking_number: packageInfo.trackingNumber,
+            p_retirant_name: finalRetirantInfo.name,
+            p_retirant_cni: finalRetirantInfo.cni,
+            p_retirant_cni_date: finalRetirantInfo.cniDate, // format "YYYY-MM-DD"
+            p_retirant_phone: finalRetirantInfo.phone,
+            p_amount_paid: amountPaid ? parseFloat(amountPaid) : null,
+            p_change_amount: changeAmount ? parseFloat(changeAmount) : null
+        });
 
-          // Mettre à jour le statut du colis concerné dans la liste principale
-          const updatedMasterParcels = masterParcels.map(p =>
-              p.id === updatedPackageInfo.trackingNumber
-                  // Le colis est trouvé, on met à jour son statut et on ajoute la date de retrait
-                  ? { ...p, status: 'Retiré', withdrawalDate: new Date().toISOString() }
-                  : p // Pour tous les autres colis, on les garde tels quels
-          );
+        if (error) {
+            console.error("Erreur RPC Supabase:", error);
+            throw new Error(`Erreur technique : ${error.message}`);
+        }
+        // ---- Fin de la logique Supabase ----
 
-          // Sauvegarder la liste mise à jour dans localStorage
-          localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(updatedMasterParcels));
-      }
-      // ---- FIN DE LA NOUVELLE LOGIQUE DE MISE À JOUR ----
-
-      setShowWithdrawalSuccess(true); 
-      setCurrentWithdrawStep('completed');
-
-    } catch (err) { 
-      console.error("Erreur lors de la confirmation du retrait :", err);
-      setError("Une erreur est survenue lors de la confirmation du retrait. Veuillez réessayer."); 
+        const updatedPackageInfo: PackageInfo = {
+          ...packageInfo, 
+          status: 'Reçu',
+          pickupDate: new Date().toLocaleString('fr-CM'),
+          retirantName: finalRetirantInfo.name,
+          retirantCni: finalRetirantInfo.cni,
+          retirantCniDate: finalRetirantInfo.cniDate,
+          retirantPhone: finalRetirantInfo.phone,
+          isPaid: true,
+          amountPaid: amountPaid || packageInfo.amountPaid,
+          changeAmount: changeAmount || packageInfo.changeAmount,
+        };
+        
+        setPackageInfo(updatedPackageInfo);
+        
+        // La logique de génération de PDF et de succès reste la même
+        await generateWithdrawalPDF(updatedPackageInfo, finalRetirantInfo);
+        setShowWithdrawalSuccess(true);
+        setCurrentWithdrawStep('completed');
+    } catch (err: any) {
+        setError(err.message || "Une erreur inconnue est survenue.");
+    } finally {
+        setIsConfirmingWithdrawal(false);
     }
-    finally { 
-      setIsConfirmingWithdrawal(false); 
-    }
-  };
-
+};
 
   const getStatusColorClasses = (status: PackageInfo['status']) => {
     switch (status) {

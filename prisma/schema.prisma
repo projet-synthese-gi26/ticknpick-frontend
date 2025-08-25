@@ -1,0 +1,133 @@
+// FICHIER: prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modèle pour les points relais
+model RelayPoint {
+  id              Int      @id @default(autoincrement())
+  name            String
+  address         String
+  quartier        String
+  lat             Float
+  lng             Float
+  hours           String
+  type            RelayPointType
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  departures      Shipment[] @relation("Departures") // Les expéditions qui partent de ce point
+  arrivals        Shipment[] @relation("Arrivals")   // Les expéditions qui arrivent à ce point
+  staff           User[]                            // Le personnel travaillant dans ce point relais
+}
+
+// Modèle pour les utilisateurs / personnel
+model User {
+  id             Int      @id @default(autoincrement())
+  email          String   @unique
+  name           String
+  phone          String?
+  passwordHash   String   // Le mot de passe sera haché avant d'être stocké
+  role           UserRole
+  status         UserStatus @default(OFFLINE)
+  avatarUrl      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  relayPoint     RelayPoint? @relation(fields: [relayPointId], references: [id])
+  relayPointId   Int?
+}
+
+// Modèle central pour une expédition (un colis en transit)
+model Shipment {
+  id                  Int      @id @default(autoincrement())
+  trackingNumber      String   @unique
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Informations sur l'expédition
+  status                ShipmentStatus @default(AU_DEPART)
+  estimatedArrivalDate  DateTime?
+  
+  // Détails de l'expéditeur
+  senderName        String
+  senderPhone       String
+
+  // Détails du destinataire
+  recipientName     String
+  recipientPhone    String
+  
+  // Relation avec les points relais
+  departurePoint    RelayPoint @relation("Departures", fields: [departurePointId], references: [id])
+  departurePointId  Int
+  arrivalPoint      RelayPoint @relation("Arrivals", fields: [arrivalPointId], references: [id])
+  arrivalPointId    Int
+
+  // Description du colis
+  description     String
+  weight          Decimal // Utiliser Decimal pour plus de précision que Float
+  isFragile       Boolean  @default(false)
+  isPerishable    Boolean  @default(false)
+  isInsured       Boolean  @default(false)
+  declaredValue   Decimal?
+
+  // Informations de paiement
+  isPaidAtDeparture Boolean @default(true) // True si payé au départ, false si payé par le destinataire
+  shippingCost      Decimal
+  amountPaid        Decimal? // Montant réellement perçu
+  changeAmount      Decimal? // Monnaie rendue
+
+  // Log de retrait
+  withdrawalLog     WithdrawalLog?
+}
+
+// Modèle pour enregistrer qui a retiré le colis
+model WithdrawalLog {
+  id              Int      @id @default(autoincrement())
+  retrievalDate   DateTime @default(now())
+  
+  retirantName    String
+  retirantCni     String
+  retirantCniDate DateTime
+  retirantPhone   String
+
+  shipment        Shipment @relation(fields: [shipmentId], references: [id])
+  shipmentId      Int      @unique // Chaque expédition n'a qu'un seul retrait
+}
+
+
+// --- ÉNUMÉRATIONS pour garantir la cohérence des données ---
+
+enum RelayPointType {
+  BUREAU
+  COMMERCE
+  AGENCE
+}
+
+enum UserRole {
+  MANUTENTIONNAIRE
+  RESPONSABLE_STOCK
+  SUPERVISEUR
+  ACCUEIL_CLIENT
+  ADMIN
+}
+
+enum UserStatus {
+  ONLINE
+  PAUSE
+  OFFLINE
+}
+
+enum ShipmentStatus {
+  AU_DEPART
+  EN_TRANSIT
+  ARRIVE_AU_RELAIS
+  RECU
+  ANNULE
+}

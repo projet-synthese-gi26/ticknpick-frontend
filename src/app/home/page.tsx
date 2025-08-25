@@ -1,14 +1,76 @@
 'use client';
 import { Package, PackagePlus, MapPin, PackageCheck, PackageOpen, CreditCard, CheckCircle, BarChart3, Bell, ShieldCheck, Search, Compass, FastForward, HandCoins, CloudLightning, MapPinHouse, Settings, Send, Truck, CarTaxiFront, Warehouse, User } from 'lucide-react'; // Ajout des icônes nécessaires
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase'; 
+
+// Définir une interface pour l'utilisateur
+interface CurrentUser {
+  name: string;
+  email?: string;
+}
+
 
 export default function HomePage() {
+ const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
+  const [user, setUser] = useState<CurrentUser | null>(null);
 
+  // --- BLOC DE PROTECTION DE ROUTE (AMÉLIORÉ) ---
   useEffect(() => {
-    setIsVisible(true);
-  }, []);
+    const checkSessionAndProfile = async () => {
+      // D'abord, essayer de récupérer les données du localStorage pour un affichage rapide
+      const localUserJSON = localStorage.getItem('pickndrop_currentUser');
+      if (localUserJSON) {
+        setUser(JSON.parse(localUserJSON));
+        setIsVisible(true);
+      }
+
+      // Ensuite, TOUJOURS vérifier la session réelle avec Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        console.log("Aucune session Supabase active, redirection...");
+        localStorage.removeItem('pickndrop_currentUser'); // Nettoyer
+        router.push('/home');
+        return;
+      }
+
+      // Si le localStorage est vide ou désynchronisé, recharger le profil depuis Supabase
+      if (!localUserJSON || JSON.parse(localUserJSON).email !== session.user.email) {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('name:full_name, email')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+        if (profile) {
+            setUser(profile);
+            localStorage.setItem('pickndrop_currentUser', JSON.stringify(profile));
+        } else {
+             // Profil non trouvé, situation anormale, on déconnecte
+            await supabase.auth.signOut();
+            localStorage.removeItem('pickndrop_currentUser');
+            return;
+        }
+      }
+      // Afficher le contenu une fois la vérification terminée
+      setIsVisible(true);
+    };
+
+    checkSessionAndProfile();
+  }, [router]);
+  // --- FIN DU BLOC ---
+
+   // Affiche un état de chargement pour éviter un flash du contenu
+  if (!isVisible || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="w-16 h-16 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   const services = [
     {
@@ -65,7 +127,7 @@ export default function HomePage() {
             </div>
             
             <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto mb-6 leading-relaxed"> {/* mb réduit, max-w réduit */}
-              Bienvenue dans votre système complet de gestion logistique
+              Bienvenue, <span className="font-bold text-green-700">{user.name}</span>, dans le système de gestion de votre point relais.
             </p>
 
             <div className="flex justify-center mb-0">

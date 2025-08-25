@@ -12,6 +12,7 @@ import html2canvas from 'html2canvas';
 import { QRCodeCanvas } from 'qrcode.react';
 import { MessageSquare } from 'lucide-react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
 
 // Icônes de partage
 const WhatsAppIcon = () => <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />;
@@ -36,6 +37,11 @@ interface ExtendedFormData {
   totalPrice?: number;
 }
 
+interface CurrentUser {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+}
 interface PackageData {
   weight?: string;
   length?: string;
@@ -57,6 +63,7 @@ interface PaymentStepProps {
   packageData: PackageData;
   onNewTask: () => void;
   onShippingSuccess: (trackingNumber?: string) => Promise<void>; 
+  currentUser: CurrentUser;
 }
 
 const APP_NAME = "Pick n Drop Link";
@@ -65,7 +72,13 @@ const LoadingSpinner = () => (
     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
 );
 
-const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData, onNewTask }) => {
+const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData, onNewTask, onShippingSuccess, currentUser }) => {
+
+      if (!currentUser) {
+        // Normalement, cela ne devrait jamais se produire grâce à la protection dans la page parente,
+        // mais c'est une bonne pratique de s'en assurer.
+        return <div>Erreur : informations utilisateur non disponibles.</div>;
+    }
   const [selectedMethod, setSelectedMethod] = useState('');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -76,12 +89,6 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
   const [processingStep, setProcessingStep] = useState(0);
   const [currentDate, setCurrentDate] = useState('');
 
-  // Simuler les informations de l'utilisateur connecté
-  const currentUser = {
-    name: "Gaby Nguetcho",
-    phone: "+237 691 743 511",
-    email: "gaby.doe@example.com"
-  };
 
   useEffect(() => {
     const generateTrackingNumber = () => {
@@ -168,7 +175,7 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
 
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'normal');
-      pdf.text(`Nom: ${currentUser.name}`, column1X, currentYExp);
+      pdf.text(`Nom: ${currentUser.full_name}`, column1X, currentYExp);
       currentYExp += 5;
       pdf.text(`Téléphone: ${currentUser.phone}`, column1X, currentYExp);
       currentYExp += 5;
@@ -410,7 +417,7 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
           <div className="grid grid-cols-2 gap-6 mb-4">
               <div className="invoice-section">
                   <h3 className="invoice-section-title text-green-600">EXPÉDITEUR</h3>
-                  <p><strong>Nom:</strong> {currentUser.name}</p>
+                  <p><strong>Nom:</strong> {currentUser.full_name}</p>
                   <p><strong>Téléphone:</strong> {currentUser.phone}</p>
                   <p><strong>Point de dépôt:</strong> {formData?.departurePointName || 'N/A'}</p>
               </div>
@@ -544,24 +551,92 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
     // { name: 'Messenger', icon: <MessengerIcon />, action: () => shareBordereau('messenger'), color: 'purple' }, // Optionnel
   ];
 
+  // --- FONCTION handlePayment ENTIÈREMENT REVUE ET CORRIGÉE ---
+const handlePayment = async () => {
+        if (!packageData || !formData || !selectedMethod) {
+            alert("Veuillez sélectionner une méthode de paiement.");
+            return;
+        }
 
-  const handlePayment = async () => {
-    setIsProcessing(true);
-    const steps = ['Vérification des informations...', 'Traitement en cours...', 'Validation...', 'Enregistrement...'];
-    for (let i = 0; i < steps.length; i++) {
-      setProcessingStep(i);
-      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
-    }
-    setIsProcessing(false);
+        setIsProcessing(true);
+        setProcessingStep(0);
+        await new Promise(resolve => setTimeout(resolve, 300));
 
-    if (selectedMethod === 'cash') {
-      setPaymentStatus('pending_cash');
-    } else if (selectedMethod === 'recipient_pay') {
-      setPaymentStatus('pending_recipient');
-    } else {
-      setPaymentStatus('success'); // Pour carte et mobile money après simulation
-    }
-  };
+        try {
+            const newTrackingNumber = `PDL${Date.now().toString().slice(-6)}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+            setProcessingStep(1);
+            
+            // --- CORRECTION MAJEURE : On complète l'objet à insérer ---
+            const shipmentData = {
+                trackingNumber: newTrackingNumber,
+                status: 'RECU' as const, 
+                
+                // Données de l'expéditeur
+                senderName: currentUser.full_name || 'Non renseigné',
+                senderPhone: currentUser.phone || 'Non renseigné',
+                
+                // Données du destinataire (VIENNENT DE FORMDATA)
+                recipientName: formData.recipientName,
+                recipientPhone: formData.recipientPhone,
+                
+                // Détails du colis (VIENNENT DE PACKAGEDATA)
+                description: packageData.designation || 'Colis', // Utilisons designation comme description principale
+                weight: parseFloat(packageData.weight || '0'),
+                isFragile: packageData.isFragile || false,
+                isPerishable: packageData.isPerishable || false,
+                isInsured: packageData.isInsured || false,
+                declaredValue: packageData.isInsured ? parseFloat(packageData.declaredValue || '0') : 0,
+
+                // Informations sur le trajet (VIENNENT DE FORMDATA)
+                departurePointId: formData.departurePointId, 
+                arrivalPointId: formData.arrivalPointId,
+                
+                // Détails du paiement
+                shippingCost: calculateTotalForPayer(),
+                isPaidAtDeparture: selectedMethod !== 'recipient_pay',
+                amountPaid: selectedMethod !== 'recipient_pay' ? calculateTotalForPayer() : null, // On suppose paiement complet au dépôt
+
+                // Trace de l'utilisateur
+                created_by_user: currentUser.id 
+            };
+
+            // Vérification des champs obligatoires
+            if (!shipmentData.recipientPhone || !shipmentData.departurePointId || !shipmentData.arrivalPointId) {
+                throw new Error("Informations manquantes : téléphone du destinataire ou points de relais invalides.");
+            }
+
+            setProcessingStep(2);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            const { error } = await supabase.from('Shipment').insert(shipmentData);
+            
+            if (error) {
+                console.error("Erreur d'insertion Supabase:", error);
+                throw new Error(`Erreur base de données : ${error.message}`);
+            }
+
+            setProcessingStep(3);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            setTrackingNumber(newTrackingNumber); 
+            
+            if (selectedMethod === 'cash') setPaymentStatus('pending_cash');
+            else if (selectedMethod === 'recipient_pay') setPaymentStatus('pending_recipient');
+            else setPaymentStatus('success');
+            
+            // Appeler la fonction de succès du parent
+            await onShippingSuccess(newTrackingNumber);
+
+        } catch (err) {
+            console.error("Erreur dans handlePayment:", err);
+            // Afficher l'erreur dans la UI est mieux qu'un alert
+            alert(`Une erreur est survenue : ${err instanceof Error ? err.message : String(err)}`);
+            setPaymentStatus(null);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
 
   const PaymentMethodCard = ({ method }: { method: typeof paymentMethods[0] }) => (
     <div
@@ -796,7 +871,7 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
 
             {/* Section des détails (colis et trajet) */}
             <div className="space-y-2 mb-4 pb-4 border-b border-gray-200 text-sm">
-              <p><UserIcon className="inline w-4 h-4 mr-1 text-gray-500" /> <strong>Expéditeur:</strong> {currentUser.name}</p>
+              <p><UserIcon className="inline w-4 h-4 mr-1 text-gray-500" /> <strong>Expéditeur:</strong> {currentUser.full_name}</p>
               <p><UserIcon className="inline w-4 h-4 mr-1 text-gray-500" /> <strong>Destinataire:</strong> {formData?.recipientName || 'N/A'}</p>
               <p><MapPinIcon className="inline w-4 h-4 mr-1 text-gray-500" /> <strong>Départ:</strong> <span className="font-medium">{formData?.departurePointName || 'N/A'}</span></p>
               <p><MapPinIcon className="inline w-4 h-4 mr-1 text-gray-500" /> <strong>Arrivée:</strong> <span className="font-medium">{formData?.arrivalPointName || 'N/A'}</span></p>

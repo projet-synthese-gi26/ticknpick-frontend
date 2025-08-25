@@ -1,42 +1,8 @@
-// RelaisData.tsx
-// Données des points relais dans la ville de Yaoundé
+// FICHIER: scripts/seed.js (créez le dossier et le fichier)
+const { createClient } = require('@supabase/supabase-js');
 
-export interface PointRelais {
-    id: number;
-    name: string;
-    address: string;
-    hours: string;
-    lat: number;
-    lng: number;
-    isNearby?: boolean;
-    quartier: string; // Ajout du quartier pour faciliter la recherche
-    type: 'bureau' | 'commerce' | 'agence'; // Type de point relais
-    services: string[]; // Services disponibles dans ce point relais
-    photo?: string;
-    contact?: string;
-    capacity?: number;
-  }
-  
-  // Coordonnées approximatives du centre de Yaoundé
-  export const YAOUNDE_CENTER: [number, number] = [3.848, 11.502];
-  // Coordonnées du centre de Yaoundé (à utiliser comme fallback)
-export const YAOUNDE_CENTER_FALLBACK: [number, number] = [3.866667, 11.516667];
-  // Zoom par défaut pour la carte de Yaoundé
-  export const YAOUNDE_ZOOM = 13;
-  // Rayon de recherche des points proches en MÈTRES
-export const NEARBY_RADIUS_METERS: number = 3000;
-  // Limites approximatives de la ville pour restreindre la vue de la carte
-  export const YAOUNDE_BOUNDS = {
-    northEast: [3.935, 11.585], // Nord-Est
-    southWest: [3.760, 11.420], // Sud-Ouest
-  };
-  // Zoom initial de la carte en cas de fallback (si la géolocalisation échoue)
-export const INITIAL_MAP_ZOOM_FALLBACK: number = 12;
-  // Rayon de recherche en km pour les points proches
-  export const NEARBY_RADIUS = 3;
-  
   // Données des points relais à Yaoundé
-  const yaoundePointsRelais: PointRelais[] = [
+  const yaoundePointsRelais = [
     //Arrondissement de Yaoundé I
     
     // QUARTIER BASTOS
@@ -1453,53 +1419,57 @@ export const INITIAL_MAP_ZOOM_FALLBACK: number = 12;
     services: ["retrait", "photocopie", "paiement droits universitaires"]
   }
     ];
-  
-  export default yaoundePointsRelais;
-  
-  // Fonction utilitaire pour calculer la distance entre deux points (en km)
-  export const calculateDistance = (
-    lat1: number, 
-    lng1: number, 
-    lat2: number, 
-    lng2: number
-  ): number => {
-    const R = 6371; // Rayon de la Terre en km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lng2 - lng1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-  
-  // Fonction pour trouver les points relais à proximité d'une position donnée
-  export const findNearbyPoints = (
-    points: PointRelais[],
-    lat: number,
-    lng: number,
-    radius: number = NEARBY_RADIUS
-  ): PointRelais[] => {
-    return points.map(point => {
-      const distance = calculateDistance(lat, lng, point.lat, point.lng);
-      return {
-        ...point,
-        isNearby: distance <= radius
-      };
-    });
-  };
-  
-  // Fonction pour filtrer les points relais par quartier ou adresse
-  export function filterPointsBySearch(points: PointRelais[], searchTerm: string): PointRelais[] {
-    if (!searchTerm.trim()) return points;
-  
-    const term = searchTerm.toLowerCase();
-    
-    return points.filter(point => 
-      point.name.toLowerCase().includes(term) ||
-      point.quartier.toLowerCase().includes(term) ||
-      point.address.toLowerCase().includes(term) ||
-      point.services.some(service => service.toLowerCase().includes(term))
-    );
+
+const SUPABASE_URL = "https://outcwvcyttnjwaryrsmv.supabase.co";
+const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91dGN3dmN5dHRuandhcnlyc212Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjA1OTk2MSwiZXhwIjoyMDcxNjM1OTYxfQ.X0Qvam-e1P9EbYu8Ei-i3EQ2jl_awjlPKnegRaXg2Mc";
+
+/**
+ * Fonction principale qui exécute le seeding.
+ */
+async function main() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || SUPABASE_URL.includes("VOTRE")) {
+    throw new Error("Script arrêté. Veuillez renseigner votre URL Supabase et votre clé SERVICE_ROLE.");
   }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  console.log('✅ Client Supabase initialisé.');
+  console.log('--- Début du seeding ---');
+
+  console.log('\n🔵 Étape 1: Insertion des points relais...');
+  
+  const relayPointsToInsert = yaoundePointsRelais.map(point => ({
+    name: point.name,
+    address: point.address,
+    hours: point.hours,
+    lat: point.lat,
+    lng: point.lng,
+    quartier: point.quartier,
+    type: point.type.toUpperCase(),
+  }));
+
+  console.log('   - Suppression des points relais existants...');
+  const { error: deleteError } = await supabase.from('RelayPoint').delete().neq('id', 0);
+  if (deleteError) {
+    console.error('❌ Erreur lors de la suppression des points relais:', deleteError.message);
+    return;
+  }
+  
+  const { data: insertedRelayPoints, error: insertError } = await supabase
+    .from('RelayPoint')
+    .insert(relayPointsToInsert)
+    .select();
+
+  if (insertError) {
+    console.error('❌ Erreur lors de l´insertion des points relais:', insertError.message);
+  } else {
+    console.log(`✅ ${insertedRelayPoints.length} points relais ont été insérés avec succès.`);
+  }
+  
+  console.log('\n--- Seeding terminé avec succès ! ---');
+}
+
+// Exécution du script
+main().catch(e => console.error('\n❌ Une erreur critique est survenue :', e.message));

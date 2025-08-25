@@ -419,161 +419,277 @@ const RouteSelection: React.FC<RouteSelectionProps> = ({ onNext, onBack, formDat
     );
   }
 
-  return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <header className="bg-white shadow-sm p-3 z-20 flex-shrink-0">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
-          <h2 className="text-md sm:text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
-              {!selectedDestination ? "1. Choisissez le point d'arrivée" : "2. Infos du destinataire"}
+return (
+  <div className="h-screen flex flex-col bg-gray-50">
+    {/* Header - Amélioré pour mobile */}
+    <header className="bg-white shadow-sm p-3 z-20 flex-shrink-0 border-b border-gray-200">
+      <div className="max-w-7xl mx-auto flex flex-col gap-3">
+        {/* Titre et bouton toggle mobile */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg sm:text-xl font-semibold bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
+            {!selectedDestination ? "1. Choisissez le point d'arrivée" : "2. Infos du destinataire"}
           </h2>
-          <div className="relative w-full sm:w-auto max-w-xs">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text" 
-              placeholder="Rechercher un relais..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-green-500 focus:border-green-500 shadow-sm"
-            />
-          </div>
+          {/* Bouton toggle sidebar - visible sur tous les écrans */}
           <button 
             onClick={() => setIsSidebarVisible(!isSidebarVisible)} 
-            className="sm:hidden p-2 text-gray-600 hover:text-green-600" 
-            title="Afficher la liste"
+            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all" 
+            title={isSidebarVisible ? "Masquer la liste" : "Afficher la liste"}
           >
             {isSidebarVisible ? <X className="w-5 h-5"/> : <List className="w-5 h-5" />}
           </button>
         </div>
-      </header>
-
-      <div className="flex-1 flex overflow-hidden">
-        <main className="flex-1 relative">
-          <MapComponent
-            onMapReady={handleMapReady}
-            initialCenter={[YAOUNDE_CENTER[1], YAOUNDE_CENTER[0]]} // CORRIGÉ: [lng, lat]
-            initialZoom={YAOUNDE_ZOOM}
+        
+        {/* Barre de recherche - toujours visible */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input 
+            type="text" 
+            placeholder="Rechercher un point relais..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm bg-gray-50 focus:bg-white transition-all"
           />
-        </main>
+        </div>
+        
+        {/* Bouton géolocalisation - visible uniquement sur mobile */}
+        <div className="sm:hidden">
+          <button 
+            onClick={() => mapInstanceRef.current && requestUserLocation(mapInstanceRef.current)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-all"
+          >
+            <LocateFixed className="w-4 h-4" />
+            Me localiser sur la carte
+          </button>
+        </div>
+      </div>
+    </header>
 
-        <aside className={`
-          fixed sm:static top-0 right-0 h-full
-          w-full max-w-xs sm:w-80 md:w-96 bg-white shadow-2xl sm:shadow-lg
-          transform transition-transform duration-300 ease-in-out z-30
-          flex flex-col border-l border-gray-200
-          ${isSidebarVisible ? 'translate-x-0' : 'translate-x-full sm:translate-x-0'}
-        `}>
-          <div className="p-3.5 border-b flex justify-between items-center bg-gray-50">
-            <h3 className="text-md font-semibold text-gray-800">
+    <div className="flex-1 flex overflow-hidden relative">
+      {/* Carte principale */}
+      <main className={`flex-1 relative transition-all duration-300 ${
+        isSidebarVisible ? 'lg:mr-96 md:mr-80 sm:mr-72' : ''
+      }`}>
+        <MapComponent
+          onMapReady={handleMapReady}
+          initialCenter={[YAOUNDE_CENTER[1], YAOUNDE_CENTER[0]]}
+          initialZoom={YAOUNDE_ZOOM}
+        />
+        
+        {/* Bouton géolocalisation flottant sur desktop */}
+        <div className="hidden sm:block absolute top-4 right-4 z-10">
+          <button 
+            onClick={() => mapInstanceRef.current && requestUserLocation(mapInstanceRef.current)}
+            className="p-3 bg-white text-gray-700 rounded-lg shadow-lg border border-gray-200 hover:bg-blue-50 hover:text-blue-600 transition-all"
+            title="Me localiser"
+          >
+            <LocateFixed className="w-5 h-5" />
+          </button>
+        </div>
+        
+        {/* Indicateur mobile pour montrer qu'il y a une sidebar */}
+        <div className={`sm:hidden absolute bottom-4 right-4 z-10 transition-opacity duration-300 ${
+          isSidebarVisible ? 'opacity-0' : 'opacity-100'
+        }`}>
+          <button 
+            onClick={() => setIsSidebarVisible(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-full shadow-lg font-medium text-sm hover:bg-green-700 transition-all"
+          >
+            <List className="w-4 h-4" />
+            Voir la liste
+          </button>
+        </div>
+      </main>
+
+      {/* Sidebar - Améliorée pour mobile */}
+      <aside className={`
+        fixed sm:fixed lg:static
+        top-0 right-0 h-full
+        w-full sm:w-80 md:w-96 lg:w-96
+        bg-white shadow-2xl sm:shadow-lg
+        transform transition-transform duration-300 ease-in-out
+        z-40 sm:z-30 lg:z-20
+        flex flex-col border-l border-gray-200
+        ${isSidebarVisible ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+      `}>
+        {/* Header sidebar */}
+        <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">
               {selectedDestination ? "Infos Destinataire" : "Points Relais"}
             </h3>
-            <button 
-              onClick={() => setIsSidebarVisible(false)} 
-              className="sm:hidden p-1 text-gray-500 hover:text-gray-700"
-            > 
-              <X className="w-5 h-5" /> 
-            </button>
+            {selectedDestination && (
+              <p className="text-sm text-gray-600">Destination: {selectedDestination.name}</p>
+            )}
           </div>
+          <button 
+            onClick={() => setIsSidebarVisible(false)} 
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-white rounded-lg transition-all lg:hidden"
+          > 
+            <X className="w-5 h-5" /> 
+          </button>
+        </div>
 
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {selectedDestination ? (
-              <form onSubmit={handleFormSubmit} className="p-4 space-y-3.5 border-b border-gray-200 overflow-y-auto">
-                <p className="text-xs text-gray-500 mb-2">Remplissez ces informations pour finaliser la sélection du trajet.</p>
-                <div>
-                  <label htmlFor="recipientName" className="block text-xs font-medium text-gray-700 mb-1">
-                    Nom complet du destinataire <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <User size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input 
-                      id="recipientName" 
-                      type="text" 
-                      placeholder="Ex: Alima C." 
-                      value={formData.recipientName} 
-                      onChange={handleRecipientNameChange} 
-                      className="w-full pl-10 pr-3 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
-                      required 
-                    />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {selectedDestination ? (
+            /* Formulaire destinataire - Amélioré pour mobile */
+            <div className="flex-1 overflow-y-auto">
+              <form onSubmit={handleFormSubmit} className="p-4 space-y-4">
+                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-700 font-medium">
+                    📍 Destination sélectionnée
+                  </p>
+                  <p className="text-sm text-green-600">{selectedDestination.name}</p>
+                </div>
+                
+                <p className="text-sm text-gray-600">
+                  Remplissez ces informations pour finaliser la sélection du trajet.
+                </p>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="recipientName" className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom complet du destinataire <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <User size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input 
+                        id="recipientName" 
+                        type="text" 
+                        placeholder="Ex: Alima Camara" 
+                        value={formData.recipientName} 
+                        onChange={handleRecipientNameChange} 
+                        className="w-full pl-11 pr-4 py-3 text-base text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
+                        required 
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="recipientPhone" className="block text-sm font-medium text-gray-700 mb-2">
+                      Téléphone du destinataire <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input 
+                        id="recipientPhone" 
+                        type="tel" 
+                        placeholder="Ex: 6XX XXX XXX" 
+                        value={formData.recipientPhone} 
+                        onChange={handleRecipientPhoneChange} 
+                        className="w-full pl-11 pr-4 py-3 text-base text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
+                        required 
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="recipientEmail" className="block text-sm font-medium text-gray-700 mb-2">
+                      E-mail du destinataire (Optionnel)
+                    </label>
+                    <div className="relative">
+                      <Mail size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input 
+                        id="recipientEmail" 
+                        type="email" 
+                        placeholder="Ex: email@example.com" 
+                        value={formData.recipientEmail} 
+                        onChange={handleRecipientEmailChange} 
+                        className="w-full pl-11 pr-4 py-3 text-base text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label htmlFor="recipientPhone" className="block text-xs font-medium text-gray-700 mb-1">
-                    Téléphone du destinataire <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Phone size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input 
-                      id="recipientPhone" 
-                      type="tel" 
-                      placeholder="Ex: 6XX XXX XXX" 
-                      value={formData.recipientPhone} 
-                      onChange={handleRecipientPhoneChange} 
-                      className="w-full pl-10 pr-3 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
-                      required 
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="recipientEmail" className="block text-xs font-medium text-gray-700 mb-1">
-                    E-mail du destinataire (Optionnel)
-                  </label>
-                  <div className="relative">
-                    <Mail size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input 
-                      id="recipientEmail" 
-                      type="email" 
-                      placeholder="Ex: email@example.com" 
-                      value={formData.recipientEmail} 
-                      onChange={handleRecipientEmailChange} 
-                      className="w-full pl-10 pr-3 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-md focus:outline-none focus:border-green-500 focus:bg-white focus:ring-2 focus:ring-green-200 transition-all" 
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-3 pt-2">
+              </form>
+              
+              {/* Boutons d'action - Fixés en bas */}
+              <div className="p-4 border-t bg-gray-50 space-y-3">
+                <button 
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      arrivalPointId: null,
+                      arrivalPointName: ''
+                    }));
+                  }}
+                  className="w-full px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium text-base transition-all hover:bg-gray-50 flex items-center justify-center gap-2"
+                >
+                  <ArrowRight className="rotate-180 w-5 h-5" />
+                  Changer de destination
+                </button>
+                <div className="flex gap-3">
                   <button 
                     type="button" 
                     onClick={onBack} 
-                    className="flex-1 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-md font-medium text-sm transition-all hover:bg-gray-50"
+                    className="flex-1 px-4 py-3 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium text-base transition-all hover:bg-gray-50"
                   >
                     Précédent
                   </button>
                   <button 
-                    type="submit" 
+                    onClick={handleFormSubmit}
                     disabled={!isRecipientFormValid} 
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-md font-medium text-sm transition-all hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center"
+                    className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium text-base transition-all hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    Suivant <ArrowRight size={16} className="ml-1" />
+                    Suivant <ArrowRight size={18} />
                   </button>
                 </div>
-              </form>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                <p className="text-xs text-gray-500 px-1 pb-1 border-b border-dashed border-gray-300">
-                    Votre point de départ est : <strong className="text-red-600">{fixedOriginPoint.name}</strong>. Veuillez choisir une destination.
-                </p>
-                {/* NOUVEAU : Légende des couleurs */}
-                <div className="text-xs text-gray-500 px-1 pb-2 border-b border-dashed border-gray-300 space-y-1">
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                        <span>Point de départ (origine)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                        <span>Points à proximité (&lt; 200m)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                        <span>Autres points relais</span>
-                    </div>
-                </div>
-
-                {renderDestinationPoints()}
               </div>
-            )}
-          </div>
-        </aside>
-      </div>
+            </div>
+          ) : (
+            /* Liste des points - Améliorée pour mobile */
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Info et légende */}
+              <div className="p-4 bg-gray-50 border-b space-y-3">
+                <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                  <p className="text-sm text-red-700">
+                    <strong>Point de départ:</strong> {fixedOriginPoint.name}
+                  </p>
+                </div>
+                
+                {/* Légende des couleurs - Améliorée */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-700">Légende des couleurs:</p>
+                  <div className="grid grid-cols-1 gap-1.5 text-xs text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0"></div>
+                      <span>Point de départ (origine)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-purple-500 rounded-full flex-shrink-0"></div>
+                      <span>Points à proximité (&lt; 200m)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full flex-shrink-0"></div>
+                      <span>Autres points relais</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Liste scrollable */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {isLoadingPoints ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="animate-spin h-8 w-8 text-green-600" />
+                  </div>
+                ) : (
+                  renderDestinationPoints()
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+      
+      {/* Overlay pour mobile quand sidebar ouverte */}
+      <div 
+        className={`fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden transition-opacity duration-300 ${
+          isSidebarVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setIsSidebarVisible(false)}
+      />
     </div>
-  );
+  </div>
+);
 };
 
 export default RouteSelection;
