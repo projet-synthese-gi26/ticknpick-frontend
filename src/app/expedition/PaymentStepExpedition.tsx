@@ -7,6 +7,42 @@ import { notifyOnPackageDeposit } from '@/lib/notification';
 import { CreditCardIcon, DevicePhoneMobileIcon, BanknotesIcon, GiftIcon, ArrowLeftIcon, CheckCircleIcon, LockClosedIcon, ShareIcon } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 
+
+// 1. AJOUT DES INTERFACES MANQUANTES
+interface SenderData {
+    senderName: string;
+    senderPhone: string;
+}
+
+interface PackageData {
+    weight: string;
+    length: string;
+    width: string;
+    height: string;
+    designation: string;
+    isFragile: boolean;
+    isPerishable: boolean;
+    isInsured: boolean;
+    declaredValue: string;
+}
+
+interface RouteData {
+    departurePointName: string;
+    arrivalPointName: string;
+    recipientName: string;
+    recipientPhone: string;
+    departurePointId?: number | null;
+    arrivalPointId?: number | null;
+}
+
+interface CurrentUser {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+    email?: string;
+}
+
+
 type PaymentStatusType = 'success' | 'pending_cash' | 'pending_recipient' | 'error' | '';
 interface FormData { senderName: string; senderPhone: string; senderAddress: string; recipientName: string; recipientPhone: string; recipientAddress: string; departurePoint: string; arrivalPoint: string; departurePointId: number; arrivalPointId: number; }
 interface PackageData { weight: string; length: string; width: string; height: string; designation: string; isFragile: boolean; isPerishable: boolean; isInsured: boolean; declaredValue: string; }
@@ -17,9 +53,17 @@ interface CurrentUser {
     phone: string | null;     // <-- MODIFIÉ pour accepter null
     email?: string;
 }
-
-interface PaymentStepProps { formData: FormData; packageData: PackageData; currentUser: CurrentUser; onBack: () => void; onSuccess: () => void; onNewTask: () => void; }
-
+// 2. MISE À JOUR DE L'INTERFACE DES PROPS
+interface PaymentStepProps {
+    senderData: SenderData;
+    packageData: PackageData;
+    routeData: RouteData;
+    totalPrice: number;
+    currentUser: CurrentUser;
+    onBack: () => void;
+    onSuccess: () => void;
+    onNewTask: () => void;
+}
 export default function PaymentStep({ formData, packageData, currentUser, onBack, onSuccess, onNewTask }: PaymentStepProps) {
     const { addNotification } = useNotification();
     const [selectedMethod, setSelectedMethod] = useState('');

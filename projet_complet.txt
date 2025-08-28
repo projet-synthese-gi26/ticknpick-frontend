@@ -525,11 +525,15 @@ const handleConfirmWithdrawal = async () => {
 
         setShowWithdrawalSuccess(true);
         setCurrentWithdrawStep('completed');
-    } catch (err: any) {
-        setError(err.message || "Une erreur inconnue est survenue.");
-         // Notification In-App d'erreur
-        addNotification(`Échec du retrait : ${errorMessage}`, 'error');
-    } finally {
+        // ...
+        } catch (err: any) {
+            // Définir le message d'erreur à partir de l'exception
+            const errorMessage = err.message || "Une erreur inconnue est survenue.";
+            setError(errorMessage);
+            // Notification In-App d'erreur
+            addNotification(`Échec du retrait : ${errorMessage}`, 'error'); // Utiliser la variable correcte
+        } finally {
+        // ...
         setIsConfirmingWithdrawal(false);
     }
 };
@@ -3903,14 +3907,20 @@ const handlePayment = async () => {
             // Appeler la fonction de succès du parent
             await onShippingSuccess(newTrackingNumber);
 
-        } catch (err) {
-            console.error("Erreur dans handlePayment:", err);
-            // Afficher l'erreur dans la UI est mieux qu'un alert
-                        // Notification In-App d'erreur
-            addNotification(errorMessage, 'error');
-            alert(`Une erreur est survenue : ${err instanceof Error ? err.message : String(err)}`);
-            setPaymentStatus(null);
-        } finally {
+            // ...
+            } catch (err: any) {
+                console.error("Erreur dans handlePayment:", err);
+
+                // Définir le message d'erreur à partir de l'exception capturée
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                
+                // Notification In-App d'erreur
+                addNotification(errorMessage, 'error'); // Maintenant, la variable existe !
+
+                alert(`Une erreur est survenue : ${errorMessage}`);
+                setPaymentStatus(null);
+            } finally {
+// ...
             setIsProcessing(false);
         }
     };
@@ -9953,6 +9963,7 @@ import {
   Settings,
   AlertCircle
 } from 'lucide-react';
+import { useMap } from 'react-leaflet'; 
 
 // Import dynamique de Leaflet pour éviter les erreurs SSR
 const MapContainer = dynamic(
@@ -9970,7 +9981,6 @@ const MapContainer = dynamic(
 
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
-const useMap = dynamic(() => import('react-leaflet').then((mod) => mod.useMap), { ssr: false });
 
 // Composant ProfileMap avec correction d'erreur
 const ProfileMap = ({ position }: { position: [number, number] }) => {
@@ -11525,26 +11535,27 @@ import { User, Truck, MapPin, CreditCard, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-
-// --- Interfaces pour les données du formulaire ---
 interface SenderData {
     senderName: string;
     senderPhone: string;
 }
 
 interface PackageData {
-    image?: string | null;
-    designation: string;
-    weight: string;
-    isFragile: boolean;
-    // ... autres champs de FomulaireColis.tsx
-}
-
-interface LoggedInUser {
-    id: string;
-    full_name: string | null;
-    phone: string | null;
-    email?: string;
+  image: string | null;
+  designation: string;
+  weight: string;
+  length: string;
+  width: string;
+  height: string;
+  isFragile: boolean;
+  contentType: 'solid' | 'liquid' | '';
+  isPerishable: boolean;
+  description: string;
+  declaredValue: string;
+  isInsured: boolean;
+  deliveryAtOrigin: boolean;
+  deliveryAtDestination: boolean;
+  expressOption?: '' | '24h' | '48h' | '72h';
 }
 
 interface RouteData {
@@ -11554,8 +11565,15 @@ interface RouteData {
     recipientPhone: string;
     departurePointId?: number | null;
     arrivalPointId?: number | null;
-    // ... autres champs
 }
+
+interface CurrentUser {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+    email?: string;
+}
+
 
 const Stepper = ({ currentStep }: { currentStep: number }) => {
     const steps = [
@@ -11585,8 +11603,9 @@ const Stepper = ({ currentStep }: { currentStep: number }) => {
 
 export default function ExpeditionPage() {
     const router = useRouter(); // AJOUT
-    const [user, setUser] = useState<LoggedInUser | null>(null); // AJOUT
+    const [user, setUser] = useState<CurrentUser | null>(null); // AJOUT
     const [isLoadingUser, setIsLoadingUser] = useState(true); // AJOUT
+    
     
     const [currentStep, setCurrentStep] = useState(1);
     const [senderData, setSenderData] = useState<SenderData>({ senderName: '', senderPhone: '' });
@@ -11600,10 +11619,16 @@ export default function ExpeditionPage() {
         const fetchUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                // Pour l'expédition, les infos de l'expéditeur peuvent être différentes de l'utilisateur PRO.
-                // On peut initialiser avec les infos de la session, mais elles sont éditables.
-                setUser({ id: session.user.id, full_name: session.user.user_metadata.full_name, phone: session.user.user_metadata.phone, email: session.user.email });
-                setSenderData({ senderName: session.user.user_metadata.full_name || '', senderPhone: session.user.user_metadata.phone || '' });
+                setUser({
+                    id: session.user.id,
+                    full_name: session.user.user_metadata.full_name || null,
+                    phone: session.user.user_metadata.phone || null,
+                    email: session.user.email
+                });
+                setSenderData({
+                    senderName: session.user.user_metadata.full_name || '',
+                    senderPhone: session.user.user_metadata.phone || ''
+                });
             }
             setIsLoadingUser(false);
         };
@@ -11649,16 +11674,24 @@ export default function ExpeditionPage() {
                     }}
                  />
             case 4:
-                // --- MODIFICATION : S'assurer que les données et l'utilisateur sont prêts ---
-                if (!packageData || !routeData || !user) {
+                if (!packageData || !routeData || !user || !user.full_name) {
                   return <div className="text-center text-red-500 p-8">Erreur de données. Veuillez revenir en arrière.</div>
                 }
+                
+                // Create a user object that matches PaymentStepExpedition's expected interface
+                const userForPayment = {
+                    id: user.id,
+                    full_name: user.full_name, // Now guaranteed to be non-null
+                    phone: user.phone,
+                    email: user.email
+                };
+                
                 return <PaymentStepExpedition
                     senderData={senderData}
                     packageData={packageData}
                     routeData={routeData}
                     totalPrice={totalPrice}
-                    currentUser={user} // <-- On passe l'utilisateur
+                    currentUser={userForPayment} // <-- On passe l'utilisateur
                     onBack={() => setCurrentStep(3)}
                     onSuccess={() => { /* ... */ }}
                     onNewTask={() => setCurrentStep(1) /* Ou une autre logique */}
@@ -11965,60 +11998,61 @@ export default function RouteSelectionExpedition({ onNext, onBack }: RouteSelect
     return el;
   };
 
-  // Draw route between points
-  const drawRoute = useCallback(async (origin: PointRelais, destination: PointRelais) => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
+// Draw route between points
+const drawRoute = useCallback(async (origin: PointRelais, destination: PointRelais) => {
+  const map = mapInstanceRef.current;
+  if (!map) return;
 
-    // Remove existing route
-    if (routeLayerRef.current) {
-      if (map.getLayer(routeLayerRef.current)) map.removeLayer(routeLayerRef.current);
-      if (map.getSource(routeLayerRef.current)) map.removeSource(routeLayerRef.current);
+  // Remove existing route
+  if (routeLayerRef.current) {
+    if (map.getLayer(routeLayerRef.current)) map.removeLayer(routeLayerRef.current);
+    if (map.getSource(routeLayerRef.current)) map.removeSource(routeLayerRef.current);
+  }
+
+  const routeId = 'route-' + Date.now();
+  routeLayerRef.current = routeId;
+
+  // Simple straight line route (in real app, use routing API)
+  // Remove 'as const' to make coordinates mutable
+  const routeGeoJSON = {
+    type: 'Feature' as const,
+    properties: {},
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: [
+        [origin.lng, origin.lat],
+        [destination.lng, destination.lat]
+      ]
     }
+  };
 
-    const routeId = 'route-' + Date.now();
-    routeLayerRef.current = routeId;
+  map.addSource(routeId, {
+    type: 'geojson',
+    data: routeGeoJSON
+  });
 
-    // Simple straight line route (in real app, use routing API)
-    const routeGeoJSON = {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [origin.lng, origin.lat],
-          [destination.lng, destination.lat]
-        ]
-      }
-    };
+  map.addLayer({
+    id: routeId,
+    type: 'line',
+    source: routeId,
+    layout: {
+      'line-join': 'round',
+      'line-cap': 'round'
+    },
+    paint: {
+      'line-color': '#F97316',
+      'line-width': 4,
+      'line-opacity': 0.8
+    }
+  });
 
-    map.addSource(routeId, {
-      type: 'geojson',
-      data: routeGeoJSON
-    });
-
-    map.addLayer({
-      id: routeId,
-      type: 'line',
-      source: routeId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': '#F97316',
-        'line-width': 4,
-        'line-opacity': 0.8
-      }
-    });
-
-    // Fit map to show route
-    const bounds = new maplibregl.LngLatBounds()
-      .extend([origin.lng, origin.lat])
-      .extend([destination.lng, destination.lat]);
-    
-    map.fitBounds(bounds, { padding: 50, duration: 1000 });
-  }, []);
+  // Fit map to show route
+  const bounds = new maplibregl.LngLatBounds()
+    .extend([origin.lng, origin.lat])
+    .extend([destination.lng, destination.lat]);
+  
+  map.fitBounds(bounds, { padding: 50, duration: 1000 });
+}, []);
 
   // Update map markers
   useEffect(() => {
@@ -12493,9 +12527,16 @@ import { notifyOnPackageDeposit } from '@/lib/notification';
 import { CreditCardIcon, DevicePhoneMobileIcon, BanknotesIcon, GiftIcon, ArrowLeftIcon, CheckCircleIcon, LockClosedIcon, ShareIcon } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 
+type PaymentStatusType = 'success' | 'pending_cash' | 'pending_recipient' | 'error' | '';
 interface FormData { senderName: string; senderPhone: string; senderAddress: string; recipientName: string; recipientPhone: string; recipientAddress: string; departurePoint: string; arrivalPoint: string; departurePointId: number; arrivalPointId: number; }
 interface PackageData { weight: string; length: string; width: string; height: string; designation: string; isFragile: boolean; isPerishable: boolean; isInsured: boolean; declaredValue: string; }
-interface CurrentUser { id: string; full_name: string; phone: string; }
+// DANS: PaymentStepExpedition.tsx
+interface CurrentUser {
+    id: string;
+    full_name: string | null; // <-- MODIFIÉ pour accepter null
+    phone: string | null;     // <-- MODIFIÉ pour accepter null
+    email?: string;
+}
 
 interface PaymentStepProps { formData: FormData; packageData: PackageData; currentUser: CurrentUser; onBack: () => void; onSuccess: () => void; onNewTask: () => void; }
 
@@ -12504,7 +12545,7 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     const [selectedMethod, setSelectedMethod] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingStep, setProcessingStep] = useState(0);
-    const [paymentStatus, setPaymentStatus] = useState('');
+    const [paymentStatus, setPaymentStatus] = useState<PaymentStatusType>('');
     const [trackingNumber, setTrackingNumber] = useState('');
     const [cardData, setCardData] = useState({ number: '', expiry: '', cvv: '', holder: '' });
     const [mobileData, setMobileData] = useState({ operator: '', number: '' });
@@ -12531,10 +12572,16 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
         return fees;
     };
 
+    // Helper function to get selected payment method
+    const getSelectedPaymentMethod = () => {
+        return paymentMethods.find(m => m.id === selectedMethod);
+    };
+
     const calculateTotalForPayer = () => {
         const basePrice = calculatePackageBasePrice();
         const additionalFees = calculateAdditionalFees();
-        const methodFee = paymentMethods.find(m => m.id === selectedMethod)?.fee || 0;
+        const selectedPaymentMethod = getSelectedPaymentMethod();
+        const methodFee = selectedPaymentMethod?.fee || 0;
         return basePrice + additionalFees + methodFee;
     };
 
@@ -12651,7 +12698,7 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     };
 
     if (paymentStatus && paymentStatus !== 'error') {
-        const statusConfig = {
+        const statusConfig: Record<Exclude<PaymentStatusType, 'error' | ''>, { color: string, icon: any, title: string, message: string }> = {
             success: { color: 'orange', icon: CheckCircleIcon, title: 'Paiement réussi !', message: 'Votre colis est enregistré et sera traité rapidement.' },
             pending_cash: { color: 'yellow', icon: BanknotesIcon, title: 'En attente de paiement', message: 'Effectuez le paiement au point relais pour finaliser.' },
             pending_recipient: { color: 'purple', icon: GiftIcon, title: 'Paiement par destinataire', message: 'Le destinataire paiera à la réception du colis.' }
@@ -12707,6 +12754,9 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
             </div>
         );
     }
+
+    // Get the selected payment method for the summary
+    const selectedPaymentMethod = getSelectedPaymentMethod();
 
     return (
         <div className="max-w-6xl mx-auto">
@@ -12790,11 +12840,11 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                                     <span>{calculateAdditionalFees().toLocaleString()} FCFA</span>
                                 </div>
                             )}
-                            
-                            {selectedMethod && paymentMethods.find(m => m.id === selectedMethod)?.fee > 0 && (
+                                                        
+                            {selectedPaymentMethod && selectedPaymentMethod.fee > 0 && (
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Frais de paiement</span>
-                                    <span>{paymentMethods.find(m => m.id === selectedMethod)?.fee.toLocaleString()} FCFA</span>
+                                    <span>{selectedPaymentMethod.fee.toLocaleString()} FCFA</span>
                                 </div>
                             )}
                             
@@ -12859,12 +12909,17 @@ const LoadingDots = () => (
 );
 
 const OptionCard = ({ title, description, icon, isSelected, onClick, cost }: {
-  title: string; description?: string; icon: ReactNode; isSelected: boolean;
-  onClick: () => void; cost?: number;
+  title: string; 
+  description?: string; 
+  // Ici on indique que `icon` est un ReactElement qui accepte `className`
+  icon: React.ReactElement<{ className?: string }>; 
+  isSelected: boolean;
+  onClick: () => void; 
+  cost?: number;
 }) => (
   <div className={`border rounded-lg p-2 cursor-pointer transition-all hover:shadow-md flex flex-col items-center text-center text-xs relative ${isSelected ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}`} onClick={onClick}>
     <div className={`p-1.5 rounded-full mb-1 ${isSelected ? 'bg-orange-100' : 'bg-gray-100'}`}>
-      {React.cloneElement(icon as React.ReactElement, { className: `w-4 h-4 ${isSelected ? 'text-orange-600' : 'text-gray-500'}` })}
+      {React.cloneElement(icon, { className: `w-4 h-4 ${isSelected ? 'text-orange-600' : 'text-gray-500'}` })}
     </div>
     <span className={`font-medium ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>{title}</span>
     {description && <span className={`text-xs ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>{description}</span>}
@@ -12890,7 +12945,7 @@ export default function FomulaireColisExpedition({ onContinue, initialData = {},
 
   useEffect(() => {
     const { image, designation, weight } = packageData;
-    setIsFormValid(image && designation.trim() && parseFloat(weight) > 0);
+    setIsFormValid(!!(image && designation.trim() && parseFloat(weight) > 0));
   }, [packageData]);
 
   useEffect(() => {
