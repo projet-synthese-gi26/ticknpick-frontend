@@ -153,61 +153,61 @@ export default function RouteSelectionExpedition({ onNext, onBack }: RouteSelect
     return el;
   };
 
-  // Draw route between points
-  const drawRoute = useCallback(async (origin: PointRelais, destination: PointRelais) => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
+// Draw route between points
+const drawRoute = useCallback(async (origin: PointRelais, destination: PointRelais) => {
+  const map = mapInstanceRef.current;
+  if (!map) return;
 
-    // Remove existing route
-    if (routeLayerRef.current) {
-      if (map.getLayer(routeLayerRef.current)) map.removeLayer(routeLayerRef.current);
-      if (map.getSource(routeLayerRef.current)) map.removeSource(routeLayerRef.current);
+  // Remove existing route
+  if (routeLayerRef.current) {
+    if (map.getLayer(routeLayerRef.current)) map.removeLayer(routeLayerRef.current);
+    if (map.getSource(routeLayerRef.current)) map.removeSource(routeLayerRef.current);
+  }
+
+  const routeId = 'route-' + Date.now();
+  routeLayerRef.current = routeId;
+
+  // Simple straight line route (in real app, use routing API)
+  // Remove 'as const' to make coordinates mutable
+  const routeGeoJSON = {
+    type: 'Feature' as const,
+    properties: {},
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: [
+        [origin.lng, origin.lat],
+        [destination.lng, destination.lat]
+      ]
     }
+  };
 
-    const routeId = 'route-' + Date.now();
-    routeLayerRef.current = routeId;
+  map.addSource(routeId, {
+    type: 'geojson',
+    data: routeGeoJSON
+  });
 
-    // Simple straight line route (in real app, use routing API)
-    // Fixed: Remove 'as const' to make coordinates mutable
-    const routeGeoJSON = {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [origin.lng, origin.lat],
-          [destination.lng, destination.lat]
-        ]
-      }
-    };
+  map.addLayer({
+    id: routeId,
+    type: 'line',
+    source: routeId,
+    layout: {
+      'line-join': 'round',
+      'line-cap': 'round'
+    },
+    paint: {
+      'line-color': '#F97316',
+      'line-width': 4,
+      'line-opacity': 0.8
+    }
+  });
 
-    map.addSource(routeId, {
-      type: 'geojson',
-      data: routeGeoJSON
-    });
-
-    map.addLayer({
-      id: routeId,
-      type: 'line',
-      source: routeId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': '#F97316',
-        'line-width': 4,
-        'line-opacity': 0.8
-      }
-    });
-
-    // Fit map to show route
-    const bounds = new maplibregl.LngLatBounds()
-      .extend([origin.lng, origin.lat])
-      .extend([destination.lng, destination.lat]);
-    
-    map.fitBounds(bounds, { padding: 50, duration: 1000 });
-  }, []);
+  // Fit map to show route
+  const bounds = new maplibregl.LngLatBounds()
+    .extend([origin.lng, origin.lat])
+    .extend([destination.lng, destination.lat]);
+  
+  map.fitBounds(bounds, { padding: 50, duration: 1000 });
+}, []);
 
   // Update map markers
   useEffect(() => {
