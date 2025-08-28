@@ -67,7 +67,7 @@ export default function FomulaireColisExpedition({ onContinue, initialData = {},
 
   useEffect(() => {
     const { image, designation, weight } = packageData;
-    setIsFormValid(image && designation.trim() && parseFloat(weight) > 0);
+    setIsFormValid(!!(image && designation.trim() && parseFloat(weight) > 0));
   }, [packageData]);
 
   useEffect(() => {
