@@ -521,11 +521,15 @@ const handleConfirmWithdrawal = async () => {
 
         setShowWithdrawalSuccess(true);
         setCurrentWithdrawStep('completed');
-    } catch (err: any) {
-        setError(err.message || "Une erreur inconnue est survenue.");
-         // Notification In-App d'erreur
-        addNotification(`Échec du retrait : ${errorMessage}`, 'error');
-    } finally {
+        // ...
+        } catch (err: any) {
+            // Définir le message d'erreur à partir de l'exception
+            const errorMessage = err.message || "Une erreur inconnue est survenue.";
+            setError(errorMessage);
+            // Notification In-App d'erreur
+            addNotification(`Échec du retrait : ${errorMessage}`, 'error'); // Utiliser la variable correcte
+        } finally {
+        // ...
         setIsConfirmingWithdrawal(false);
     }
 };

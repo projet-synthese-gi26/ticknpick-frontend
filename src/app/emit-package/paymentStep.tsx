@@ -645,14 +645,20 @@ const handlePayment = async () => {
             // Appeler la fonction de succès du parent
             await onShippingSuccess(newTrackingNumber);
 
-        } catch (err) {
-            console.error("Erreur dans handlePayment:", err);
-            // Afficher l'erreur dans la UI est mieux qu'un alert
-                        // Notification In-App d'erreur
-            addNotification(errorMessage, 'error');
-            alert(`Une erreur est survenue : ${err instanceof Error ? err.message : String(err)}`);
-            setPaymentStatus(null);
-        } finally {
+            // ...
+            } catch (err: any) {
+                console.error("Erreur dans handlePayment:", err);
+
+                // Définir le message d'erreur à partir de l'exception capturée
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                
+                // Notification In-App d'erreur
+                addNotification(errorMessage, 'error'); // Maintenant, la variable existe !
+
+                alert(`Une erreur est survenue : ${errorMessage}`);
+                setPaymentStatus(null);
+            } finally {
+// ...
             setIsProcessing(false);
         }
     };
