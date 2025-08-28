@@ -168,7 +168,7 @@ export default function RouteSelectionExpedition({ onNext, onBack }: RouteSelect
     routeLayerRef.current = routeId;
 
     // Simple straight line route (in real app, use routing API)
-    // Par celle-ci (avec as const)
+    // Fixed: Remove 'as const' to make coordinates mutable
     const routeGeoJSON = {
       type: 'Feature',
       properties: {},
@@ -179,7 +179,7 @@ export default function RouteSelectionExpedition({ onNext, onBack }: RouteSelect
           [destination.lng, destination.lat]
         ]
       }
-    } as const; // <-- AJOUTEZ CECI
+    };
 
     map.addSource(routeId, {
       type: 'geojson',
