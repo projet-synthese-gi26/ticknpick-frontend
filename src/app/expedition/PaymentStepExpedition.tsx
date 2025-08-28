@@ -46,10 +46,16 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
         return fees;
     };
 
+    // Helper function to get selected payment method
+    const getSelectedPaymentMethod = () => {
+        return paymentMethods.find(m => m.id === selectedMethod);
+    };
+
     const calculateTotalForPayer = () => {
         const basePrice = calculatePackageBasePrice();
         const additionalFees = calculateAdditionalFees();
-        const methodFee = paymentMethods.find(m => m.id === selectedMethod)?.fee || 0;
+        const selectedPaymentMethod = getSelectedPaymentMethod();
+        const methodFee = selectedPaymentMethod?.fee || 0;
         return basePrice + additionalFees + methodFee;
     };
 
@@ -223,6 +229,9 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
         );
     }
 
+    // Get the selected payment method for the summary
+    const selectedPaymentMethod = getSelectedPaymentMethod();
+
     return (
         <div className="max-w-6xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -305,11 +314,11 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                                     <span>{calculateAdditionalFees().toLocaleString()} FCFA</span>
                                 </div>
                             )}
-                            
-                            {selectedMethod && paymentMethods.find(m => m.id === selectedMethod)?.fee > 0 && (
+                                                        
+                            {selectedPaymentMethod && selectedPaymentMethod.fee > 0 && (
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Frais de paiement</span>
-                                    <span>{paymentMethods.find(m => m.id === selectedMethod)?.fee.toLocaleString()} FCFA</span>
+                                    <span>{selectedPaymentMethod.fee.toLocaleString()} FCFA</span>
                                 </div>
                             )}
                             
