@@ -7,6 +7,7 @@ import { notifyOnPackageDeposit } from '@/lib/notification';
 import { CreditCardIcon, DevicePhoneMobileIcon, BanknotesIcon, GiftIcon, ArrowLeftIcon, CheckCircleIcon, LockClosedIcon, ShareIcon } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 
+type PaymentStatusType = 'success' | 'pending_cash' | 'pending_recipient' | 'error' | '';
 interface FormData { senderName: string; senderPhone: string; senderAddress: string; recipientName: string; recipientPhone: string; recipientAddress: string; departurePoint: string; arrivalPoint: string; departurePointId: number; arrivalPointId: number; }
 interface PackageData { weight: string; length: string; width: string; height: string; designation: string; isFragile: boolean; isPerishable: boolean; isInsured: boolean; declaredValue: string; }
 interface CurrentUser { id: string; full_name: string; phone: string; }
@@ -18,7 +19,7 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     const [selectedMethod, setSelectedMethod] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingStep, setProcessingStep] = useState(0);
-    const [paymentStatus, setPaymentStatus] = useState('');
+    const [paymentStatus, setPaymentStatus] = useState<PaymentStatusType>('');
     const [trackingNumber, setTrackingNumber] = useState('');
     const [cardData, setCardData] = useState({ number: '', expiry: '', cvv: '', holder: '' });
     const [mobileData, setMobileData] = useState({ operator: '', number: '' });
@@ -165,7 +166,7 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     };
 
     if (paymentStatus && paymentStatus !== 'error') {
-        const statusConfig = {
+        const statusConfig: Record<Exclude<PaymentStatusType, 'error' | ''>, { color: string, icon: any, title: string, message: string }> = {
             success: { color: 'orange', icon: CheckCircleIcon, title: 'Paiement réussi !', message: 'Votre colis est enregistré et sera traité rapidement.' },
             pending_cash: { color: 'yellow', icon: BanknotesIcon, title: 'En attente de paiement', message: 'Effectuez le paiement au point relais pour finaliser.' },
             pending_recipient: { color: 'purple', icon: GiftIcon, title: 'Paiement par destinataire', message: 'Le destinataire paiera à la réception du colis.' }
