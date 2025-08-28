@@ -13,6 +13,9 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useNotification } from '@/context/NotificationContext';   // <-- AJOUT 1
+import { notifyOnPackageDeposit } from '@/lib/notification';      // <-- AJOUT 2
+
 
 // Icônes de partage
 const WhatsAppIcon = () => <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />;
@@ -89,6 +92,7 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ onBack, formData, packageData
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
   const [currentDate, setCurrentDate] = useState('');
+  const { addNotification } = useNotification(); // <-- AJOUT 3
 
 
   useEffect(() => {
@@ -616,6 +620,19 @@ const handlePayment = async () => {
                 throw new Error(`Erreur base de données : ${error.message}`);
             }
 
+                        // 1. Notification In-App
+            addNotification(`Colis ${newTrackingNumber} enregistré et prêt pour l'envoi !`, 'success');
+            
+            // 2. Notifications par SMS
+            notifyOnPackageDeposit({
+              trackingNumber: newTrackingNumber,
+              recipientName: formData.recipientName || 'Destinataire',
+              recipientPhone: formData.recipientPhone || '',
+              senderName: currentUser.full_name || 'Expéditeur',
+              senderPhone: currentUser.phone || '',
+              arrivalPointName: formData.arrivalPointName || 'Point d\'arrivée'
+            });
+
             setProcessingStep(3);
             await new Promise(resolve => setTimeout(resolve, 300));
             
@@ -631,6 +648,8 @@ const handlePayment = async () => {
         } catch (err) {
             console.error("Erreur dans handlePayment:", err);
             // Afficher l'erreur dans la UI est mieux qu'un alert
+                        // Notification In-App d'erreur
+            addNotification(errorMessage, 'error');
             alert(`Une erreur est survenue : ${err instanceof Error ? err.message : String(err)}`);
             setPaymentStatus(null);
         } finally {

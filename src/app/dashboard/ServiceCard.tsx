@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Camera, User, Package, Tag, PlusCircle, Trash2, Car, Palette, Fingerprint, Ruler, Edit, Save, X, Eye, Users, ShieldCheck, Clock, Sprout, Sparkles, Star, Award } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { ProProfile } from './page';
+import { AnimatePresence, motion } from 'framer-motion';
+
 
 // INTERFACES
 interface StaffMember {
@@ -28,6 +32,43 @@ interface Tarif {
   prix: string;
 }
 
+interface ServiceCardDetails {
+    promo?: string;
+    vehicules?: Vehicle[];
+    tarifs?: Tarif[];
+    devise?: string;
+}
+
+interface InputFieldProps {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  icon?: React.ElementType;
+  readOnly: boolean;
+}
+
+
+interface ColorPaletteProps {
+  selectedColor: string;
+  onSelect: (color: string) => void;
+  readOnly?: boolean;
+}
+
+// Simule le chargement et la sauvegarde des données spécifiques à la carte de service
+const useServiceCardData = (profileId: string) => {
+    // ... Dans une vraie app, ces données seraient chargées depuis Supabase
+    // ... en utilisant `profileId` comme clé.
+    // ... Pour la démo, on utilise useState avec des valeurs initiales.
+    
+    const [vehicules, setVehicules] = useState<Vehicle[]>([{ nom: 'Van Utilitaire', marque: 'Toyota Hiace', couleur: '#10B981', immatriculation: 'LT 589-AI', dimensions: { l: 450, w: 180, h: 190 } }]);
+    const [tarifs, setTarifs] = useState<Tarif[]>([ { service: 'Réception Colis Standard (< 5kg)', prix: '1500' }, { service: 'Gardiennage / jour (après 7j)', prix: '500' } ]);
+    const [devise, setDevise] = useState('XAF');
+
+    return { vehicules, setVehicules, tarifs, setTarifs, devise, setDevise };
+};
+
+
 const initialStaffMembers = [
   { id: 'emp-001', name: 'Essono Cédric', avatar: '/avatars/essono.png', role: 'Manutentionnaire' },
   { id: 'emp-002', name: 'Mballa Alice', avatar: '/avatars/mballa.png', role: 'Responsable Stock' },
@@ -52,14 +93,6 @@ const loadFromMemory = (key: string, defaultValue: any) => {
 };
 
 // SOUS-COMPOSANTS
-interface InputFieldProps {
-  label: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  icon?: React.ElementType;
-  readOnly: boolean;
-}
 
 const InputField = ({ label, value, onChange, placeholder, icon: Icon, readOnly }: InputFieldProps) => (
   <div className="group">
@@ -80,11 +113,6 @@ const InputField = ({ label, value, onChange, placeholder, icon: Icon, readOnly 
   </div>
 );
 
-interface ColorPaletteProps {
-  selectedColor: string;
-  onSelect: (color: string) => void;
-  readOnly?: boolean;
-}
 
 const ColorPalette = ({ selectedColor, onSelect, readOnly = false }: ColorPaletteProps) => {
   const colors = ['#FFFFFF', '#1F2937', '#EF4444', '#F97316', '#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'];
@@ -107,27 +135,25 @@ const ColorPalette = ({ selectedColor, onSelect, readOnly = false }: ColorPalett
   );
 };
 
-const RelayPointServiceCard = () => {
+export default function ServiceCardPage({ profile }: { profile: ProProfile }) {
   // ÉTATS PERSISTANTS
   const [isEditing, setIsEditing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [backupData, setBackupData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [backupData, setBackupData] = useState<ServiceCardDetails | null>(null);
+
+
+  const { vehicules, setVehicules, tarifs, setTarifs, devise, setDevise } = useServiceCardData(profile.id);
 
   const [nom, setNom] = useState(() => loadFromMemory('nom', "Pick & Drop - Agence du Lac"));
   const [adresseGps, setAdresseGps] = useState(() => loadFromMemory('adresseGps', ""));
   const [adresseInformelle, setAdresseInformelle] = useState(() => loadFromMemory('adresseInformelle', "Face à l'hôtel de ville, grand portail vert"));
   const [description, setDescription] = useState(() => loadFromMemory('description', "Votre point relais de confiance au coeur de la ville. Nous combinons sécurité, rapidité et un service client exceptionnel pour tous vos besoins logistiques."));
   const [photoPreview, setPhotoPreview] = useState(() => loadFromMemory('photoPreview', "/images/relay-point-placeholder.jpg"));
-
-  const [vehicules, setVehicules] = useState<Vehicle[]>(() => loadFromMemory('vehicules', [{ nom: 'Van Utilitaire', marque: 'Toyota Hiace', couleur: '#10B981', immatriculation: 'LT 589-AI', dimensions: { l: 450, w: 180, h: 190 } }]));
-  const [newVehicule, setNewVehicule] = useState<Vehicle>({ nom: '', marque: '', couleur: '#10B981', immatriculation: '', dimensions: { l: '', w: '', h: '' } });
-  
   const [services, setServices] = useState<string[]>(() => loadFromMemory('services', ['Aide au chargement sur demande', 'Emballages éco-responsables', 'Stockage sécurisé 24/7']));
-  const [newService, setNewService] = useState('');
-  
+  const [newService, setNewService] = useState(''); 
   const [personnel, setPersonnel] = useState<StaffMember[]>([]);
-  const [devise, setDevise] = useState(() => loadFromMemory('devise', 'XAF'));
-  const [tarifs, setTarifs] = useState<Tarif[]>(() => loadFromMemory('tarifs', [{ service: 'Réception Colis Standard (< 5kg)', prix: '1500' }, { service: 'Réception Colis Large (5-15kg)', prix: '3000' }, { service: 'Gardiennage / jour (après 7 jours)', prix: '500' }]));
+  const [newVehicule, setNewVehicule] = useState<Vehicle>({ nom: '', marque: '', couleur: '#F97316', immatriculation: '', dimensions: { l: '', w: '', h: '' } });
   const [newTarif, setNewTarif] = useState<Tarif>({ service: '', prix: '' });
   const [promo, setPromo] = useState(() => loadFromMemory('promo', "BIENVENUE ! Votre première réception de colis direct est GRATUITE !"));
 
@@ -147,34 +173,53 @@ const RelayPointServiceCard = () => {
   useEffect(() => { saveToMemory('tarifs', tarifs); }, [tarifs]);
   useEffect(() => { saveToMemory('promo', promo); }, [promo]);
 
+  useEffect(() => {
+        const details: ServiceCardDetails = profile.service_card_details || {};
+        setPromo(details.promo || "BIENVENUE ! Votre première réception de colis direct est GRATUITE !");
+        setVehicules(details.vehicules || [{ nom: 'Van Utilitaire', marque: 'Toyota Hiace', couleur: '#F97316', immatriculation: 'LT 589-AI', dimensions: { l: 450, w: 180, h: 190 } }]);
+        setTarifs(details.tarifs || [{ service: 'Réception Colis Standard (< 5kg)', prix: '1500' }, { service: 'Gardiennage / jour (après 7j)', prix: '500' }]);
+        setDevise(details.devise || 'XAF');
+    }, [profile]);
+
   // GESTIONNAIRES
   const handleEditToggle = () => {
-    if (!isEditing) { 
-      setBackupData({ nom, adresseGps, adresseInformelle, description, vehicules, services, tarifs, promo, devise }); 
-    }
-    setIsEditing(!isEditing);
-  };
+        if (!isEditing) {
+            // Créer une sauvegarde des états actuels
+            setBackupData({ promo, vehicules, tarifs, devise });
+            setIsEditing(true);
+        }
+    };
 
-  const handleSaveChanges = () => { 
-    setIsEditing(false); 
-    setBackupData(null); 
-  };
+    const handleSaveChanges = async () => {
+        setIsLoading(true);
+        const newServiceCardDetails: ServiceCardDetails = { promo, vehicules, tarifs, devise };
+        
+        const { error } = await supabase
+            .from('profiles_pro')
+            .update({ service_card_details: newServiceCardDetails })
+            .eq('id', profile.id);
 
-  const handleCancelChanges = () => {
-    if (backupData) {
-      setNom(backupData.nom); 
-      setAdresseGps(backupData.adresseGps); 
-      setAdresseInformelle(backupData.adresseInformelle);
-      setDescription(backupData.description); 
-      setVehicules(backupData.vehicules); 
-      setServices(backupData.services);
-      setTarifs(backupData.tarifs); 
-      setPromo(backupData.promo); 
-      setDevise(backupData.devise);
-    }
-    setIsEditing(false); 
-    setBackupData(null);
-  };
+        setIsLoading(false);
+        if (error) {
+            alert("Erreur lors de la sauvegarde : " + error.message);
+        } else {
+            alert("Modifications sauvegardées avec succès !");
+            setIsEditing(false);
+            setBackupData(null);
+        }
+    };
+
+    const handleCancelChanges = () => {
+        if (backupData) {
+            setPromo(backupData.promo || '');
+            setVehicules(backupData.vehicules || []);
+            setTarifs(backupData.tarifs || []);
+            setDevise(backupData.devise || 'XAF');
+        }
+        setIsEditing(false);
+        setBackupData(null);
+    };
+
 
   const handleGetLocation = () => {
     if (navigator.geolocation) {
@@ -336,82 +381,52 @@ const RelayPointServiceCard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/30 to-green-50/20 p-4 sm:p-8">
-      {/* HEADER MODERNE */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 bg-white/80 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-white/40">
-        <div>
-          <h2 className="text-3xl font-black bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">Carte de Service</h2>
-          <p className="text-slate-600 font-medium">Interface de gestion de votre point relais</p>
-        </div>
-        <div className="flex gap-3">
-          {!isEditing && (
-            <button onClick={() => setShowPreview(true)} className="group flex items-center gap-2 bg-white border-2 border-slate-200 text-slate-700 font-bold py-3 px-6 rounded-2xl hover:border-emerald-300 hover:shadow-lg transition-all duration-300">
-              <Eye className="h-5 w-5 group-hover:text-emerald-500 transition-colors"/> Aperçu
-            </button>
-          )}
-          
-          {isEditing ? (
-            <>
-              <button onClick={handleCancelChanges} className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-2xl shadow-lg transition-all duration-300">
-                <X className="h-5 w-5"/> Annuler
-              </button>
-              <button onClick={handleSaveChanges} className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white font-bold py-3 px-6 rounded-2xl shadow-lg transition-all duration-300 transform hover:scale-105">
-                <Save className="h-5 w-5"/> Sauvegarder
-              </button>
-            </>
-          ) : (
-            <button onClick={handleEditToggle} className="flex items-center gap-2 bg-gradient-to-r from-emerald-100 to-green-100 hover:from-emerald-200 hover:to-green-200 text-emerald-800 font-bold py-3 px-6 rounded-2xl shadow-lg transition-all duration-300 transform hover:scale-105">
-              <Edit className="h-5 w-5"/> Modifier
-            </button>
-          )}
-        </div>
-      </div>
+        <div className="relative space-y-8">
+        {/* --- Bouton d'édition flottant et animé --- */}
+        <div className="fixed top-24 right-4 md:right-8 z-40">
+             <div className="relative flex flex-col items-center gap-3">
+                <button
+                    onClick={isEditing ? handleSaveChanges : handleEditToggle}
+                    disabled={isLoading}
+                    className={`flex items-center gap-2 font-bold py-4 px-5 rounded-full text-white shadow-xl transform transition-all duration-300 hover:scale-105
+                    ${isEditing 
+                        ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                        : 'bg-gradient-to-r from-orange-500 to-amber-500'
+                    }`}
+                >
+                    <AnimatePresence mode="wait">
+                        <motion.div key={isEditing ? 'save' : 'edit'} initial={{opacity: 0, rotate: -30}} animate={{opacity: 1, rotate: 0}} exit={{opacity: 0, rotate: 30}}>
+                            {isEditing ? <Save className="w-6 h-6"/> : <Edit className="w-6 h-6"/>}
+                        </motion.div>
+                    </AnimatePresence>
+                     <AnimatePresence>
+                        {isEditing && (
+                            <motion.span initial={{width: 0, opacity: 0}} animate={{width: 'auto', opacity: 1}} exit={{width: 0, opacity: 0}}>
+                                {isLoading ? 'Sauvegarde...' : 'Sauvegarder'}
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+                </button>
 
-      {/* CONTENU PRINCIPAL */}
-      <div className="space-y-8">
-        {/* SECTION HERO */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 overflow-hidden">
-          <div className="relative h-80 bg-cover bg-center group" style={{ backgroundImage: `url(${photoPreview})` }}>
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
-            {isEditing && (
-              <label htmlFor="photo-upload" className="absolute bottom-6 right-6 cursor-pointer bg-emerald-500/90 backdrop-blur-sm text-white px-6 py-3 rounded-2xl shadow-xl hover:bg-emerald-600 transition-all duration-300 flex items-center gap-3 transform hover:scale-105">
-                <Camera className="h-5 w-5" /> Changer la photo
-                <input id="photo-upload" type="file" className="hidden" onChange={handlePhotoChange} accept="image/*" />
-              </label>
-            )}
-            <div className="absolute bottom-6 left-6 text-white">
-              <div className="flex items-center gap-2 bg-emerald-500/20 backdrop-blur-md px-4 py-2 rounded-full">
-                <Clock className="h-4 w-4" />
-                <span className="text-sm font-medium">Ouvert 24/7</span>
-              </div>
+                <AnimatePresence>
+                {isEditing && (
+                    <motion.button 
+                        initial={{y: -10, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: -10, opacity: 0}}
+                        onClick={handleCancelChanges} 
+                        className="bg-white text-gray-600 font-bold p-3 rounded-full shadow-lg hover:bg-gray-100 transition-all">
+                        <X className="w-5 h-5"/>
+                    </motion.button>
+                )}
+                </AnimatePresence>
             </div>
-          </div>
-          
-          <div className="p-8">
-            <input type="text" value={nom} onChange={(e) => setNom(e.target.value)} readOnly={!isEditing} className={`text-4xl font-black w-full border-b-4 bg-transparent outline-none transition-all duration-300 ${isEditing ? 'border-emerald-300 focus:border-emerald-500 text-slate-800' : 'border-transparent text-slate-800'}`} placeholder="Nom du point relais" />
-            
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} readOnly={!isEditing} className={`mt-6 text-slate-600 text-lg w-full h-32 border-2 rounded-2xl p-4 transition-all duration-300 resize-none ${isEditing ? 'bg-white/80 border-emerald-200 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500' : 'bg-slate-50/50 border-transparent cursor-not-allowed'}`} placeholder="Décrivez votre point relais..." />
-            
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Adresse GPS</label>
-                <div className="flex gap-3">
-                  <input type="text" value={adresseGps} onChange={(e) => setAdresseGps(e.target.value)} readOnly={!isEditing} placeholder="Lat, Long" className={`flex-grow px-4 py-3 rounded-xl border-2 transition-all duration-300 ${!isEditing ? 'bg-slate-50/50 border-slate-200 cursor-not-allowed' : 'bg-white/80 border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20'}`}/>
-                  {isEditing && (
-                    <button onClick={handleGetLocation} className="p-3 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:from-emerald-600 hover:to-green-600 transition-all duration-300 shadow-lg transform hover:scale-105">
-                      <MapPin className="h-6 w-6"/>
-                    </button>
-                  )}
-                </div>
-              </div>
-              <InputField label="Adresse Descriptive" value={adresseInformelle} onChange={(e) => setAdresseInformelle(e.target.value)} readOnly={!isEditing} placeholder="Ex: En face de la mairie" icon={MapPin} />
-            </div>
-          </div>
         </div>
 
-        {/* SECTIONS FONCTIONNALITÉS */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* VÉHICULES & SERVICES */}
+        <div className="grid lg:grid-cols-2 gap-8 items-start">
+             {/* --- Flotte de véhicules & Tarifs (côte gauche) --- */}
+            <div className="space-y-8">
+                <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border p-8">
+                    <h4 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mb-6"><Truck className="text-orange-500 h-7 w-7"/>Flotte de Véhicules</h4>    
+                              {/* VÉHICULES & SERVICES */}
           <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 p-8 space-y-8">
             <div>
               <h4 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mb-6"><Truck className="text-emerald-500 h-7 w-7"/>Flotte de Véhicules</h4>
@@ -490,45 +505,12 @@ const RelayPointServiceCard = () => {
             </div>
           </div>
 
-          {/* ÉQUIPE */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 p-8">
-            <h4 className="text-2xl font-bold text-slate-800 mb-2 flex items-center gap-3"><Users className="text-emerald-500 h-7 w-7"/>Notre Équipe</h4>
-            <p className="text-xs text-slate-500 mb-6 bg-slate-100 px-3 py-2 rounded-lg">Synchronisé depuis le module Personnel</p>
-            <div className="space-y-4">
-              {personnel.map(p => (
-                <div key={p.id} className="group flex items-center gap-4 p-4 rounded-2xl hover:bg-gradient-to-r hover:from-emerald-50 hover:to-green-50 transition-all duration-300 hover:shadow-lg cursor-pointer">
-                  <div className="relative">
-                    <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-110">
-                      <User className="h-7 w-7 text-white" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-white">
-                      <div className="w-1 h-1 bg-white rounded-full mx-auto mt-1 animate-pulse"></div>
-                    </div>
-                  </div>
-                  <div className="flex-grow">
-                    <p className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{p.name}</p>
-                    <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors">{p.role}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* TARIFS & PROMOTIONS */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* GRILLE TARIFAIRE */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><Package className="text-emerald-500 h-7 w-7"/>Grille Tarifaire</h3>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-bold text-slate-700">Devise:</label>
-                <select id="devise" value={devise} onChange={(e) => setDevise(e.target.value)} disabled={!isEditing} className={`px-4 py-2 rounded-xl border-2 font-bold transition-all duration-300 ${!isEditing ? 'bg-slate-100 border-slate-200 cursor-not-allowed' : 'bg-white border-emerald-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20'}`}>
-                  <option>XAF</option><option>EUR</option><option>USD</option>
-                </select>
-              </div>
-            </div>
-            
+          <h4 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mb-6"><Package className="text-orange-500 h-7 w-7"/>Grille Tarifaire</h4>
+                     <select disabled={!isEditing} value={devise} onChange={e => setDevise(e.target.value)}
+                        className={`font-bold border-2 rounded-lg p-2 mb-4 ${!isEditing ? 'bg-gray-100' : 'border-orange-300'}`}>
+                         <option>XAF</option>
+                         <option>EUR</option>
+                     </select>
             <div className="space-y-3">
               {tarifs.map((t, index) => (
                 <div key={index} className="group flex justify-between items-center p-5 rounded-2xl bg-gradient-to-r from-slate-50 to-slate-100 hover:from-emerald-50 hover:to-green-50 border border-slate-200 hover:border-emerald-300 transition-all duration-300 hover:shadow-lg">
@@ -557,50 +539,32 @@ const RelayPointServiceCard = () => {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* PROMOTIONS */}
-          <div className="relative overflow-hidden rounded-3xl shadow-xl">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500"></div>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.3),transparent_60%)]"></div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-12 -translate-x-12"></div>
+</div>
+            </div>
             
-            <div className="relative p-8 text-white min-h-[300px] flex flex-col">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl shadow-lg">
-                  <Sparkles className="h-7 w-7 animate-pulse"/>
-                </div>
-                <h3 className="text-2xl font-black">Offres Spéciales</h3>
-              </div>
-              
-              <textarea value={promo} onChange={(e) => setPromo(e.target.value)} readOnly={!isEditing} className={`flex-grow w-full bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-2xl p-6 text-lg font-medium leading-relaxed placeholder-white/70 resize-none transition-all duration-300 ${isEditing ? 'focus:ring-4 focus:ring-white/50 focus:border-white/50' : 'cursor-not-allowed'}`} placeholder="Décrivez votre offre spéciale..." rows={6} />
-              
-              <div className="absolute bottom-4 right-6 opacity-20">
-                <Award className="h-20 w-20 animate-bounce"/>
-              </div>
+            {/* --- Personnel ou Message Freelance & Promo (côte droite) --- */}
+            <div className="space-y-8">
+                {profile.account_type === 'AGENCY' && (
+                    <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border p-8">
+                         <h4 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mb-6"><Users className="text-orange-500 h-7 w-7"/>Notre Équipe</h4>
+                         {/* Vous pouvez mapper le personnel ici si nécessaire */}
+                    </div>
+                )}
+                {profile.account_type === 'FREELANCE' && (
+                    <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border p-8 text-center">
+                         <User className="w-12 h-12 mx-auto text-orange-400 mb-4"/>
+                         <h4 className="text-xl font-bold text-slate-800">Gestionnaire Unique</h4>
+                         <p className="text-slate-500 mt-2">En tant que Freelance, vous êtes le seul gestionnaire. Pour ajouter du personnel, passez à un compte Agence.</p>
+                    </div>
+                )}
+                 <div className="relative overflow-hidden rounded-3xl shadow-xl bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 p-8 text-white min-h-[250px] flex flex-col">
+                     <h3 className="text-2xl font-black flex items-center gap-3 mb-4"><Award className="w-7 h-7"/>Offres Spéciales</h3>
+                     <textarea value={promo} onChange={(e) => setPromo(e.target.value)} readOnly={!isEditing} 
+                        className="flex-grow w-full bg-white/20 p-4 rounded-xl resize-none font-medium placeholder-white/70"/>
+                 </div>
             </div>
-          </div>
         </div>
-      </div>
-
-      {/* MODAL APERÇU */}
-      {showPreview && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setShowPreview(false)}>
-          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 flex justify-end p-4">
-              <button onClick={() => setShowPreview(false)} className="bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white p-3 rounded-2xl transition-all duration-300 transform hover:scale-110">
-                <X className="h-6 w-6"/>
-              </button>
-            </div>
-            <div className="px-4 pb-4">
-              {renderPreviewCard()}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
-export default RelayPointServiceCard;

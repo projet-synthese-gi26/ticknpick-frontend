@@ -1,0 +1,119 @@
+name,address,quartier,lat,lng,hours,type
+"Relais MarketCm Bastos","Rue 1756, face Immeuble SCB, Bastos","Bastos",3.8686,11.5184,"Lun-Ven: 8h-19h | Sam: 9h-15h",bureau
+"Boutique Connectée Bastos","Carrefour Bastos, à côté de Total","Bastos",3.8672,11.5178,"Tous les jours: 7h30-20h30",commerce
+"Agence Express Bastos","Avenue Kennedy, Immeuble Les Diplomates","Bastos",3.8691,11.5193,"Lun-Sam: 7h-21h",agence
+"Point MarketCm Hippodrome","Boulevard du 20 Mai, face stade","Hippodrome",3.8612,11.5107,"Lun-Sam: 8h-18h",bureau
+"Superette Relais Hippodrome","Rue de l'Hippodrome, près du marché","Hippodrome",3.8605,11.5119,"Tous les jours: 6h30-21h",commerce
+"Agence Colis Express","Carrefour Hippodrome, Immeuble Le Général","Hippodrome",3.8621,11.5123,"Lun-Ven: 7h30-19h | Sam: 8h-13h",agence
+"Relais Principal Tsinga","Avenue Winston Churchill","Tsinga",3.8724,11.5068,"Lun-Sam: 7h30-20h",bureau
+"Librairie-Papeterie Relais Tsinga","Rue Joseph Mballa Eloumden","Tsinga",3.8731,11.5075,"Lun-Sam: 8h-19h",commerce
+"Dépôt Express Tsinga","Carrefour Tsinga, face station Oryx","Tsinga",3.8718,11.5059,"24h/24 - 7j/7",agence
+"Bureau MarketCm Nkolndongo","Avenue de la Liberté","Nkolndongo",3.8782,11.4927,"Lun-Ven: 8h-17h | Sam: 9h-13h",bureau
+"Epicerie Relais Nkolndongo","Marché Central Nkolndongo","Nkolndongo",3.8791,11.4935,"Tous les jours: 6h-22h",commerce
+"Agence Logistique Nkolndongo","Rue des Banques, Immeuble Financier","Nkolndongo",3.8776,11.4919,"Lun-Sam: 7h-20h",agence
+"Bureau Principal MarketCm","Avenue Kennedy, Immeuble CNPS, 2ème étage","Centre-ville",3.8667,11.5167,"Lun-Ven: 7h30-17h30 | Sam: 8h-13h",bureau
+"Relais Poste Centrale","Place de l'Indépendance","Centre-ville",3.8658,11.5153,"Lun-Sam: 8h-18h",agence
+"Librairie des Nations","Rue Joseph Charles","Centre-ville",3.8672,11.5171,"Lun-Sam: 7h30-19h",commerce
+"Relais MarketCm Bastos","Rue 1756, face Immeuble SCB","Bastos",3.8686,11.5184,"Lun-Ven: 8h-19h | Sam: 9h-15h",bureau
+"Boutique Connectée Bastos","Carrefour Bastos, à côté de Total","Bastos",3.8672,11.5178,"Tous les jours: 7h30-20h30",commerce
+"Agence Express Bastos","Avenue Kennedy, Immeuble Les Diplomates","Bastos",3.8691,11.5193,"Lun-Sam: 7h-21h",agence
+"Point MarketCm Hippodrome","Boulevard du 20 Mai, face stade","Hippodrome",3.8612,11.5107,"Lun-Sam: 8h-18h",bureau
+"Superette Relais Hippodrome","Rue de l'Hippodrome, près du marché","Hippodrome",3.8605,11.5119,"Tous les jours: 6h30-21h",commerce
+"Agence Colis Express","Carrefour Hippodrome, Immeuble Le Général","Hippodrome",3.8621,11.5123,"Lun-Ven: 7h30-19h | Sam: 8h-13h",agence
+"Relais Principal Tsinga","Avenue Winston Churchill","Tsinga",3.8724,11.5068,"Lun-Sam: 7h30-20h",bureau
+"Librairie-Papeterie Relais Tsinga","Rue Joseph Mballa Eloumden","Tsinga",3.8731,11.5075,"Lun-Sam: 8h-19h",commerce
+"Dépôt Express Tsinga","Carrefour Tsinga, face station Oryx","Tsinga",3.8718,11.5059,"24h/24 - 7j/7",agence
+"Bureau MarketCm Nkolndongo","Avenue de la Liberté","Nkolndongo",3.8782,11.4927,"Lun-Ven: 8h-17h | Sam: 9h-13h",bureau
+"Epicerie Relais Nkolndongo","Marché Central Nkolndongo","Nkolndongo",3.8791,11.4935,"Tous les jours: 6h-22h",commerce
+"Agence Logistique Nkolndongo","Rue des Banques, Immeuble Financier","Nkolndongo",3.8776,11.4919,"Lun-Sam: 7h-20h",agence
+"Point Relais Université","Carrefour Messa, près de l'Université","Messa",3.8689,11.5032,"Lun-Sam: 7h30-20h",bureau
+"Relais Pharmacie Messa","Rue de la Poste, face hôpital","Messa",3.8675,11.5028,"7j/7: 7h-22h",commerce
+"Dépôt Messa","Avenue Ngoa-Ekellé","Messa",3.8693,11.5041,"Lun-Ven: 8h-18h",agence
+"Relais MarketCm Mvog-Ada","Carrefour Mvog-Ada","Mvog-Ada",3.8832,11.4976,"Lun-Sam: 8h-19h",bureau
+"Superette Ada","Marché Mvog-Ada","Mvog-Ada",3.8827,11.4983,"Tous les jours: 6h-21h",commerce
+"Agence Mvog-Ada","Route d'Efoulan","Mvog-Ada",3.8841,11.4969,"Lun-Ven: 7h30-17h",agence
+"Relais Principal Mvolyé","Carrefour Mvolyé, près de l'église","Mvolyé",3.8723,11.4987,"Lun-Sam: 7h30-19h",bureau
+"Boutique Tech Mvolyé","Rue de l'Université Catholique","Mvolyé",3.8735,11.4979,"Lun-Sam: 8h-20h",commerce
+"Dépôt Express Mvolyé","Avenue Jean Paul II","Mvolyé",3.8718,11.4992,"Lun-Ven: 7h-21h | Sam: 8h-18h",agence
+"Point Relais Mvog-Atangana","Marché Mvog-Atangana","Mvog-Atangana Mballa",3.8856,11.5034,"Tous les jours: 7h-20h",commerce
+"Bureau MarketCm Mvog-Atangana","Rue principale","Mvog-Atangana Mballa",3.8849,11.5027,"Lun-Ven: 8h-17h",bureau
+"Agence Colis Mvog-Atangana","Carrefour école publique","Mvog-Atangana Mballa",3.8862,11.5041,"Lun-Sam: 7h30-19h",agence
+"Relais Sécurisé Etoudi","Avenue du Palais, Zone protégée","Etoudi",3.8589,11.5287,"Lun-Ven: 8h-18h | Sam: 9h-13h",bureau
+"Boutique Diplomat Etoudi","Résidence des Ambassadeurs","Etoudi",3.8578,11.5279,"Lun-Sam: 9h-19h",commerce
+"Agence VIP Etoudi","Complexe présidentiel, accès nord","Etoudi",3.8595,11.5293,"Lun-Ven: 7h30-17h",agence
+"Relais MarketCm Nsimeyong","Carrefour Nsimeyong","Nsimeyong",3.8754,11.5123,"Lun-Sam: 7h-20h",bureau
+"Epicerie Relais Nsimeyong","Rue du marché","Nsimeyong",3.8761,11.5135,"6h-22h tous les jours",commerce
+"Dépôt Nsimeyong","Avenue des écoles","Nsimeyong",3.8748,11.5117,"Lun-Ven: 8h-17h",agence
+"Relais Principal Essos","Carrefour Essos, près hôpital","Essos",3.8825,11.5198,"Lun-Sam: 7h30-20h",bureau
+"Boutique High-Tech Essos","Centre commercial Essos","Essos",3.8832,11.5204,"Lun-Sam: 8h-19h",commerce
+"Agence Express Essos","Route du Palais des Congrès","Essos",3.8819,11.5191,"24h/24 - 7j/7",agence
+"Point Relais Briqueterie","Marché Central Briqueterie","Briqueterie",3.8789,11.5056,"Tous les jours: 6h-21h",commerce
+"Bureau MarketCm Briqueterie","Avenue des Briqueteries","Briqueterie",3.8796,11.5063,"Lun-Ven: 8h-17h",bureau
+"Agence Logistique Briqueterie","Zone industrielle","Briqueterie",3.8783,11.5049,"Lun-Sam: 7h-19h",agence
+"Relais MarketCm Ekounou","Carrefour Ekounou","Ekounou",3.8912,11.4978,"Lun-Sam: 7h30-19h",bureau
+"Superette Ekounou","Rue du marché","Ekounou",3.8905,11.4985,"6h-22h tous les jours",commerce
+"Dépôt Ekounou","Route de l'aéroport","Ekounou",3.8918,11.4971,"Lun-Ven: 8h-17h",agence
+"Point Relais Universitaire","Cité U Elig-Essono","Elig-Essono",3.8662,11.4923,"Lun-Sam: 8h-20h",bureau
+"Librairie Académique","Rue des Résidences","Elig-Essono",3.8657,11.4931,"Lun-Sam: 7h30-19h",commerce
+"Agence Express Etudiant","Face restaurant universitaire","Elig-Essono",3.8668,11.4917,"Lun-Ven: 7h30-21h | Sam: 9h-17h",agence
+"Relais MarketCm Elig-Edzoa","Carrefour Elig-Edzoa","Elig-Edzoa",3.8843,11.4876,"Lun-Sam: 7h-19h",bureau
+"Boutique Elig-Edzoa","Marché secondaire","Elig-Edzoa",3.8837,11.4883,"Tous les jours: 6h30-21h",commerce
+"Dépôt Elig-Edzoa","Route de Nkolbisson","Elig-Edzoa",3.8849,11.4871,"Lun-Ven: 8h-17h",agence
+"Relais Principal Mimboman","Carrefour Mimboman","Mimboman",3.8965,11.4812,"Lun-Sam: 7h30-20h",bureau
+"Boutique High-Tech Mimboman","Centre commercial Mimboman","Mimboman",3.8971,11.4819,"Lun-Sam: 8h-19h",commerce
+"Agence Express Mimboman","Route de l'hôpital","Mimboman",3.896,11.4806,"24h/24 - 7j/7",agence
+"Point Relais Nkolbikok","Marché Nkolbikok","Nkolbikok",3.8923,11.4765,"Tous les jours: 6h-21h",commerce
+"Bureau MarketCm Nkolbikok","Avenue principale","Nkolbikok",3.893,11.4772,"Lun-Ven: 8h-17h",bureau
+"Agence Logistique Nkolbikok","Zone artisanale","Nkolbikok",3.8917,11.4759,"Lun-Sam: 7h-19h",agence
+"Relais MarketCm Nkolbogo","Carrefour Nkolbogo","Nkolbogo",3.8876,11.4723,"Lun-Sam: 7h30-19h",bureau
+"Superette Nkolbogo","Rue du marché","Nkolbogo",3.8869,11.473,"6h-22h tous les jours",commerce
+"Dépôt Nkolbogo","Route de Nkolmesseng","Nkolbogo",3.8882,11.4716,"Lun-Ven: 8h-17h",agence
+"Point Relais Nkolmengong","Carrefour Nkolmengong","Nkolmengong",3.8834,11.4687,"Lun-Sam: 8h-20h",bureau
+"Librairie Nkolmengong","Rue des écoles","Nkolmengong",3.8829,11.4694,"Lun-Sam: 7h30-19h",commerce
+"Agence Express Nkolmengong","Face au centre de santé","Nkolmengong",3.8839,11.4681,"Lun-Ven: 7h30-21h | Sam: 9h-17h",agence
+"Relais MarketCm Nkolmesseng","Carrefour Nkolmesseng","Nkolmesseng",3.8795,11.4652,"Lun-Sam: 7h-19h",bureau
+"Boutique Nkolmesseng","Marché secondaire","Nkolmesseng",3.8789,11.4659,"Tous les jours: 6h30-21h",commerce
+"Dépôt Nkolmesseng","Route de Nkolfoulou","Nkolmesseng",3.8801,11.4646,"Lun-Ven: 8h-17h",agence
+"Relais Principal Nkolmeyos","Carrefour Nkolmeyos","Nkolmeyos",3.8763,11.4621,"Lun-Sam: 7h30-20h",bureau
+"Boutique High-Tech Nkolmeyos","Centre commercial","Nkolmeyos",3.8769,11.4628,"Lun-Sam: 8h-19h",commerce
+"Agence Express Nkolmeyos","Route de l'hôpital","Nkolmeyos",3.8758,11.4615,"24h/24 - 7j/7",agence
+"Point Relais Nkolnkoumou","Marché Nkolnkoumou","Nkolnkoumou",3.8725,11.4593,"Tous les jours: 6h-21h",commerce
+"Bureau MarketCm Nkolnkoumou","Avenue principale","Nkolnkoumou",3.8732,11.46,"Lun-Ven: 8h-17h",bureau
+"Agence Logistique Nkolnkoumou","Zone artisanale","Nkolnkoumou",3.8719,11.4587,"Lun-Sam: 7h-19h",agence
+"Relais MarketCm Nkolnyada","Carrefour Nkolnyada","Nkolnyada",3.8687,11.4564,"Lun-Sam: 7h30-19h",bureau
+"Superette Nkolnyada","Rue du marché","Nkolnyada",3.868,11.4571,"6h-22h tous les jours",commerce
+"Dépôt Nkolnyada","Route de Nkolo","Nkolnyada",3.8693,11.4558,"Lun-Ven: 8h-17h",agence
+"Point Relais Nkolo","Carrefour Nkolo","Nkolo",3.8652,11.4536,"Lun-Sam: 8h-20h",bureau
+"Librairie Nkolo","Rue des écoles","Nkolo",3.8647,11.4543,"Lun-Sam: 7h30-19h",commerce
+"Agence Express Nkolo","Face au centre de santé","Nkolo",3.8657,11.453,"Lun-Ven: 7h30-21h | Sam: 9h-17h",agence
+"Relais MarketCm Nkolfoulou","Carrefour Nkolfoulou","Nkolfoulou",3.8618,11.4507,"Lun-Sam: 7h-19h",bureau
+"Boutique Nkolfoulou","Marché secondaire","Nkolfoulou",3.8612,11.4514,"Tous les jours: 6h30-21h",commerce
+"Dépôt Nkolfoulou","Route de Nkolso'o","Nkolfoulou",3.8624,11.4501,"Lun-Ven: 8h-17h",agence
+"Relais Principal Nkolso'o","Carrefour Nkolso'o","Nkolso'o",3.8584,11.4482,"Lun-Sam: 7h30-20h",bureau
+"Boutique High-Tech Nkolso'o","Centre commercial","Nkolso'o",3.859,11.4489,"Lun-Sam: 8h-19h",commerce
+"Agence Express Nkolso'o","Route principale","Nkolso'o",3.8579,11.4476,"24h/24 - 7j/7",agence
+"Bureau Principal MarketCm Akwa","Boulevard de la Liberté, face Direction Générale SABC","Akwa",4.0452,9.6922,"Lun-Ven: 7h30-18h | Sam: 8h-14h",bureau
+"Relais Boutique Le Kajo","Rue Joss, à côté de l'Hôtel Akwa Palace","Akwa",4.0481,9.6895,"Lun-Sam: 9h-20h",commerce
+"Agence Express Bonapriso","Rue Njo-Njo, près de la Pâtisserie Le Flaubert","Bonapriso",4.0325,9.6987,"Lun-Sam: 7h-21h",agence
+"Point Relais Super U","Centre Commercial L'Atrium, Bonapriso","Bonapriso",4.0355,9.7011,"Tous les jours: 8h-21h",commerce
+"Dépôt Logistique Bonaberi","Ancienne Route, après le Pont sur le Wouri","Bonaberi",4.0938,9.6641,"Lun-Ven: 8h-17h",agence
+"Relais Pharmacie Makepe","Carrefour St-Tropez, Makepe","Makepe",4.0792,9.7423,"7j/7: 8h-22h",commerce
+"Agence Centrale Bafoussam","Rue du Marché A, face au Commissariat Central","Marché A",5.4695,10.419,"Lun-Sam: 7h30-18h",bureau
+"Quincaillerie Relais Djemoun","Quartier Djemoun, route de Bamenda","Djemoun",5.4788,10.4215,"Lun-Sam: 7h-19h",commerce
+"Point Relais Kouogouo","Carrefour Total Ndiangdam","Kouogouo",5.4842,10.3998,"Lun-Ven: 8h-18h | Sam: 9h-13h",agence
+"Bureau Principal Bamenda","Commercial Avenue, près du rond-point City Chemist","Commercial Avenue",5.9634,10.1587,"Lun-Ven: 8h-17h | Sam: 8h-13h",bureau
+"Librairie Relais Nkwen","Cow Street, à côté de Food Market","Nkwen",5.9602,10.1601,"Lun-Sam: 7h30-19h",commerce
+"Relais Côtier Limbe","Down Beach, face au Seme Beach Hotel","Down Beach",4.0152,9.2081,"Lun-Dim: 9h-18h",bureau
+"Boutique Relais Bota","Près du Jardin Botanique de Limbe","Bota",4.0105,9.1869,"Lun-Sam: 8h-19h",commerce
+"Agence Océan Kribi","Centre-ville, près du débarcadère","Centre-ville",2.9461,9.9079,"Lun-Sam: 8h-18h",bureau
+"Point Relais Chutes de la Lobé","Route des Chutes de la Lobé","Lobé",2.8804,9.8973,"Tous les jours: 9h-17h",commerce
+"Bureau Central Garoua","Avenue des Banques, quartier Yelwa","Yelwa",9.3005,13.4021,"Lun-Ven: 8h-17h | Sam: 9h-13h",bureau
+"Agence Roumdé Adjia","Près du Stade Omnisport de Roumdé Adjia","Roumdé Adjia",9.3248,13.3854,"Lun-Sam: 8h-18h",agence
+"Relais Sahel Maroua","Quartier DOUGGOI, près du marché central","Douggoi",10.5902,14.3218,"Lun-Sam: 7h30-18h",bureau
+"Boutique Relais Pont Vert","Carrefour Pont Vert, sur la Nationale N1","Pitoare",10.5835,14.316,"Tous les jours: 7h-20h",commerce
+"Agence du Château Ngaoundéré","Montée du Lamidat, quartier Résidentiel","Résidentiel",7.332,13.5834,"Lun-Ven: 8h-17h",agence
+"Point Relais Université de Dang","Carrefour de l'Université de Ngaoundéré, Dang","Dang",7.4253,13.5678,"Lun-Sam: 8h-19h",commerce
+"Bureau Régional Sud Ebolowa","Place de l'indépendance, centre administratif","Centre administratif",2.9144,11.156,"Lun-Ven: 8h-17h",bureau
+"Relais Marché Anacardier","Marché Anacardier, quartier New-Bell","New-Bell",2.9098,11.1492,"Lun-Sam: 7h-18h",commerce
+"Agence de l'Est Bertoua","Avenue Ahidjo, près de la grande mosquée","Mokolo",4.5776,13.6821,"Lun-Ven: 7h30-17h30 | Sam: 8h-13h",agence
+"Point Relais Université Dschang","Cité universitaire, campus principal","Campus",5.4523,10.0631,"Lun-Sam: 8h-20h",bureau

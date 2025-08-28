@@ -49,6 +49,8 @@ import Navbar from '../../components/Navbar';
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; // Renamed to avoid conflict with HeroIcon
 import { supabase } from '@/lib/supabase';  
+import { useNotification } from '@/context/NotificationContext'; // <-- AJOUT 1
+import { notifyOnPackageWithdrawal } from '@/lib/notification';   // <-- AJOUT 2
 interface PackageInfo {
   trackingNumber: string;
   senderName: string; 
@@ -124,7 +126,7 @@ const WithdrawPackagePage: React.FC<WithdrawPackagePageProps> = ({}) => {
   const [retirantInfo, setRetirantInfo] = useState<RetirantInfo>({ name: '', cni: '', cniDate: '', phone: '' });
   const [isConfirmingWithdrawal, setIsConfirmingWithdrawal] = useState(false);
   const [showWithdrawalSuccess, setShowWithdrawalSuccess] = useState(false);
-  
+  const { addNotification } = useNotification(); // <-- AJOUT 3
   const [amountPaid, setAmountPaid] = useState('');
   const [changeAmount, setChangeAmount] = useState('0');
 
@@ -511,10 +513,18 @@ const handleConfirmWithdrawal = async () => {
         
         // La logique de génération de PDF et de succès reste la même
         await generateWithdrawalPDF(updatedPackageInfo, finalRetirantInfo);
+                // 1. Notification In-App
+        addNotification(`Retrait du colis ${updatedPackageInfo.trackingNumber} finalisé avec succès !`, 'success');
+        
+        // 2. Notifications par SMS (s'exécute en arrière-plan, n'attend pas la fin)
+        notifyOnPackageWithdrawal(updatedPackageInfo, finalRetirantInfo.name);
+
         setShowWithdrawalSuccess(true);
         setCurrentWithdrawStep('completed');
     } catch (err: any) {
         setError(err.message || "Une erreur inconnue est survenue.");
+         // Notification In-App d'erreur
+        addNotification(`Échec du retrait : ${errorMessage}`, 'error');
     } finally {
         setIsConfirmingWithdrawal(false);
     }
