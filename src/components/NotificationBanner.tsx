@@ -1,13 +1,34 @@
+// FICHIER : src/components/NotificationBanner.tsx
+// VERSION CORRIGÉE
+
 'use client';
 
 import { AnimatePresence, motion, useAnimation } from 'framer-motion';
-import { useNotification } from '../context/NotificationContext'; // Assurez-vous que le chemin est correct
+import { useNotification } from '../context/NotificationContext';
 import { CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { useEffect } from 'react';
 
+// --- CORRECTION 1 : Définir un type clair pour les types de notification ---
+type NotificationType = 'success' | 'error' | 'info';
+
+// --- CORRECTION 2 : Définir une interface pour une notification (basée sur le contexte) ---
+interface Notification {
+  id: string | number;
+  message: string;
+  type: NotificationType;
+  duration?: number;
+  title?: string;
+}
+
 // --- CONFIGURATION DU DESIGN ---
-// On peut facilement changer le thème ici
-const notificationStyles = {
+// On type l'objet pour qu'il ne puisse être indexé que par NotificationType
+const notificationStyles: Record<NotificationType, {
+  icon: JSX.Element;
+  bg: string;
+  progressBar: string;
+  titleColor: string;
+  textColor: string;
+}> = {
   success: {
     icon: <CheckCircle className="h-6 w-6 text-emerald-500" />,
     bg: 'bg-emerald-50/80 border-emerald-200 backdrop-blur-lg',
@@ -34,8 +55,10 @@ const notificationStyles = {
 
 // --- LE SOUS-COMPOSANT NOTIFICATION ---
 // On l'isole pour mieux gérer l'état individuel (timer, animations)
-const NotificationItem = ({ notif, onRemove }: { notif: any; onRemove: (id: string | number) => void; }) => {
+const NotificationItem = ({ notif, onRemove }: { notif: Notification; onRemove: (id: string | number) => void; }) => {
   const controls = useAnimation();
+  
+  // --- CORRECTION 3 : La ligne ci-dessous est maintenant sécurisée grâce au typage ---
   const styles = notificationStyles[notif.type] || notificationStyles.info;
 
   useEffect(() => {
@@ -97,11 +120,11 @@ const NotificationBanner = () => {
   const { notifications, removeNotification } = useNotification();
 
   return (
-    // Position change en fonction de la taille de l'écran pour une meilleure responsivité
     <div className="fixed bottom-0 sm:bottom-6 sm:left-6 w-full sm:w-auto p-4 sm:p-0 z-[100] flex flex-col items-center sm:items-start pointer-events-none">
       <AnimatePresence>
         {notifications.map((notif) => (
-          <NotificationItem key={notif.id} notif={notif} onRemove={removeNotification} />
+          // On s'assure que notif est bien du bon type
+          <NotificationItem key={notif.id} notif={notif as Notification} onRemove={removeNotification} />
         ))}
       </AnimatePresence>
     </div>
