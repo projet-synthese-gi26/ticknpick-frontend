@@ -1,12 +1,12 @@
 // FICHIER : src/components/NotificationBanner.tsx
-// VERSION CORRIGÉE
+// VERSION CORRIGÉE - FIX JSX.Element
 
 'use client';
 
 import { AnimatePresence, motion, useAnimation } from 'framer-motion';
 import { useNotification } from '../context/NotificationContext';
 import { CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, ReactElement } from 'react';
 
 // --- CORRECTION 1 : Définir un type clair pour les types de notification ---
 type NotificationType = 'success' | 'error' | 'info';
@@ -21,9 +21,9 @@ interface Notification {
 }
 
 // --- CONFIGURATION DU DESIGN ---
-// On type l'objet pour qu'il ne puisse être indexé que par NotificationType
+// CORRECTION PRINCIPALE : Remplacer JSX.Element par ReactElement
 const notificationStyles: Record<NotificationType, {
-  icon: JSX.Element;
+  icon: ReactElement;
   bg: string;
   progressBar: string;
   titleColor: string;
