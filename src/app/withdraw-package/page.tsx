@@ -63,7 +63,7 @@ const cardVariants: Variants = {
   exit: { opacity: 0, y: -20, transition: { duration: 0.3, ease: 'easeIn' } },
 };
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Pick & Drop Link";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Pick n Drop Link";
 
 // --- AJOUT IMPORTANT ---
 // Définir à nouveau les types de l'inventaire pour garantir la cohérence des données
