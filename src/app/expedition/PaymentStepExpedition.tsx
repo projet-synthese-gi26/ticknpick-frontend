@@ -10,7 +10,13 @@ import jsPDF from 'jspdf';
 type PaymentStatusType = 'success' | 'pending_cash' | 'pending_recipient' | 'error' | '';
 interface FormData { senderName: string; senderPhone: string; senderAddress: string; recipientName: string; recipientPhone: string; recipientAddress: string; departurePoint: string; arrivalPoint: string; departurePointId: number; arrivalPointId: number; }
 interface PackageData { weight: string; length: string; width: string; height: string; designation: string; isFragile: boolean; isPerishable: boolean; isInsured: boolean; declaredValue: string; }
-interface CurrentUser { id: string; full_name: string; phone: string; }
+// DANS: PaymentStepExpedition.tsx
+interface CurrentUser {
+    id: string;
+    full_name: string | null; // <-- MODIFIÉ pour accepter null
+    phone: string | null;     // <-- MODIFIÉ pour accepter null
+    email?: string;
+}
 
 interface PaymentStepProps { formData: FormData; packageData: PackageData; currentUser: CurrentUser; onBack: () => void; onSuccess: () => void; onNewTask: () => void; }
 
