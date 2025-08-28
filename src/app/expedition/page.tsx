@@ -43,80 +43,6 @@ interface LoggedInUser {
     email?: string;
 }
 
-Withdraw Package Page
-Model response
-ThinkingThoughts
-(experimental)
-Auto
-Expand to view model thoughts
-
-chevron_right
-Model response
-ThinkingThoughts
-(experimental)
-Auto
-Expand to view model thoughts
-
-chevron_right
-Model response
-ThinkingThoughts
-(experimental)
-Auto
-Expand to view model thoughts
-
-chevron_right
-Model response
-ThinkingThoughts
-(experimental)
-Auto
-Expand to view model thoughts
-
-chevron_right
-Model response
-Parfait, je comprends tout à fait. Pas de problème pour ne pas créer de nouveau fichier, nous allons harmoniser les types directement dans les fichiers existants. La logique reste la même : s'assurer que les définitions sont cohérentes.
-Solution Sans Refactorisation
-Nous allons copier la définition la plus complète de l'interface PackageData et la coller dans le fichier parent où elle était incomplète.
-Étape 1 : Récupérer la définition complète
-Dans src/app/expedition/PaymentStepExpedition.tsx, vous avez une interface PackageData qui est correcte et complète (elle est implicitement définie via les props mais on va prendre celle de FormulaireColisExpedition qui est plus claire).
-La définition la plus complète se trouve dans src/app/expedition/FormulaireColisExpedition.tsx.
-Copiez cette interface :
-code
-TypeScript
-// DANS FormulaireColisExpedition.tsx
-interface PackageData {
-  image: string | null;
-  designation: string;
-  weight: string;
-  length: string;
-  width: string;
-  height: string;
-  isFragile: boolean;
-  contentType: 'solid' | 'liquid' | '';
-  isPerishable: boolean;
-  description: string;
-  declaredValue: string;
-  isInsured: boolean;
-  deliveryAtOrigin: boolean;
-  deliveryAtDestination: boolean;
-}
-Étape 2 : Mettre à jour la définition incomplète
-Maintenant, allez dans le fichier src/app/expedition/page.tsx et remplacez la définition incomplète de PackageData par celle que vous venez de copier.
-Fichier à modifier : src/app/expedition/page.tsx
-Remplacez ceci :
-code
-TypeScript
-// Ligne ~18 du fichier expedition/page.tsx
-interface PackageData {
-    image?: string | null;
-    designation: string;
-    weight: string;
-    isFragile: boolean;
-    // ... autres champs de FomulaireColis.tsx
-}
-Par la version complète :
-code
-TypeScript
-// Remplacez par ceci
 interface PackageData {
   image: string | null;
   designation: string;
@@ -135,54 +61,6 @@ interface PackageData {
   // Ajout de l'option express pour être 100% complet
   expressOption?: '' | '24h' | '48h' | '72h'; 
 }
-Étape 3 : Ajuster l'état et le passage des props
-Toujours dans src/app/expedition/page.tsx, il faut mettre à jour l'état et comment la prop est passée.
-Mettez à jour l'état initial pour packageData pour qu'il soit null afin de refléter qu'il n'est pas encore complet.
-Dans le rendu du composant PaymentStepExpedition, assurez-vous de faire un "cast" (une affirmation de type) pour rassurer TypeScript que, à ce stade, l'objet packageData est bien complet.
-Dans src/app/expedition/page.tsx :
-code
-TypeScript
-// ...
-
-// Mettez à jour l'état
-const [packageData, setPackageData] = useState<PackageData | null>(null);
-
-// ...
-
-const renderStep = () => {
-    switch (currentStep) {
-        // ... cas 1, 2
-        case 2:
-            return <FomulaireColisExpedition
-                initialData={packageData || {}} 
-                onBack={() => setCurrentStep(1)} 
-                onContinue={(data, price) => {
-                    setPackageData(data); // `data` ici est maintenant du bon type complet
-                    setTotalPrice(price);
-                    setCurrentStep(3);
-                }}
-            />;
-        // ... cas 3
-        case 4:
-            // S'assurer que les données ne sont pas nulles
-            if (!packageData || !routeData || !user) {
-                return <div className="text-center text-red-500 p-8">Erreur de données. Veuillez revenir en arrière.</div>
-            }
-            return <PaymentStepExpedition
-                // ... autres props
-                packageData={packageData} // Le 'cast' n'est plus nécessaire ici car on a vérifié plus haut
-                // ... autres props
-            />;
-        // ...
-    }
-};
-Maintenant, allons aussi harmoniser la définition des props dans PaymentStepExpedition.tsx.
-Fichier à modifier : src/app/expedition/PaymentStepExpedition.tsx
-Au début du fichier, définissez les interfaces comme suit :
-code
-TypeScript
-// ...
-// --- Copiez/Collez EXACTEMENT les mêmes interfaces qu'on a définies dans page.tsx ---
 
 interface SenderData {
     senderName: string;
