@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
-import type { PackageInfo } from '../app/withdraw-package/page'; // Assurez-vous que le chemin est correct
-
+// NOUVELLE LIGNE
+import type { PackageInfo } from '@/types';
 /**
  * Normalise un numéro de téléphone pour l'envoi de SMS (format 6XXXXXXXX).
  * @param phone Le numéro à normaliser

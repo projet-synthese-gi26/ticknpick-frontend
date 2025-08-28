@@ -51,41 +51,9 @@ import OriginalQRCode from 'qrcode'; // Renamed to avoid conflict with HeroIcon
 import { supabase } from '@/lib/supabase';  
 import { useNotification } from '@/context/NotificationContext'; // <-- AJOUT 1
 import { notifyOnPackageWithdrawal } from '@/lib/notification';   // <-- AJOUT 2
-interface PackageInfo {
-  trackingNumber: string;
-  senderName: string; 
-  senderPhone: string;
-  recipientName: string;
-  recipientPhone: string;
-  departurePointName: string;
-  arrivalPointName: string;
-  packageDescription: string;
-  packageWeight: string;
-  isFragile: boolean;
-  isPerishable: boolean;
-  isInsured: boolean;
-  declaredValue?: string;
-  status: 'Au départ' | 'En transit' | 'Arrivé au relais' | 'Reçu' | 'Annulé';
-  estimatedArrivalDate?: string;
-  pickupDate?: string;
-  retirantName?: string;
-  retirantCni?: string;
-  retirantCniDate?: string;
-  retirantPhone?: string;
-  retirantSignature?: string; // This will now typically be undefined
-  isPaid: boolean;
-  shippingCost?: string;
-  amountPaid?: string;
-  changeAmount?: string;
-}
+// Au début du fichier src/app/withdraw-package/page.tsx
 
-interface RetirantInfo {
-  name: string;
-  cni: string;
-  cniDate: string;
-  phone: string;
-  // signatureDataUrl?: string; // Removed as digital signature is no longer used
-}
+import type { PackageInfo, RetirantInfo } from '@/types/index'; // <-- AJOUTER CETTE LIGNE
 
 interface WithdrawPackagePageProps {}
 
