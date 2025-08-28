@@ -9,59 +9,6 @@ import { User, Truck, MapPin, CreditCard, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-
-// --- Interfaces pour les données du formulaire ---
-interface SenderData {
-    senderName: string;
-    senderPhone: string;
-}
-
-// DANS FormulaireColisExpedition.tsx
-// Remplacez par ceci
-interface PackageData {
-  image: string | null;
-  designation: string;
-  weight: string;
-  length: string;
-  width: string;
-  height: string;
-  isFragile: boolean;
-  contentType: 'solid' | 'liquid' | '';
-  isPerishable: boolean;
-  description: string;
-  declaredValue: string;
-  isInsured: boolean;
-  deliveryAtOrigin: boolean;
-  deliveryAtDestination: boolean;
-  // Ajout de l'option express pour être 100% complet
-  expressOption?: '' | '24h' | '48h' | '72h'; 
-}
-interface LoggedInUser {
-    id: string;
-    full_name: string | null;
-    phone: string | null;
-    email?: string;
-}
-
-interface PackageData {
-  image: string | null;
-  designation: string;
-  weight: string;
-  length: string;
-  width: string;
-  height: string;
-  isFragile: boolean;
-  contentType: 'solid' | 'liquid' | '';
-  isPerishable: boolean;
-  description: string;
-  declaredValue: string;
-  isInsured: boolean;
-  deliveryAtOrigin: boolean;
-  deliveryAtDestination: boolean;
-  // Ajout de l'option express pour être 100% complet
-  expressOption?: '' | '24h' | '48h' | '72h'; 
-}
-
 interface SenderData {
     senderName: string;
     senderPhone: string;
@@ -102,16 +49,6 @@ interface CurrentUser {
 }
 
 
-interface RouteData {
-    departurePointName: string;
-    arrivalPointName:string;
-    recipientName: string;
-    recipientPhone: string;
-    departurePointId?: number | null;
-    arrivalPointId?: number | null;
-    // ... autres champs
-}
-
 const Stepper = ({ currentStep }: { currentStep: number }) => {
     const steps = [
         { num: 1, title: "Expéditeur", icon: <User className="w-6 h-6"/> },
@@ -140,7 +77,7 @@ const Stepper = ({ currentStep }: { currentStep: number }) => {
 
 export default function ExpeditionPage() {
     const router = useRouter(); // AJOUT
-    const [user, setUser] = useState<LoggedInUser | null>(null); // AJOUT
+    const [user, setUser] = useState<CurrentUser | null>(null); // AJOUT
     const [isLoadingUser, setIsLoadingUser] = useState(true); // AJOUT
     
     
@@ -156,10 +93,16 @@ export default function ExpeditionPage() {
         const fetchUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                // Pour l'expédition, les infos de l'expéditeur peuvent être différentes de l'utilisateur PRO.
-                // On peut initialiser avec les infos de la session, mais elles sont éditables.
-                setUser({ id: session.user.id, full_name: session.user.user_metadata.full_name, phone: session.user.user_metadata.phone, email: session.user.email });
-                setSenderData({ senderName: session.user.user_metadata.full_name || '', senderPhone: session.user.user_metadata.phone || '' });
+                setUser({
+                    id: session.user.id,
+                    full_name: session.user.user_metadata.full_name || null,
+                    phone: session.user.user_metadata.phone || null,
+                    email: session.user.email
+                });
+                setSenderData({
+                    senderName: session.user.user_metadata.full_name || '',
+                    senderPhone: session.user.user_metadata.phone || ''
+                });
             }
             setIsLoadingUser(false);
         };
