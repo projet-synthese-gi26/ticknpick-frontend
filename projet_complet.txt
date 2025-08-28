@@ -11515,7 +11515,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\expedition\page.tsx
 ================================================================================
 
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from '@/components/Navbar';
 import SenderInfoStep from './SenderInfoStep'; // Étape 1: Infos expéditeur
 import FomulaireColisExpedition from './FormulaireColisExpedition'; // Réutilisé et adapté
@@ -11523,6 +11523,8 @@ import RouteSelectionExpedition from './RouteExpedition'; // Étape 3: Choix du 
 import PaymentStepExpedition from './PaymentStepExpedition'; // Étape 4: Paiement
 import { User, Truck, MapPin, CreditCard, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 // --- Interfaces pour les données du formulaire ---
 interface SenderData {
@@ -11536,6 +11538,13 @@ interface PackageData {
     weight: string;
     isFragile: boolean;
     // ... autres champs de FomulaireColis.tsx
+}
+
+interface LoggedInUser {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+    email?: string;
 }
 
 interface RouteData {
@@ -11575,11 +11584,32 @@ const Stepper = ({ currentStep }: { currentStep: number }) => {
 };
 
 export default function ExpeditionPage() {
+    const router = useRouter(); // AJOUT
+    const [user, setUser] = useState<LoggedInUser | null>(null); // AJOUT
+    const [isLoadingUser, setIsLoadingUser] = useState(true); // AJOUT
+    
     const [currentStep, setCurrentStep] = useState(1);
     const [senderData, setSenderData] = useState<SenderData>({ senderName: '', senderPhone: '' });
     const [packageData, setPackageData] = useState<PackageData | null>(null);
     const [routeData, setRouteData] = useState<RouteData | null>(null);
     const [totalPrice, setTotalPrice] = useState(0);
+
+
+        // --- AJOUT : Hook pour charger l'utilisateur ---
+    useEffect(() => {
+        const fetchUser = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                // Pour l'expédition, les infos de l'expéditeur peuvent être différentes de l'utilisateur PRO.
+                // On peut initialiser avec les infos de la session, mais elles sont éditables.
+                setUser({ id: session.user.id, full_name: session.user.user_metadata.full_name, phone: session.user.user_metadata.phone, email: session.user.email });
+                setSenderData({ senderName: session.user.user_metadata.full_name || '', senderPhone: session.user.user_metadata.phone || '' });
+            }
+            setIsLoadingUser(false);
+        };
+        fetchUser();
+    }, []);
+
 
     const renderStep = () => {
         switch (currentStep) {
@@ -11619,14 +11649,20 @@ export default function ExpeditionPage() {
                     }}
                  />
             case 4:
+                // --- MODIFICATION : S'assurer que les données et l'utilisateur sont prêts ---
+                if (!packageData || !routeData || !user) {
+                  return <div className="text-center text-red-500 p-8">Erreur de données. Veuillez revenir en arrière.</div>
+                }
                 return <PaymentStepExpedition
                     senderData={senderData}
-                    packageData={packageData!}
-                    routeData={routeData!}
+                    packageData={packageData}
+                    routeData={routeData}
                     totalPrice={totalPrice}
+                    currentUser={user} // <-- On passe l'utilisateur
                     onBack={() => setCurrentStep(3)}
-                    onSuccess={() => { /* Gérer le succès */ }}
-                />
+                    onSuccess={() => { /* ... */ }}
+                    onNewTask={() => setCurrentStep(1) /* Ou une autre logique */}
+                />;
             default:
                 return null;
         }
@@ -13321,7 +13357,7 @@ export default function Home() {
                   Envoyer un colis
                 </Link>
                 <Link 
-                  href="/login" 
+                  href="/register" 
                   className="bg-white border-2 border-orange-600 text-orange-600 px-8 py-4 rounded-full hover:bg-orange-50 transition-colors font-semibold text-lg"
                 >
                   Devenir Point Relais

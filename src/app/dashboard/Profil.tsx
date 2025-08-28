@@ -25,6 +25,7 @@ import {
   Settings,
   AlertCircle
 } from 'lucide-react';
+import { useMap } from 'react-leaflet'; 
 
 // Import dynamique de Leaflet pour éviter les erreurs SSR
 const MapContainer = dynamic(
@@ -42,7 +43,6 @@ const MapContainer = dynamic(
 
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
-const useMap = dynamic(() => import('react-leaflet').then((mod) => mod.useMap), { ssr: false });
 
 // Composant ProfileMap avec correction d'erreur
 const ProfileMap = ({ position }: { position: [number, number] }) => {
