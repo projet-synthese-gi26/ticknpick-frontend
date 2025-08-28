@@ -7,8 +7,7 @@ import { notifyOnPackageDeposit } from '@/lib/notification';
 import { CreditCardIcon, DevicePhoneMobileIcon, BanknotesIcon, GiftIcon, ArrowLeftIcon, CheckCircleIcon, LockClosedIcon, ShareIcon } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 
-
-// 1. AJOUT DES INTERFACES MANQUANTES
+// Interfaces définies une seule fois et correctement typées
 interface SenderData {
     senderName: string;
     senderPhone: string;
@@ -42,18 +41,22 @@ interface CurrentUser {
     email?: string;
 }
 
+// Interface pour FormData (reconstruite à partir du contexte)
+interface FormData {
+    senderName: string;
+    senderPhone: string;
+    senderAddress: string;
+    recipientName: string;
+    recipientPhone: string;
+    recipientAddress: string;
+    departurePoint: string;
+    arrivalPoint: string;
+    departurePointId: number;
+    arrivalPointId: number;
+}
 
 type PaymentStatusType = 'success' | 'pending_cash' | 'pending_recipient' | 'error' | '';
-interface FormData { senderName: string; senderPhone: string; senderAddress: string; recipientName: string; recipientPhone: string; recipientAddress: string; departurePoint: string; arrivalPoint: string; departurePointId: number; arrivalPointId: number; }
-interface PackageData { weight: string; length: string; width: string; height: string; designation: string; isFragile: boolean; isPerishable: boolean; isInsured: boolean; declaredValue: string; }
-// DANS: PaymentStepExpedition.tsx
-interface CurrentUser {
-    id: string;
-    full_name: string | null; // <-- MODIFIÉ pour accepter null
-    phone: string | null;     // <-- MODIFIÉ pour accepter null
-    email?: string;
-}
-// 2. MISE À JOUR DE L'INTERFACE DES PROPS
+
 interface PaymentStepProps {
     senderData: SenderData;
     packageData: PackageData;
@@ -64,7 +67,17 @@ interface PaymentStepProps {
     onSuccess: () => void;
     onNewTask: () => void;
 }
-export default function PaymentStep({ formData, packageData, currentUser, onBack, onSuccess, onNewTask }: PaymentStepProps) {
+
+export default function PaymentStepExpedition({ 
+    senderData, 
+    packageData, 
+    routeData, 
+    totalPrice,
+    currentUser, 
+    onBack, 
+    onSuccess, 
+    onNewTask 
+}: PaymentStepProps) {
     const { addNotification } = useNotification();
     const [selectedMethod, setSelectedMethod] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -73,7 +86,20 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     const [trackingNumber, setTrackingNumber] = useState('');
     const [cardData, setCardData] = useState({ number: '', expiry: '', cvv: '', holder: '' });
     const [mobileData, setMobileData] = useState({ operator: '', number: '' });
-    const [showReceipt, setShowReceipt] = useState(false);
+
+    // Reconstruction de formData à partir des props
+    const formData: FormData = {
+        senderName: senderData.senderName,
+        senderPhone: senderData.senderPhone,
+        senderAddress: '', // Valeur par défaut si non fournie
+        recipientName: routeData.recipientName,
+        recipientPhone: routeData.recipientPhone,
+        recipientAddress: '', // Valeur par défaut si non fournie
+        departurePoint: routeData.departurePointName,
+        arrivalPoint: routeData.arrivalPointName,
+        departurePointId: routeData.departurePointId || 0,
+        arrivalPointId: routeData.arrivalPointId || 0,
+    };
 
     const paymentMethods = [
         { id: 'card', name: 'Carte bancaire', icon: CreditCardIcon, fee: 0, gradient: 'from-blue-500 to-blue-600', popular: false },
@@ -82,13 +108,13 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
         { id: 'recipient', name: 'Paiement par destinataire', icon: GiftIcon, fee: 0, gradient: 'from-purple-500 to-purple-600', popular: false }
     ];
 
-    const calculatePackageBasePrice = () => {
+    const calculatePackageBasePrice = (): number => {
         const weight = parseFloat(packageData.weight) || 0;
         const volume = (parseFloat(packageData.length) || 0) * (parseFloat(packageData.width) || 0) * (parseFloat(packageData.height) || 0);
         return Math.max(2000, weight * 500 + volume * 0.1);
     };
 
-    const calculateAdditionalFees = () => {
+    const calculateAdditionalFees = (): number => {
         let fees = 0;
         if (packageData.isFragile) fees += 500;
         if (packageData.isPerishable) fees += 300;
@@ -101,7 +127,7 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
         return paymentMethods.find(m => m.id === selectedMethod);
     };
 
-    const calculateTotalForPayer = () => {
+    const calculateTotalForPayer = (): number => {
         const basePrice = calculatePackageBasePrice();
         const additionalFees = calculateAdditionalFees();
         const selectedPaymentMethod = getSelectedPaymentMethod();
@@ -147,7 +173,10 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     };
 
     const handlePayment = async () => {
-        if (!selectedMethod) { addNotification("Sélectionnez une méthode de paiement", 'error'); return; }
+        if (!selectedMethod) { 
+            addNotification("Sélectionnez une méthode de paiement", 'error'); 
+            return; 
+        }
         
         setIsProcessing(true);
         const steps = ['Validation des données', 'Traitement du paiement', 'Enregistrement', 'Finalisation'];
@@ -222,18 +251,19 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
     };
 
     if (paymentStatus && paymentStatus !== 'error') {
-        const statusConfig: Record<Exclude<PaymentStatusType, 'error' | ''>, { color: string, icon: any, title: string, message: string }> = {
+        const statusConfig: Record<Exclude<PaymentStatusType, 'error' | ''>, { color: string, icon: React.ComponentType<any>, title: string, message: string }> = {
             success: { color: 'orange', icon: CheckCircleIcon, title: 'Paiement réussi !', message: 'Votre colis est enregistré et sera traité rapidement.' },
             pending_cash: { color: 'yellow', icon: BanknotesIcon, title: 'En attente de paiement', message: 'Effectuez le paiement au point relais pour finaliser.' },
             pending_recipient: { color: 'purple', icon: GiftIcon, title: 'Paiement par destinataire', message: 'Le destinataire paiera à la réception du colis.' }
         };
         
         const config = statusConfig[paymentStatus];
+        const IconComponent = config.icon;
         
         return (
             <div className="max-w-2xl mx-auto text-center space-y-6">
                 <div className={`w-24 h-24 mx-auto rounded-full bg-gradient-to-r from-${config.color}-400 to-${config.color}-600 flex items-center justify-center animate-pulse`}>
-                    <config.icon className="w-12 h-12 text-white" />
+                    <IconComponent className="w-12 h-12 text-white" />
                 </div>
                 <div>
                     <h2 className="text-3xl font-bold text-gray-900 mb-2">{config.title}</h2>
@@ -244,11 +274,15 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                     </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <button onClick={generateReceipt} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-700 transition-colors">Télécharger le bordereau</button>
+                    <button onClick={generateReceipt} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-700 transition-colors">
+                        Télécharger le bordereau
+                    </button>
                     <button onClick={shareTracking} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
                         <ShareIcon className="w-5 h-5" /> Partager
                     </button>
-                    <button onClick={onNewTask} className="bg-orange-100 text-orange-700 px-6 py-3 rounded-lg font-semibold hover:bg-orange-200 transition-colors">Nouvelle expédition</button>
+                    <button onClick={onNewTask} className="bg-orange-100 text-orange-700 px-6 py-3 rounded-lg font-semibold hover:bg-orange-200 transition-colors">
+                        Nouvelle expédition
+                    </button>
                 </div>
             </div>
         );
@@ -289,24 +323,27 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900 mb-6">Choisissez votre méthode de paiement</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {paymentMethods.map((method) => (
-                                <div key={method.id} className={`relative p-6 rounded-xl border-2 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-lg ${selectedMethod === method.id ? `border-orange-500 shadow-lg` : 'border-gray-200'} bg-gradient-to-br ${method.gradient}`}
-                                    onClick={() => setSelectedMethod(method.id)}>
-                                    {method.popular && (
-                                        <div className="absolute -top-2 -right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold">POPULAIRE</div>
-                                    )}
-                                    <div className="flex items-center justify-between mb-4">
-                                        <method.icon className="w-8 h-8 text-white" />
-                                        {selectedMethod === method.id && (
-                                            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-                                                <CheckCircleIcon className="w-6 h-6 text-orange-600" />
-                                            </div>
+                            {paymentMethods.map((method) => {
+                                const IconComponent = method.icon;
+                                return (
+                                    <div key={method.id} className={`relative p-6 rounded-xl border-2 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-lg ${selectedMethod === method.id ? `border-orange-500 shadow-lg` : 'border-gray-200'} bg-gradient-to-br ${method.gradient}`}
+                                        onClick={() => setSelectedMethod(method.id)}>
+                                        {method.popular && (
+                                            <div className="absolute -top-2 -right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold">POPULAIRE</div>
                                         )}
+                                        <div className="flex items-center justify-between mb-4">
+                                            <IconComponent className="w-8 h-8 text-white" />
+                                            {selectedMethod === method.id && (
+                                                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                                                    <CheckCircleIcon className="w-6 h-6 text-orange-600" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <h3 className="font-semibold text-white mb-2">{method.name}</h3>
+                                        <p className="text-white/80 text-sm">{method.fee === 0 ? 'Gratuit' : `${method.fee} FCFA de frais`}</p>
                                     </div>
-                                    <h3 className="font-semibold text-white mb-2">{method.name}</h3>
-                                    <p className="text-white/80 text-sm">{method.fee === 0 ? 'Gratuit' : `${method.fee} FCFA de frais`}</p>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -314,10 +351,30 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                         <div className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
                             <h3 className="font-semibold text-lg">Informations de la carte</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <input placeholder="Numéro de carte" value={cardData.number} onChange={(e) => setCardData({...cardData, number: e.target.value})} className="col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
-                                <input placeholder="MM/AA" value={cardData.expiry} onChange={(e) => setCardData({...cardData, expiry: e.target.value})} className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
-                                <input placeholder="CVV" value={cardData.cvv} onChange={(e) => setCardData({...cardData, cvv: e.target.value})} className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
-                                <input placeholder="Nom du titulaire" value={cardData.holder} onChange={(e) => setCardData({...cardData, holder: e.target.value})} className="col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
+                                <input 
+                                    placeholder="Numéro de carte" 
+                                    value={cardData.number} 
+                                    onChange={(e) => setCardData({...cardData, number: e.target.value})} 
+                                    className="col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                                />
+                                <input 
+                                    placeholder="MM/AA" 
+                                    value={cardData.expiry} 
+                                    onChange={(e) => setCardData({...cardData, expiry: e.target.value})} 
+                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                                />
+                                <input 
+                                    placeholder="CVV" 
+                                    value={cardData.cvv} 
+                                    onChange={(e) => setCardData({...cardData, cvv: e.target.value})} 
+                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                                />
+                                <input 
+                                    placeholder="Nom du titulaire" 
+                                    value={cardData.holder} 
+                                    onChange={(e) => setCardData({...cardData, holder: e.target.value})} 
+                                    className="col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                                />
                             </div>
                         </div>
                     )}
@@ -326,12 +383,21 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                         <div className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
                             <h3 className="font-semibold text-lg">Paiement mobile</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <select value={mobileData.operator} onChange={(e) => setMobileData({...mobileData, operator: e.target.value})} className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                                <select 
+                                    value={mobileData.operator} 
+                                    onChange={(e) => setMobileData({...mobileData, operator: e.target.value})} 
+                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                >
                                     <option value="">Opérateur</option>
                                     <option value="orange">Orange Money</option>
                                     <option value="mtn">MTN MoMo</option>
                                 </select>
-                                <input placeholder="Numéro" value={mobileData.number} onChange={(e) => setMobileData({...mobileData, number: e.target.value})} className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
+                                <input 
+                                    placeholder="Numéro" 
+                                    value={mobileData.number} 
+                                    onChange={(e) => setMobileData({...mobileData, number: e.target.value})} 
+                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                                />
                             </div>
                         </div>
                     )}
@@ -355,7 +421,7 @@ export default function PaymentStep({ formData, packageData, currentUser, onBack
                                 <span className="text-gray-600">📍 {formData.departurePoint} → {formData.arrivalPoint}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-gray-600">📞 {currentUser.full_name}</span>
+                                <span className="text-gray-600">📞 {currentUser.full_name || 'Utilisateur'}</span>
                             </div>
                             
                             {calculateAdditionalFees() > 0 && (
