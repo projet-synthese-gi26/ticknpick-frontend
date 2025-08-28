@@ -148,16 +148,24 @@ export default function ExpeditionPage() {
                     }}
                  />
             case 4:
-                // --- MODIFICATION : S'assurer que les données et l'utilisateur sont prêts ---
-                if (!packageData || !routeData || !user) {
+                if (!packageData || !routeData || !user || !user.full_name) {
                   return <div className="text-center text-red-500 p-8">Erreur de données. Veuillez revenir en arrière.</div>
                 }
+                
+                // Create a user object that matches PaymentStepExpedition's expected interface
+                const userForPayment = {
+                    id: user.id,
+                    full_name: user.full_name, // Now guaranteed to be non-null
+                    phone: user.phone,
+                    email: user.email
+                };
+                
                 return <PaymentStepExpedition
                     senderData={senderData}
                     packageData={packageData}
                     routeData={routeData}
                     totalPrice={totalPrice}
-                    currentUser={user} // <-- On passe l'utilisateur
+                    currentUser={userForPayment} // <-- On passe l'utilisateur
                     onBack={() => setCurrentStep(3)}
                     onSuccess={() => { /* ... */ }}
                     onNewTask={() => setCurrentStep(1) /* Ou une autre logique */}
