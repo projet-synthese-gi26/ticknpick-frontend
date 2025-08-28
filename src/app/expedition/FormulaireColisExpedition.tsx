@@ -1,330 +1,637 @@
-'use client';
-
-import React, { useState, useEffect, useRef, ReactNode } from 'react';
-import { motion } from 'framer-motion';
-import {
-  TruckIcon, ShoppingBagIcon, ArrowRightIcon, ArrowLeftIcon, PhotoIcon,
-  XCircleIcon, ScaleIcon, ExclamationTriangleIcon, BeakerIcon, ClockIcon,
-  CheckCircleIcon, InformationCircleIcon, ShieldCheckIcon, BoltIcon,
-  UsersIcon, HomeModernIcon, MapPinIcon, CameraIcon
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  TruckIcon, 
+  PhotoIcon, 
+  XCircleIcon, 
+  ScaleIcon, 
+  ExclamationTriangleIcon, 
+  ClockIcon,
+  ShieldCheckIcon, 
+  CheckCircleIcon,
+  ShoppingBagIcon,
+  HomeIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline';
+import { ArrowLeft, ArrowRight, Package, Flame, Shield, Zap, Droplets, Truck, Bike, Car } from 'lucide-react';
+import { 
+  BsBicycle           // Vélo Bootstrap
+} from 'react-icons/bs';
+import { 
+  MdDeliveryDining
+} from 'react-icons/md';
+
+
 
 interface PackageData {
-  image: string | null; designation: string; weight: string; length: string;
-  width: string; height: string; isFragile: boolean; contentType: 'solid' | 'liquid' | '';
-  isPerishable: boolean; description: string; declaredValue: string;
-  isInsured: boolean; deliveryAtOrigin: boolean; deliveryAtDestination: boolean;
+  photo: string | null;
+  designation: string;
+  description: string;
+  weight: string;
+  length: string;
+  width: string;
+  height: string;
+  isFragile: boolean;
+  isPerishable: boolean;
+  isLiquid: boolean;
+  isInsured: boolean;
+  declaredValue: string;
+  logistics: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | '';
+  pickup: boolean;
+  delivery: boolean;
 }
-
-type ExpressOption = '' | '24h' | '48h' | '72h';
 
 interface PackageRegistrationProps {
-  initialData?: Partial<PackageData & { expressOption: ExpressOption }>;
-  onContinue: (data: PackageData & { expressOption: ExpressOption }, totalPrice: number) => void;
-  onBack: () => void;
+  initialData?: Partial<PackageData>;
+  onContinue: (data: PackageData, totalPrice: number) => void;
+  onBack?: () => void;
 }
 
-const DELIVERY_AT_ORIGIN_COST = 1200; const DELIVERY_AT_DESTINATION_COST = 1800;
-
 const LoadingDots = () => (
-  <div className="flex space-x-1"><div className="w-1 h-1 bg-orange-500 rounded-full animate-bounce"></div><div className="w-1 h-1 bg-orange-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div><div className="w-1 h-1 bg-orange-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div></div>
-);
-
-const OptionCard = ({ title, description, icon, isSelected, onClick, cost }: {
-  title: string; 
-  description?: string; 
-  // Ici on indique que `icon` est un ReactElement qui accepte `className`
-  icon: React.ReactElement<{ className?: string }>; 
-  isSelected: boolean;
-  onClick: () => void; 
-  cost?: number;
-}) => (
-  <div className={`border rounded-lg p-2 cursor-pointer transition-all hover:shadow-md flex flex-col items-center text-center text-xs relative ${isSelected ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}`} onClick={onClick}>
-    <div className={`p-1.5 rounded-full mb-1 ${isSelected ? 'bg-orange-100' : 'bg-gray-100'}`}>
-      {React.cloneElement(icon, { className: `w-4 h-4 ${isSelected ? 'text-orange-600' : 'text-gray-500'}` })}
-    </div>
-    <span className={`font-medium ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>{title}</span>
-    {description && <span className={`text-xs ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>{description}</span>}
-    {cost !== undefined && <span className={`text-xs ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>+{cost.toLocaleString()}</span>}
-    {isSelected && <CheckCircleIcon className="absolute -top-1 -right-1 w-4 h-4 text-orange-500" />}
+  <div className="flex space-x-1">
+    {[0, 0.1, 0.2].map((delay, i) => (
+      <div key={i} className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: `${delay}s` }}></div>
+    ))}
   </div>
 );
 
-export default function FomulaireColisExpedition({ onContinue, initialData = {}, onBack }: PackageRegistrationProps) {
+const OptionCard = ({ title, subtitle, icon, additionalCost, isSelected, onClick, compact = false }: { 
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  additionalCost?: number;
+  isSelected: boolean;
+  onClick: () => void;
+  compact?: boolean;
+}) => (
+  <div
+    onClick={onClick}
+    className={`relative p-3 border-2 rounded-xl cursor-pointer transition-all hover:scale-105 ${
+      isSelected 
+        ? 'border-orange-500 bg-orange-50 shadow-lg' 
+        : 'border-gray-200 bg-white hover:border-orange-300 hover:shadow-md'
+    } ${compact ? 'text-center' : ''}`}
+  >
+    <div className={`flex ${compact ? 'flex-col' : 'items-center'} ${compact ? 'space-y-2' : 'space-x-3'}`}>
+      <div className={`p-2 rounded-lg ${isSelected ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'} ${compact ? 'mx-auto' : ''}`}>
+        {icon}
+      </div>
+      <div className={compact ? 'text-center' : 'flex-1'}>
+        <h4 className={`font-semibold text-sm ${isSelected ? 'text-orange-800' : 'text-gray-800'}`}>
+          {title}
+        </h4>
+        {subtitle && (
+          <p className={`text-xs ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+    </div>
+    
+    {additionalCost && additionalCost > 0 && (
+      <div className={`mt-2 text-xs font-medium ${isSelected ? 'text-orange-700' : 'text-gray-600'} ${compact ? 'text-center' : ''}`}>
+        + {additionalCost.toLocaleString()} FCFA
+      </div>
+    )}
+    
+    {isSelected && (
+      <div className="absolute -top-2 -right-2 bg-orange-500 text-white rounded-full p-1">
+        <CheckCircleIcon className="w-3 h-3" />
+      </div>
+    )}
+  </div>
+);
+
+export default function PackageRegistration({ initialData = {}, onContinue, onBack }: PackageRegistrationProps) {
   const [packageData, setPackageData] = useState<PackageData>({
-    image: null, designation: '', weight: '', length: '', width: '', height: '',
-    isFragile: false, contentType: '', isPerishable: false, description: '',
-    declaredValue: '', isInsured: false, deliveryAtOrigin: false, deliveryAtDestination: false,
-    ...initialData,
+    photo: null,
+    designation: '',
+    description: '',
+    weight: '',
+    length: '',
+    width: '',
+    height: '',
+    isFragile: false,
+    isPerishable: false,
+    isLiquid: false,
+    isInsured: false,
+    declaredValue: '',
+    logistics: '',
+    pickup: false,
+    delivery: false,
+    ...initialData
   });
 
-  const [expressOption, setExpressOption] = useState<ExpressOption>(initialData.expressOption || '');
+  const [expressOption, setExpressOption] = useState<'none' | '24h' | '48h'>('none');
   const [priceLoading, setPriceLoading] = useState(false);
   const [price, setPrice] = useState<number | null>(null);
-  const [basePriceForCalc, setBasePriceForCalc] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [volume, setVolume] = useState(0);
   const [isFormValid, setIsFormValid] = useState(false);
+  const [validationError, setValidationError] = useState<string>('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const { image, designation, weight } = packageData;
-    setIsFormValid(!!(image && designation.trim() && parseFloat(weight) > 0));
-  }, [packageData]);
-
-  useEffect(() => {
-    const { weight, isFragile, contentType, isPerishable, length, width, height, declaredValue, isInsured, deliveryAtOrigin, deliveryAtDestination } = packageData;
-    const weightNum = parseFloat(weight);
-    if (isNaN(weightNum) || weightNum <= 0) { setPrice(null); setBasePriceForCalc(null); return; }
+    const isValid = Boolean(
+      packageData.photo &&
+      packageData.designation.trim().length >= 3 &&
+      packageData.weight.trim() &&
+      !isNaN(parseFloat(packageData.weight)) &&
+      parseFloat(packageData.weight) > 0
+    );
     
+    setIsFormValid(isValid);
+    
+    if (!isValid) {
+      if (!packageData.photo) {
+        setValidationError('Veuillez ajouter une photo du colis');
+      } else if (packageData.designation.trim().length < 3) {
+        setValidationError('La désignation doit contenir au moins 3 caractères');
+      } else if (!packageData.weight.trim() || isNaN(parseFloat(packageData.weight)) || parseFloat(packageData.weight) <= 0) {
+        setValidationError('Veuillez saisir un poids valide');
+      }
+    } else {
+      setValidationError('');
+    }
+  }, [packageData.photo, packageData.designation, packageData.weight]);
+
+  useEffect(() => {
+    if (!isFormValid) {
+      setPrice(null);
+      return;
+    }
+
     setPriceLoading(true);
-    const lengthNum = parseFloat(length) || 0, widthNum = parseFloat(width) || 0, heightNum = parseFloat(height) || 0, declaredValueNum = parseFloat(declaredValue) || 0;
-    const vol = lengthNum * widthNum * heightNum, volumetricWeight = vol / 5000;
-
-    setTimeout(() => {
-      let basePrice = 1500 + (volumetricWeight > weightNum ? volumetricWeight : weightNum) * 300;
-      setBasePriceForCalc(basePrice);
-      let totalAdditionalFees = 0;
-      if (isFragile) totalAdditionalFees += basePrice * 0.15;
-      if (contentType === 'liquid') totalAdditionalFees += basePrice * 0.10;
-      if (isPerishable) totalAdditionalFees += basePrice * 0.20;
-      if (isInsured && declaredValueNum > 0) totalAdditionalFees += declaredValueNum * 0.05;
-      if (deliveryAtOrigin) totalAdditionalFees += DELIVERY_AT_ORIGIN_COST;
-      if (deliveryAtDestination) totalAdditionalFees += DELIVERY_AT_DESTINATION_COST;
-
-      let expressFee = 0;
-      if (expressOption === '24h') expressFee = basePrice * 0.30;
-      else if (expressOption === '48h') expressFee = basePrice * 0.20;
-      else if (expressOption === '72h') expressFee = basePrice * 0.10;
+    
+    const calculatePrice = () => {
+      const weight = parseFloat(packageData.weight) || 0;
+      const length = parseFloat(packageData.length) || 10;
+      const width = parseFloat(packageData.width) || 10;
+      const height = parseFloat(packageData.height) || 10;
       
-      setPrice(basePrice + totalAdditionalFees + expressFee);
-      setPriceLoading(false);
-    }, 300);
-  }, [packageData, expressOption]);
+      const calculatedVolume = (length * width * height) / 1000000;
+      const volumetricWeight = calculatedVolume * 200;
+      const billableWeight = Math.max(weight, volumetricWeight);
+      
+      setVolume(calculatedVolume);
+      
+      let basePrice = 1500 + (billableWeight * 300);
+      
+      if (packageData.isFragile) basePrice += 1200;
+      if (packageData.isPerishable) basePrice += 800;
+      if (packageData.isLiquid) basePrice += 500;
+      if (packageData.isInsured && parseFloat(packageData.declaredValue) > 0) {
+        basePrice += parseFloat(packageData.declaredValue) * 0.02;
+      }
+      
+      if (packageData.pickup) basePrice += 1000;
+      if (packageData.delivery) basePrice += 1000;
+      
+      let expressMultiplier = 1;
+      if (expressOption === '24h') expressMultiplier = 2.0;
+      else if (expressOption === '48h') expressMultiplier = 1.5;
+      
+      const finalPrice = Math.round(basePrice * expressMultiplier);
+      
+      setTimeout(() => {
+        setPrice(finalPrice);
+        setPriceLoading(false);
+      }, 600);
+    };
+
+    calculatePrice();
+  }, [packageData, expressOption, isFormValid]);
+
+  const handleInputChange = (field: keyof PackageData, value: any) => {
+    setPackageData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Pré-remplir la description avec la désignation si la description est vide
+      if (field === 'designation' && value && !prev.description.trim()) {
+        newData.description = value;
+      }
+      
+      return newData;
+    });
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Le fichier est trop volumineux. Veuillez choisir une image de moins de 5MB.');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        handleInputChange('photo', e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const validateNumberInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight'];
+    if (allowedKeys.includes(e.key) || 
+        (e.key >= '0' && e.key <= '9') || 
+        (e.key === '.' && !e.currentTarget.value.includes('.'))) {
+      return;
+    }
+    e.preventDefault();
+  };
 
   const handleContinue = () => {
-    if (isFormValid && price !== null) onContinue({ ...packageData, expressOption }, price);
-    else alert("Veuillez remplir tous les champs obligatoires.");
-  };
-  
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.size < 5 * 1024 * 1024) {
-      const reader = new FileReader();
-      reader.onloadend = () => setPackageData(prev => ({ ...prev, image: reader.result as string }));
-      reader.readAsDataURL(file);
-    } else if (file) alert("Image trop lourde (max 5MB).");
-  };
-  
-  const validateNumberInput = (value: string) => value === '' || /^(\d+)?(\.\d{0,2})?$/.test(value);
-
-  const sections = [
-    {
-      id: 'photo',
-      title: 'Photo du colis',
-      icon: <PhotoIcon className="w-5 h-5" />,
-      content: (
-        <div onClick={() => fileInputRef.current?.click()} className="relative w-full h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors group">
-          {packageData.image ? (
-            <>
-              <img src={packageData.image} alt="Aperçu" className="w-full h-full object-cover rounded-lg"/>
-              <button onClick={(e) => { e.stopPropagation(); setPackageData(prev => ({ ...prev, image: null })); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1">
-                <XCircleIcon className="w-4 h-4"/>
-              </button>
-            </>
-          ) : (
-            <div className="text-center text-gray-500 group-hover:text-orange-500 transition-colors">
-              <CameraIcon className="w-8 h-8 mx-auto mb-1"/>
-              <p className="text-sm">Ajouter une photo</p>
-            </div>
-          )}
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/png, image/jpeg" onChange={handleImageUpload}/>
-        </div>
-      )
-    },
-    {
-      id: 'info',
-      title: 'Informations',
-      icon: <ShoppingBagIcon className="w-5 h-5" />,
-      content: (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Désignation <span className="text-red-500">*</span></label>
-            <input type="text" className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.designation} onChange={e => setPackageData(prev => ({ ...prev, designation: e.target.value }))} placeholder="Ex: Vêtements, Livres..." />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea rows={2} className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.description} onChange={e => setPackageData(prev => ({ ...prev, description: e.target.value }))} placeholder="Détails sur le contenu..."/>
-          </div>
-        </div>
-      )
-    },
-    {
-      id: 'dimensions',
-      title: 'Poids & Dimensions',
-      icon: <ScaleIcon className="w-5 h-5" />,
-      content: (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Poids (kg) <span className="text-red-500">*</span></label>
-            <input type="text" className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.weight} onChange={e => validateNumberInput(e.target.value) && setPackageData(prev => ({ ...prev, weight: e.target.value }))} placeholder="0.5"/>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <input type="text" placeholder="L (cm)" className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.length} onChange={e => validateNumberInput(e.target.value) && setPackageData(prev => ({ ...prev, length: e.target.value }))}/>
-            <input type="text" placeholder="l (cm)" className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.width} onChange={e => validateNumberInput(e.target.value) && setPackageData(prev => ({ ...prev, width: e.target.value }))}/>
-            <input type="text" placeholder="H (cm)" className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.height} onChange={e => validateNumberInput(e.target.value) && setPackageData(prev => ({ ...prev, height: e.target.value }))}/>
-          </div>
-        </div>
-      )
-    },
-    {
-      id: 'special',
-      title: 'Options spéciales',
-      icon: <ExclamationTriangleIcon className="w-5 h-5" />,
-      content: (
-        <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-2">
-            <OptionCard title="Fragile" icon={<ExclamationTriangleIcon />} isSelected={packageData.isFragile} onClick={() => setPackageData(p => ({ ...p, isFragile: !p.isFragile }))} />
-            <OptionCard title="Liquide" icon={<BeakerIcon />} isSelected={packageData.contentType === 'liquid'} onClick={() => setPackageData(p => ({ ...p, contentType: p.contentType === 'liquid' ? '' : 'liquid' }))} />
-            <OptionCard title="Périssable" icon={<ClockIcon />} isSelected={packageData.isPerishable} onClick={() => setPackageData(p => ({ ...p, isPerishable: !p.isPerishable }))} />
-            <OptionCard title="Assurer" icon={<ShieldCheckIcon />} isSelected={packageData.isInsured} onClick={() => setPackageData(p => ({ ...p, isInsured: !p.isInsured }))} />
-          </div>
-          {packageData.isInsured && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Valeur déclarée (FCFA)</label>
-              <input type="text" className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm" value={packageData.declaredValue} onChange={e => validateNumberInput(e.target.value) && setPackageData(p => ({ ...p, declaredValue: e.target.value }))} placeholder="10000"/>
-            </div>
-          )}
-        </div>
-      )
-    },
-    {
-      id: 'express',
-      title: 'Options d\'envoi',
-      icon: <BoltIcon className="w-5 h-5" />,
-      content: (
-        <div className="grid grid-cols-4 gap-2">
-          <OptionCard title="Standard" icon={<TruckIcon />} isSelected={expressOption === ''} onClick={() => setExpressOption('')}/>
-          <OptionCard title="72h" icon={<ClockIcon />} isSelected={expressOption === '72h'} onClick={() => setExpressOption('72h')}/>
-          <OptionCard title="48h" icon={<ClockIcon />} isSelected={expressOption === '48h'} onClick={() => setExpressOption('48h')}/>
-          <OptionCard title="24h" icon={<ClockIcon />} isSelected={expressOption === '24h'} onClick={() => setExpressOption('24h')}/>
-        </div>
-      )
-    },
-    {
-      id: 'delivery',
-      title: 'Services de livraison',
-      icon: <UsersIcon className="w-5 h-5" />,
-      content: (
-        <div className="grid grid-cols-2 gap-2">
-          <OptionCard title="Prise en charge à domicile" icon={<HomeModernIcon />} isSelected={packageData.deliveryAtOrigin} onClick={() => setPackageData(p => ({ ...p, deliveryAtOrigin: !p.deliveryAtOrigin }))} cost={DELIVERY_AT_ORIGIN_COST}/>
-          <OptionCard title="Livraison au destinataire" icon={<MapPinIcon />} isSelected={packageData.deliveryAtDestination} onClick={() => setPackageData(p => ({ ...p, deliveryAtDestination: !p.deliveryAtDestination }))} cost={DELIVERY_AT_DESTINATION_COST}/>
-        </div>
-      )
+    if (isFormValid && price !== null) {
+      onContinue(packageData, price);
     }
+  };
+
+  const logisticsOptions = [
+    { key: 'truck', label: 'Camion', icon: <TruckIcon className="w-4 h-4" /> },
+    { key: 'tricycle', label: 'Tricycle', icon: < MdDeliveryDining className="w-4 h-4" /> },
+    { key: 'moto', label: 'Moto', icon: <Bike className="w-4 h-4" /> },
+    { key: 'bike', label: 'Vélo', icon: <BsBicycle className="w-4 h-4" /> },
+    { key: 'car', label: 'Voiture', icon: <Car className="w-4 h-4" /> }
   ];
 
   return (
     <div className="max-w-7xl mx-auto p-4">
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-1">Enregistrement du colis</h1>
+        <p className="text-gray-600 text-sm">Décrivez votre colis pour obtenir une estimation précise</p>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          {sections.map((section, index) => (
-            <motion.div key={section.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: index * 0.1 }}>
-              <h3 className="flex items-center text-base font-semibold text-gray-800 mb-3 gap-2">
-                <div className="text-orange-500">{section.icon}</div>
-                {section.title}
-                {(section.id === 'photo' || section.id === 'info' || section.id === 'dimensions') && <span className="text-red-500">*</span>}
-              </h3>
-              {section.content}
-            </motion.div>
-          ))}
-        </div>
-        
-        <div className="lg:col-span-1">
-          <div className="bg-orange-50 p-4 rounded-lg shadow-sm border border-orange-100 sticky top-4">
-            <h3 className="text-lg font-bold mb-3 text-orange-800 flex items-center gap-2">
-              <TruckIcon className="w-5 h-5" />
-              Résumé du colis
-            </h3>
+          
+          {/* Photo du colis */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="flex items-center mb-3">
+              <PhotoIcon className="w-4 h-4 text-orange-500 mr-2" />
+              <h3 className="font-semibold text-gray-800">Photo du colis <span className="text-red-500">*</span></h3>
+            </div>
             
-            {packageData.image && (
-              <div className="mb-3">
-                <img src={packageData.image} alt="Colis" className="w-16 h-16 object-cover rounded-lg border-2 border-orange-200"/>
+            {!packageData.photo ? (
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors"
+              >
+                <PhotoIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-600 font-medium text-sm">Cliquez pour ajouter une photo</p>
+                <p className="text-xs text-gray-500 mt-1">PNG, JPG jusqu'à 5MB</p>
+              </div>
+            ) : (
+              <div className="relative inline-block">
+                <img src={packageData.photo} alt="Colis" className="w-32 h-32 object-cover rounded-lg border border-gray-200" />
+                <button
+                  onClick={() => handleInputChange('photo', null)}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                >
+                  <XCircleIcon className="w-4 h-4" />
+                </button>
               </div>
             )}
             
-            <div className="space-y-2 text-sm border-t border-orange-200 pt-3">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Prix de base:</span>
-                <span className="font-medium">{priceLoading ? <LoadingDots/> : (basePriceForCalc?.toLocaleString() ?? '...') + ' FCFA'}</span>
-              </div>
-              {packageData.isFragile && basePriceForCalc && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Fragile:</span>
-                  <span className="font-medium text-orange-600">+{(basePriceForCalc * 0.15).toLocaleString()} FCFA</span>
-                </div>
-              )}
-              {packageData.contentType === 'liquid' && basePriceForCalc && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Liquide:</span>
-                  <span className="font-medium text-orange-600">+{(basePriceForCalc * 0.10).toLocaleString()} FCFA</span>
-                </div>
-              )}
-              {packageData.isPerishable && basePriceForCalc && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Périssable:</span>
-                  <span className="font-medium text-orange-600">+{(basePriceForCalc * 0.20).toLocaleString()} FCFA</span>
-                </div>
-              )}
-              {expressOption && basePriceForCalc && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Express {expressOption}:</span>
-                  <span className="font-medium text-orange-600">+{(basePriceForCalc * (expressOption === '24h' ? 0.3 : expressOption === '48h' ? 0.2 : 0.1)).toLocaleString()} FCFA</span>
-                </div>
-              )}
-              {packageData.deliveryAtOrigin && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Prise domicile:</span>
-                  <span className="font-medium text-orange-600">+{DELIVERY_AT_ORIGIN_COST.toLocaleString()} FCFA</span>
-                </div>
-              )}
-              {packageData.deliveryAtDestination && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Livraison finale:</span>
-                  <span className="font-medium text-orange-600">+{DELIVERY_AT_DESTINATION_COST.toLocaleString()} FCFA</span>
-                </div>
-              )}
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+          </div>
+
+          {/* Informations de base */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="flex items-center mb-3">
+              <ShoppingBagIcon className="w-4 h-4 text-orange-500 mr-2" />
+              <h3 className="font-semibold text-gray-800">Informations de base</h3>
             </div>
             
-            <div className="border-t-2 border-dashed border-orange-300 mt-3 pt-3 flex justify-between items-center">
-              <span className="font-bold text-gray-800">TOTAL</span>
-              <span className="font-black text-xl text-orange-600">{priceLoading ? <LoadingDots/> : (price !== null ? `${Math.round(price).toLocaleString()} FCFA` : '...')}</span>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Désignation du colis <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={packageData.designation}
+                  onChange={(e) => handleInputChange('designation', e.target.value)}
+                  placeholder="Ex: Vêtements, Livres, Électronique..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description détaillée</label>
+                <textarea
+                  value={packageData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  placeholder="Décrivez le contenu de votre colis..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Poids et dimensions */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="flex items-center mb-3">
+              <ScaleIcon className="w-4 h-4 text-orange-500 mr-2" />
+              <h3 className="font-semibold text-gray-800">Poids et dimensions</h3>
             </div>
             
-            {!isFormValid && (
-              <div className="text-xs text-center mt-3 text-red-600 p-2 bg-red-50 rounded-md flex items-center gap-1">
-                <InformationCircleIcon className="w-4 h-4" />
-                Photo, désignation et poids requis
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Poids (kg) <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={packageData.weight}
+                  onChange={(e) => handleInputChange('weight', e.target.value)}
+                  onKeyDown={validateNumberInput}
+                  placeholder="1.5"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                />
               </div>
-            )}
+              
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Longueur (cm)</label>
+                  <input
+                    type="text"
+                    value={packageData.length}
+                    onChange={(e) => handleInputChange('length', e.target.value)}
+                    onKeyDown={validateNumberInput}
+                    placeholder="20"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Largeur (cm)</label>
+                  <input
+                    type="text"
+                    value={packageData.width}
+                    onChange={(e) => handleInputChange('width', e.target.value)}
+                    onKeyDown={validateNumberInput}
+                    placeholder="15"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hauteur (cm)</label>
+                  <input
+                    type="text"
+                    value={packageData.height}
+                    onChange={(e) => handleInputChange('height', e.target.value)}
+                    onKeyDown={validateNumberInput}
+                    placeholder="10"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Options spéciales */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="font-semibold text-gray-800 mb-3">Options spéciales</h3>
             
-            {isFormValid && (
-              <div className="text-xs text-center mt-3 text-green-700 p-2 bg-green-50 rounded-md flex items-center gap-1">
-                <CheckCircleIcon className="w-4 h-4" />
-                Prêt à continuer
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <OptionCard
+                title="Fragile"
+                icon={<ExclamationTriangleIcon className="w-4 h-4" />}
+                additionalCost={1200}
+                isSelected={packageData.isFragile}
+                onClick={() => handleInputChange('isFragile', !packageData.isFragile)}
+                compact={true}
+              />
+              
+              <OptionCard
+                title="Périssable"
+                icon={<Flame className="w-4 h-4" />}
+                additionalCost={800}
+                isSelected={packageData.isPerishable}
+                onClick={() => handleInputChange('isPerishable', !packageData.isPerishable)}
+                compact={true}
+              />
+              
+              <OptionCard
+                title="Liquide"
+                icon={<Droplets className="w-4 h-4" />}
+                additionalCost={500}
+                isSelected={packageData.isLiquid}
+                onClick={() => handleInputChange('isLiquid', !packageData.isLiquid)}
+                compact={true}
+              />
+              
+              <OptionCard
+                title="Assuré"
+                icon={<Shield className="w-4 h-4" />}
+                isSelected={packageData.isInsured}
+                onClick={() => handleInputChange('isInsured', !packageData.isInsured)}
+                compact={true}
+              />
+            </div>
+            
+            {packageData.isInsured && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valeur déclarée (FCFA)</label>
+                <input
+                  type="text"
+                  value={packageData.declaredValue}
+                  onChange={(e) => handleInputChange('declaredValue', e.target.value)}
+                  onKeyDown={validateNumberInput}
+                  placeholder="50000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                />
               </div>
             )}
           </div>
+
+          {/* Choix de la logistique */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="font-semibold text-gray-800 mb-3">Moyen de transport (optionnel)</h3>
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+              {logisticsOptions.map(option => (
+                <OptionCard
+                  key={option.key}
+                  title={option.label}
+                  icon={option.icon}
+                  isSelected={packageData.logistics === option.key}
+                  onClick={() => handleInputChange('logistics', packageData.logistics === option.key ? '' : option.key)}
+                  compact={true}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Services additionnels */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="font-semibold text-gray-800 mb-3">Services additionnels</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <OptionCard
+                title="Récupération à domicile"
+                subtitle="Un livreur vient chercher le colis"
+                icon={<HomeIcon className="w-4 h-4" />}
+                additionalCost={1000}
+                isSelected={packageData.pickup}
+                onClick={() => handleInputChange('pickup', !packageData.pickup)}
+              />
+              
+              <OptionCard
+                title="Livraison à domicile"
+                subtitle="Livraison directe au destinataire"
+                icon={<MapPinIcon className="w-4 h-4" />}
+                additionalCost={1000}
+                isSelected={packageData.delivery}
+                onClick={() => handleInputChange('delivery', !packageData.delivery)}
+              />
+            </div>
+          </div>
+
+          {/* Livraison express */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="font-semibold text-gray-800 mb-3">Livraison express</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <OptionCard
+                title="Standard"
+                subtitle="3-5 jours ouvrables"
+                icon={<TruckIcon className="w-4 h-4" />}
+                isSelected={expressOption === 'none'}
+                onClick={() => setExpressOption('none')}
+                compact={true}
+              />
+              
+              <OptionCard
+                title="Express 48h"
+                subtitle="Livraison en 2 jours"
+                icon={<ClockIcon className="w-4 h-4" />}
+                isSelected={expressOption === '48h'}
+                onClick={() => setExpressOption('48h')}
+                compact={true}
+              />
+              
+              <OptionCard
+                title="Express 24h"
+                subtitle="Livraison en 1 jour"
+                icon={<Zap className="w-4 h-4" />}
+                isSelected={expressOption === '24h'}
+                onClick={() => setExpressOption('24h')}
+                compact={true}
+              />
+            </div>
+          </div>
         </div>
-      </div>
-      
-      <div className="mt-6 pt-4 border-t flex justify-between items-center">
-        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors">
-          <ArrowLeftIcon className="w-4 h-4"/>
-          Précédent
-        </button>
-        <button onClick={handleContinue} disabled={!isFormValid || price === null} className="flex items-center gap-2 px-6 py-2 bg-orange-500 text-white rounded-lg font-bold shadow-md hover:shadow-lg hover:bg-orange-600 transition-all disabled:bg-gray-400 disabled:shadow-none">
-          Continuer
-          <ArrowRightIcon className="w-4 h-4"/>
-        </button>
+
+        {/* Résumé du colis - Sticky */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-44 bg-gradient-to-br from-orange-50 to-amber-50 p-4 rounded-lg border-2 border-orange-200 shadow-sm">
+            <h3 className="text-lg font-bold text-orange-800 mb-3 flex items-center">
+              <Package className="w-4 h-4 mr-2" />
+              Résumé du colis
+            </h3>
+            
+            {/* Photo dans le résumé */}
+            {packageData.photo && (
+              <div className="mb-3 text-center">
+                <img src={packageData.photo} alt="Colis" className="w-20 h-20 object-cover rounded-lg mx-auto border border-orange-200" />
+              </div>
+            )}
+            
+            <div className="space-y-2 mb-4 text-sm">
+              <div>
+                <span className="font-medium text-gray-600">Désignation:</span>
+                <p className="text-gray-800 font-semibold">{packageData.designation || '...'}</p>
+              </div>
+              
+              <div>
+                <span className="font-medium text-gray-600">Poids:</span>
+                <p className="text-gray-800 font-semibold">{packageData.weight ? `${packageData.weight} kg` : '...'}</p>
+              </div>
+              
+              {volume > 0 && (
+                <div>
+                  <span className="font-medium text-gray-600">Volume:</span>
+                  <p className="text-gray-800 font-semibold">{volume.toFixed(3)} m³</p>
+                </div>
+              )}
+              
+              {/* Options actives */}
+              {(packageData.isFragile || packageData.isPerishable || packageData.isLiquid || packageData.isInsured || packageData.pickup || packageData.delivery) && (
+                <div>
+                  <span className="font-medium text-gray-600">Options:</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {packageData.isFragile && <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">Fragile</span>}
+                    {packageData.isPerishable && <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">Périssable</span>}
+                    {packageData.isLiquid && <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">Liquide</span>}
+                    {packageData.isInsured && <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">Assuré</span>}
+                    {packageData.pickup && <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">Récupération</span>}
+                    {packageData.delivery && <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">Livraison</span>}
+                  </div>
+                </div>
+              )}
+              
+              {expressOption !== 'none' && (
+                <div>
+                  <span className="font-medium text-gray-600">Livraison:</span>
+                  <p className="text-gray-800 font-semibold">Express {expressOption === '24h' ? '24h' : '48h'}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Prix de manutention */}
+            <div className="border-t-2 border-dashed border-orange-200 pt-3 mb-4">
+              <div className="text-center">
+                <p className="text-sm font-medium text-gray-600 mb-1">Prix de manutention</p>
+                {priceLoading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <LoadingDots />
+                    <span className="text-xs text-gray-500">Calcul...</span>
+                  </div>
+                ) : price !== null ? (
+                  <div>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {price.toLocaleString()}
+                      <span className="text-sm font-normal text-gray-500 ml-1">FCFA</span>
+                    </p>
+                    <p className="text-xs text-gray-500">Manutention uniquement</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-xs">Complétez le formulaire</p>
+                )}
+              </div>
+            </div>
+
+            {validationError && (
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-red-700 text-xs font-medium">{validationError}</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <button
+                onClick={handleContinue}
+                disabled={!isFormValid || price === null}
+                className={`w-full flex items-center justify-center py-2 px-3 rounded-md font-semibold text-sm transition-all ${
+                  isFormValid && price !== null
+                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-md hover:shadow-lg'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Continuer vers les adresses
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </button>
+              
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="w-full flex items-center justify-center py-2 px-3 border border-gray-300 rounded-md font-semibold text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Retour
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

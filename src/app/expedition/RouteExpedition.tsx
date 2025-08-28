@@ -1,669 +1,717 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, MouseEvent, ChangeEvent, FormEvent } from 'react';
-import dynamic from 'next/dynamic';
-import {
-  MapPin, User, ArrowRight, Search, Package, Building2,
-  Store, ChevronRight, X, Mail, Phone, Loader2, List, Undo2,
-  Navigation, Zap, Eye, Target
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import maplibregl, { Marker, Map as MapGL, LngLat } from 'maplibre-gl';
-import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER, YAOUNDE_ZOOM } from '../emit-package/RelaisData';
+import { 
+  MapPin, 
+  ArrowRight, 
+  ArrowLeft, 
+  Loader2, 
+  Undo2, 
+  Target, 
+  CheckCircle, 
+  Search,
+  X,
+  Menu,
+  Navigation
+} from 'lucide-react';
+import dynamic from 'next/dynamic';
+import 'maplibre-gl/dist/maplibre-gl.css';
+
+// Réutiliser vos données de points relais
+import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER } from '../emit-package/RelaisData';
+
+const MapComponent = dynamic(() => import('../emit-package/MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="animate-spin h-8 w-8 text-orange-500" />
+        <p className="text-sm text-gray-600">Chargement de la carte...</p>
+      </div>
+    </div>
+  ),
+});
 
 interface RouteData {
   departurePointId: number | null;
   arrivalPointId: number | null;
   departurePointName: string;
   arrivalPointName: string;
-  recipientName: string;
-  recipientPhone: string;
+  distanceKm: number;
 }
 
-interface RouteSelectionProps {
-  onNext: (data: RouteData) => void;
+interface RouteSelectionStepProps {
+  onContinue: (data: RouteData, travelPrice: number) => void;
   onBack: () => void;
 }
 
-const MapComponent = dynamic(() => import('../emit-package/MapComponent'), {
-  ssr: false,
-  loading: () => (
-    <div className="h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
-      <div className="text-center space-y-4">
-        <Loader2 className="animate-spin h-12 w-12 text-orange-500 mx-auto" />
-        <p className="text-orange-600 font-medium">Chargement de la carte...</p>
-      </div>
-    </div>
-  ),
-});
+// Calcul du prix du trajet
+const calculateTravelPrice = (distance: number) => {
+  if (distance <= 0) return 0;
+  const baseFee = 500; // 500 FCFA
+  const pricePerKm = 80; // 80 FCFA par km
+  return Math.round(baseFee + distance * pricePerKm);
+};
 
-export default function RouteSelectionExpedition({ onNext, onBack }: RouteSelectionProps) {
-  const mapInstanceRef = useRef<MapGL | null>(null);
-  const markersRef = useRef<Map<number, Marker>>(new Map());
-  const userLocationMarkerRef = useRef<Marker | null>(null);
-  const routeLayerRef = useRef<string | null>(null);
+// Fonction de calcul de distance (Haversine)
+const haversineDistance = ([lat1, lon1]: [number, number], [lat2, lon2]: [number, number]): number => {
+  const toRad = (x: number) => x * Math.PI / 180;
+  const R = 6371; // Rayon de la Terre en km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + 
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
-  const [allPoints] = useState<PointRelais[]>(yaoundePointsRelais);
-  const [displayedPoints, setDisplayedPoints] = useState<PointRelais[]>(allPoints);
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-  
-  const [selectionMode, setSelectionMode] = useState<'origin' | 'destination' | 'recipient'>('origin');
-  
+export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectionStepProps) {
+  const [selectionMode, setSelectionMode] = useState<'origin' | 'destination'>('origin');
   const [routeData, setRouteData] = useState<RouteData>({
     departurePointId: null,
     arrivalPointId: null,
     departurePointName: '',
     arrivalPointName: '',
-    recipientName: '',
-    recipientPhone: '',
+    distanceKm: 0
   });
-
+  const [travelPrice, setTravelPrice] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-
-  // Get user location
-  const getUserLocation = useCallback(() => {
-    setIsLoadingLocation(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const coords: [number, number] = [position.coords.longitude, position.coords.latitude];
-          setUserLocation(coords);
-          setIsLoadingLocation(false);
-          
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.flyTo({
-              center: coords,
-              zoom: 14,
-              duration: 1500
-            });
-          }
-        },
-        () => {
-          setIsLoadingLocation(false);
-        }
-      );
-    } else {
-      setIsLoadingLocation(false);
-    }
-  }, []);
-
-  // Filter points based on search
-  useEffect(() => {
-    const term = searchQuery.toLowerCase().trim();
-    if (!term) {
-      setDisplayedPoints(allPoints);
-    } else {
-      setDisplayedPoints(allPoints.filter(p => 
-        p.name.toLowerCase().includes(term) || 
-        p.quartier.toLowerCase().includes(term) ||
-        p.address.toLowerCase().includes(term)
-      ));
-    }
-  }, [searchQuery, allPoints]);
-
-  const getPointById = useCallback((id: number | null): PointRelais | null => {
-    if (id === null) return null;
-    return allPoints.find(p => p.id === id) || null;
-  }, [allPoints]);
-
-  // Create marker element
-  const createMarkerElement = (point: PointRelais, isSelected: boolean, type: 'origin' | 'destination' | 'normal') => {
-    const el = document.createElement('div');
-    el.className = 'relative cursor-pointer transition-all duration-300 hover:scale-110';
-    
-    let bgColor, pulseColor, size;
-    if (type === 'origin') {
-      bgColor = 'bg-green-500';
-      pulseColor = 'bg-green-400';
-      size = 'w-10 h-10';
-    } else if (type === 'destination') {
-      bgColor = 'bg-green-500';
-      pulseColor = 'bg-green-400';
-      size = 'w-10 h-10';
-    } else {
-      bgColor = 'bg-red-500';
-      pulseColor = 'bg-red-400';
-      size = 'w-8 h-8';
-    }
-
-    el.innerHTML = `
-      <div class="${size} ${bgColor} rounded-full flex items-center justify-center shadow-xl border-3 border-white relative z-10">
-        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
-        </svg>
-      </div>
-      ${isSelected ? `<div class="absolute inset-0 ${pulseColor} rounded-full animate-ping opacity-75"></div>` : ''}
-    `;
-    
-    return el;
-  };
-
-  // Create user location marker
-  const createUserLocationMarker = () => {
-    const el = document.createElement('div');
-    el.className = 'relative';
-    el.innerHTML = `
-      <div class="w-6 h-6 bg-blue-500 rounded-full border-3 border-white shadow-lg flex items-center justify-center relative z-10">
-        <div class="w-2 h-2 bg-white rounded-full"></div>
-      </div>
-      <div class="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-50"></div>
-    `;
-    return el;
-  };
-
-// Draw route between points
-const drawRoute = useCallback(async (origin: PointRelais, destination: PointRelais) => {
-  const map = mapInstanceRef.current;
-  if (!map) return;
-
-  // Remove existing route
-  if (routeLayerRef.current) {
-    if (map.getLayer(routeLayerRef.current)) map.removeLayer(routeLayerRef.current);
-    if (map.getSource(routeLayerRef.current)) map.removeSource(routeLayerRef.current);
-  }
-
-  const routeId = 'route-' + Date.now();
-  routeLayerRef.current = routeId;
-
-  // Simple straight line route (in real app, use routing API)
-  // Remove 'as const' to make coordinates mutable
-  const routeGeoJSON = {
-    type: 'Feature' as const,
-    properties: {},
-    geometry: {
-      type: 'LineString' as const,
-      coordinates: [
-        [origin.lng, origin.lat],
-        [destination.lng, destination.lat]
-      ]
-    }
-  };
-
-  map.addSource(routeId, {
-    type: 'geojson',
-    data: routeGeoJSON
-  });
-
-  map.addLayer({
-    id: routeId,
-    type: 'line',
-    source: routeId,
-    layout: {
-      'line-join': 'round',
-      'line-cap': 'round'
-    },
-    paint: {
-      'line-color': '#F97316',
-      'line-width': 4,
-      'line-opacity': 0.8
-    }
-  });
-
-  // Fit map to show route
-  const bounds = new maplibregl.LngLatBounds()
-    .extend([origin.lng, origin.lat])
-    .extend([destination.lng, destination.lat]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [filteredPoints, setFilteredPoints] = useState(yaoundePointsRelais);
+  const [mapRef, setMapRef] = useState<any>(null);
+  const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null);
   
-  map.fitBounds(bounds, { padding: 50, duration: 1000 });
-}, []);
+  // Ajout d'un flag pour éviter les re-renders multiples
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Update map markers
+  // Filtrage des points relais selon la recherche
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
+    if (!searchQuery.trim()) {
+      setFilteredPoints(yaoundePointsRelais);
+    } else {
+      const filtered = yaoundePointsRelais.filter(point =>
+        point.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        point.quartier.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredPoints(filtered);
+    }
+  }, [searchQuery]);
 
-    // Clear existing markers
-    markersRef.current.forEach(marker => marker.remove());
-    markersRef.current.clear();
-    
-    const originPoint = getPointById(routeData.departurePointId);
-    const destinationPoint = getPointById(routeData.arrivalPointId);
+  // Ajouter les marqueurs sur la carte
+  useEffect(() => {
+    if (!mapRef || !isInitialized) return;
 
-    // Add point markers
-    allPoints.forEach(point => {
-      let markerType: 'origin' | 'destination' | 'normal' = 'normal';
-      let isSelected = false;
-
-      if (point.id === originPoint?.id) {
-        markerType = 'origin';
-        isSelected = true;
-      } else if (point.id === destinationPoint?.id) {
-        markerType = 'destination';
-        isSelected = true;
+    // Supprimer les anciens marqueurs et sources si ils existent
+    try {
+      if (mapRef.getLayer('points-relais')) {
+        mapRef.removeLayer('points-relais');
       }
+      if (mapRef.getLayer('points-relais-labels')) {
+        mapRef.removeLayer('points-relais-labels');
+      }
+      if (mapRef.getSource('points-relais')) {
+        mapRef.removeSource('points-relais');
+      }
+    } catch (error) {
+      console.warn('Erreur lors de la suppression des couches:', error);
+    }
 
-      const el = createMarkerElement(point, isSelected, markerType);
-      
-      const popup = new maplibregl.Popup({ offset: 25, className: 'custom-popup' }).setHTML(`
-        <div class="p-3 font-sans">
-          <h3 class="font-bold text-gray-800 mb-1">${point.name}</h3>
-          <p class="text-sm text-gray-600 mb-2">${point.quartier}</p>
-          <p class="text-xs text-gray-500">${point.address}</p>
-        </div>
-      `);
-      
-      const marker = new Marker({ element: el })
-        .setLngLat([point.lng, point.lat])
-        .setPopup(popup)
-        .addTo(map);
-
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handlePointSelect(point);
-      });
-
-      markersRef.current.set(point.id, marker);
+    // Créer les features GeoJSON pour tous les points
+    const features = yaoundePointsRelais.map(point => {
+      const status = getPointStatus(point);
+      return {
+        type: 'Feature',
+        properties: {
+          id: point.id,
+          name: point.name,
+          quartier: point.quartier,
+          status: status
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [point.lng, point.lat]
+        }
+      };
     });
 
-    // Add user location marker
-    if (userLocation && !userLocationMarkerRef.current) {
-      const userEl = createUserLocationMarker();
-      userLocationMarkerRef.current = new Marker({ element: userEl })
-        .setLngLat(userLocation)
-        .addTo(map);
+    try {
+      // Ajouter la source des points
+      mapRef.addSource('points-relais', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: features
+        }
+      });
+
+      // Ajouter la couche des marqueurs
+      mapRef.addLayer({
+        id: 'points-relais',
+        type: 'circle',
+        source: 'points-relais',
+        paint: {
+          'circle-radius': [
+            'case',
+            ['==', ['get', 'status'], 'origin'], 10,
+            ['==', ['get', 'status'], 'destination'], 10,
+            6
+          ],
+          'circle-color': [
+            'case',
+            ['==', ['get', 'status'], 'origin'], '#f97316',
+            ['==', ['get', 'status'], 'destination'], '#10b981',
+            '#6b7280'
+          ],
+          'circle-stroke-width': [
+            'case',
+            ['==', ['get', 'status'], 'origin'], 3,
+            ['==', ['get', 'status'], 'destination'], 3,
+            2
+          ],
+          'circle-stroke-color': '#ffffff'
+        }
+      });
+
+      // Ajouter les labels
+      mapRef.addLayer({
+        id: 'points-relais-labels',
+        type: 'symbol',
+        source: 'points-relais',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular'],
+          'text-offset': [0, 2],
+          'text-anchor': 'top',
+          'text-size': 12
+        },
+        paint: {
+          'text-color': '#374151',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1
+        }
+      });
+
+      // Gérer les clics sur les points
+      const handlePointClick = (e: any) => {
+        const features = mapRef.queryRenderedFeatures(e.point, {
+          layers: ['points-relais']
+        });
+
+        if (features.length > 0) {
+          const pointId = features[0].properties.id;
+          const point = yaoundePointsRelais.find(p => p.id === pointId);
+          if (point) {
+            handlePointSelect(point);
+          }
+        }
+      };
+
+      mapRef.on('click', 'points-relais', handlePointClick);
+
+      // Changer le curseur sur hover
+      mapRef.on('mouseenter', 'points-relais', () => {
+        mapRef.getCanvas().style.cursor = 'pointer';
+      });
+
+      mapRef.on('mouseleave', 'points-relais', () => {
+        mapRef.getCanvas().style.cursor = '';
+      });
+
+      // Cleanup function
+      return () => {
+        try {
+          mapRef.off('click', 'points-relais', handlePointClick);
+          mapRef.off('mouseenter', 'points-relais');
+          mapRef.off('mouseleave', 'points-relais');
+        } catch (error) {
+          console.warn('Erreur lors du nettoyage des événements:', error);
+        }
+      };
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout des couches de la carte:', error);
+    }
+  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId, isInitialized]);
+
+  // Dessiner l'itinéraire
+  useEffect(() => {
+    if (!mapRef || !routeData.departurePointId || !routeData.arrivalPointId) {
+      // Supprimer l'itinéraire existant
+      try {
+        if (mapRef && mapRef.getLayer('route')) {
+          mapRef.removeLayer('route');
+        }
+        if (mapRef && mapRef.getSource('route')) {
+          mapRef.removeSource('route');
+        }
+      } catch (error) {
+        console.warn('Erreur lors de la suppression de la route:', error);
+      }
+      return;
     }
 
-    // Draw route if both points selected
+    const originPoint = yaoundePointsRelais.find(p => p.id === routeData.departurePointId);
+    const destinationPoint = yaoundePointsRelais.find(p => p.id === routeData.arrivalPointId);
+
     if (originPoint && destinationPoint) {
-      drawRoute(originPoint, destinationPoint);
+      // Utiliser l'API de routing (exemple avec OSRM ou MapBox)
+      fetchRoute(originPoint, destinationPoint);
     }
-  }, [allPoints, routeData.departurePointId, routeData.arrivalPointId, userLocation, drawRoute]);
+  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId]);
 
-  // Handle point selection
+  const fetchRoute = async (origin: PointRelais, destination: PointRelais) => {
+    try {
+      // Exemple avec OSRM (service de routing open source)
+      const response = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
+      );
+      
+      const data = await response.json();
+      
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        
+        // Supprimer l'ancienne route
+        try {
+          if (mapRef.getLayer('route')) {
+            mapRef.removeLayer('route');
+          }
+          if (mapRef.getSource('route')) {
+            mapRef.removeSource('route');
+          }
+
+          // Ajouter la nouvelle route
+          mapRef.addSource('route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: route.geometry
+            }
+          });
+
+          mapRef.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': '#10b981',
+              'line-width': 4,
+              'line-opacity': 0.8
+            }
+          });
+
+          // Ajuster la vue pour inclure toute la route
+          const coordinates = route.geometry.coordinates;
+          // Créer les bounds manuellement au lieu d'utiliser maplibregl.LngLatBounds
+          let minLng = coordinates[0][0];
+          let maxLng = coordinates[0][0];
+          let minLat = coordinates[0][1];
+          let maxLat = coordinates[0][1];
+
+          coordinates.forEach((coord: number[]) => {
+            minLng = Math.min(minLng, coord[0]);
+            maxLng = Math.max(maxLng, coord[0]);
+            minLat = Math.min(minLat, coord[1]);
+            maxLat = Math.max(maxLat, coord[1]);
+          });
+
+          mapRef.fitBounds([
+            [minLng, minLat],
+            [maxLng, maxLat]
+          ], {
+            padding: 50
+          });
+        } catch (error) {
+          console.warn('Erreur lors de l\'affichage de la route:', error);
+          drawStraightLine(origin, destination);
+        }
+      }
+    } catch (error) {
+      console.warn('Erreur lors du calcul de l\'itinéraire:', error);
+      // Fallback: dessiner une ligne droite
+      drawStraightLine(origin, destination);
+    }
+  };
+
+  const drawStraightLine = (origin: PointRelais, destination: PointRelais) => {
+    try {
+      // Supprimer l'ancienne route
+      if (mapRef.getLayer('route')) {
+        mapRef.removeLayer('route');
+      }
+      if (mapRef.getSource('route')) {
+        mapRef.removeSource('route');
+      }
+
+      // Dessiner une ligne droite
+      mapRef.addSource('route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [origin.lng, origin.lat],
+              [destination.lng, destination.lat]
+            ]
+          }
+        }
+      });
+
+      mapRef.addLayer({
+        id: 'route',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#10b981',
+          'line-width': 4,
+          'line-opacity': 0.6,
+          'line-dasharray': [2, 2]
+        }
+      });
+    } catch (error) {
+      console.error('Erreur lors du dessin de la ligne droite:', error);
+    }
+  };
+
+  const handleMapReady = (map: any) => {
+    setMapRef(map);
+    // Ajouter un délai pour s'assurer que la carte est complètement initialisée
+    setTimeout(() => {
+      setIsInitialized(true);
+    }, 100);
+  };
+
   const handlePointSelect = (point: PointRelais) => {
     if (selectionMode === 'origin') {
-      setRouteData(prev => ({ 
-        ...prev, 
-        departurePointId: point.id, 
-        departurePointName: point.name 
+      setRouteData(prev => ({
+        ...prev,
+        departurePointId: point.id,
+        departurePointName: point.name
       }));
       setSelectionMode('destination');
-      setSearchQuery('');
-    } else if (selectionMode === 'destination') {
+    } else {
       if (point.id === routeData.departurePointId) {
-        setError("Le point d'arrivée ne peut pas être identique au point de départ.");
-        setTimeout(() => setError(null), 3000);
+        alert("Le point d'arrivée doit être différent du point de départ.");
         return;
       }
-      setRouteData(prev => ({ 
-        ...prev, 
-        arrivalPointId: point.id, 
-        arrivalPointName: point.name 
-      }));
-      setSelectionMode('recipient');
-    }
-  };
-
-  // Zoom to point on list click
-  const handlePointZoom = (point: PointRelais) => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo({
-        center: [point.lng, point.lat],
-        zoom: 16,
-        duration: 1000
-      });
       
-      // Trigger popup
-      const marker = markersRef.current.get(point.id);
-      if (marker) {
-        marker.getPopup()?.addTo(mapInstanceRef.current);
+      const originPoint = yaoundePointsRelais.find(p => p.id === routeData.departurePointId);
+      if (originPoint) {
+        const distance = haversineDistance(
+          [originPoint.lat, originPoint.lng],
+          [point.lat, point.lng]
+        );
+        setRouteData(prev => ({
+          ...prev,
+          arrivalPointId: point.id,
+          arrivalPointName: point.name,
+          distanceKm: distance
+        }));
+        setTravelPrice(calculateTravelPrice(distance));
       }
     }
+    
+    // Fermer la sidebar sur mobile après sélection
+    setIsSidebarOpen(false);
   };
 
-  const handleRecipientChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setRouteData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSubmitRecipient = (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    
-    if (!routeData.recipientName.trim()) {
-      setError("Le nom du destinataire est requis.");
-      return;
-    }
-    
-    const phonePattern = /^(6|2)(?:[235-9]\d{7})$/;
-    if (!phonePattern.test(routeData.recipientPhone.replace(/\s/g, ''))) {
-      setError("Format de téléphone invalide (ex: 6xxxxxxxx ou 2xxxxxxxx).");
-      return;
-    }
-    
-    onNext(routeData);
-  };
-  
-  const resetSelection = (mode: 'origin' | 'destination') => {
-    if (mode === 'origin') {
-      setRouteData(prev => ({
-        ...prev, 
-        departurePointId: null, 
-        departurePointName: '',
-        arrivalPointId: null,
-        arrivalPointName: ''
-      }));
-      setSelectionMode('origin');
-    } else {
-      setRouteData(prev => ({
-        ...prev, 
-        arrivalPointId: null, 
-        arrivalPointName: ''
-      }));
-      setSelectionMode('destination');
-    }
-    
-    // Clear route
-    if (routeLayerRef.current && mapInstanceRef.current) {
-      const map = mapInstanceRef.current;
-      if (map.getLayer(routeLayerRef.current)) map.removeLayer(routeLayerRef.current);
-      if (map.getSource(routeLayerRef.current)) map.removeSource(routeLayerRef.current);
-      routeLayerRef.current = null;
+  const handleSubmit = () => {
+    if (routeData.departurePointId && routeData.arrivalPointId) {
+      onContinue(routeData, travelPrice);
     }
   };
 
-  // Render sidebar content
-  const renderSidebarContent = () => {
-    const pointToRender = (point: PointRelais) => {
-      const isOrigin = routeData.departurePointId === point.id;
-      const isDestination = routeData.arrivalPointId === point.id;
-      const isSelected = isOrigin || isDestination;
-      const Icon = point.type === 'bureau' ? Building2 : point.type === 'commerce' ? Store : Package;
-
-      return (
-        <motion.div 
-          key={point.id}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`group relative p-4 rounded-2xl border-2 transition-all duration-300 cursor-pointer ${
-            isSelected 
-              ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-400 shadow-lg' 
-              : 'bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 hover:shadow-md'
-          }`}
-          onClick={() => handlePointSelect(point)}
-        >
-          <div className="flex items-start gap-3">
-            <div className={`p-3 rounded-xl transition-colors ${
-              isSelected ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-            }`}>
-              <Icon size={20} />
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-bold text-gray-800 truncate text-sm">{point.name}</h4>
-                {isOrigin && <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Départ</span>}
-                {isDestination && <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Arrivée</span>}
-              </div>
-              <p className="text-xs text-orange-600 font-medium mb-1">{point.quartier}</p>
-              <p className="text-xs text-gray-500 leading-relaxed">{point.address}</p>
-            </div>
-            
-            <div className="flex flex-col gap-2 ml-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePointZoom(point);
-                }}
-                className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
-                title="Voir sur la carte"
-              >
-                <Eye size={16} />
-              </button>
-              <ChevronRight size={16} className="text-gray-400 group-hover:text-orange-500 transition-colors"/>
-            </div>
-          </div>
-        </motion.div>
-      );
-    };
-    
-    switch(selectionMode) {
-      case 'origin':
-      case 'destination':
-        return (
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            {displayedPoints.length > 0 ? (
-              displayedPoints.map(pointToRender)
-            ) : (
-              <div className="text-center py-12">
-                <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">Aucun point trouvé</p>
-              </div>
-            )}
-          </div>
-        );
-      
-      case 'recipient':
-        return (
-          <form onSubmit={handleSubmitRecipient} className="space-y-6">
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="p-4 bg-red-50 border border-red-200 rounded-xl"
-                >
-                  <p className="text-red-700 text-sm font-medium">{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-3">Nom du destinataire</label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input 
-                    type="text" 
-                    name="recipientName" 
-                    required 
-                    value={routeData.recipientName} 
-                    onChange={handleRecipientChange} 
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                    placeholder="Entrez le nom complet"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-3">Téléphone du destinataire</label>
-                <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input 
-                    type="tel" 
-                    name="recipientPhone" 
-                    required 
-                    value={routeData.recipientPhone} 
-                    onChange={handleRecipientChange} 
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                    placeholder="6xxxxxxxx ou 2xxxxxxxx"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <motion.button 
-              type="submit" 
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 shadow-lg hover:shadow-xl transition-all"
-            >
-              Continuer <ArrowRight className="w-5 h-5"/>
-            </motion.button>
-          </form>
-        );
-      
-      default: return null;
-    }
+  const handleReset = () => {
+    setRouteData({
+      departurePointId: null,
+      arrivalPointId: null,
+      departurePointName: '',
+      arrivalPointName: '',
+      distanceKm: 0
+    });
+    setTravelPrice(0);
+    setSelectionMode('origin');
+    setSearchQuery('');
   };
 
-  const getHeaderTitle = () => {
-    if (selectionMode === 'origin') return "1. Point de départ";
-    if (selectionMode === 'destination') return "2. Point d'arrivée";
-    return "3. Informations destinataire";
+  const getPointStatus = (point: PointRelais) => {
+    if (routeData.departurePointId === point.id) return 'origin';
+    if (routeData.arrivalPointId === point.id) return 'destination';
+    return 'available';
   };
 
-  const getHeaderSubtitle = () => {
-    if (selectionMode === 'origin') return "Sélectionnez votre point de collecte";
-    if (selectionMode === 'destination') return "Choisissez la destination finale";
-    return "Renseignez les détails du destinataire";
-  };
-  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center"
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="h-screen flex flex-col bg-gray-50"
+    >
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b px-4 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">
+                {selectionMode === 'origin' ? "Point de départ" : "Point d'arrivée"}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {selectionMode === 'origin' 
+                  ? "Cliquez sur la carte ou sélectionnez dans la liste" 
+                  : "Choisissez le point d'arrivée"
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <h1 className="text-2xl lg:text-3xl font-bold text-gray-800 mb-2">{getHeaderTitle()}</h1>
-            <p className="text-gray-600">{getHeaderSubtitle()}</p>
-          </motion.div>
+            <Menu className="w-5 h-5 text-gray-600" />
+          </button>
         </div>
+      </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 h-[calc(100vh-200px)] min-h-[600px]">
-          {/* Sidebar */}
-          <motion.aside 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="xl:col-span-2 bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col"
-          >
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-800">Points relais</h2>
-                <button
-                  onClick={getUserLocation}
-                  disabled={isLoadingLocation}
-                  className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
-                >
-                  {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
-                  Ma position
-                </button>
-              </div>
-              
-              {(selectionMode === 'origin' || selectionMode === 'destination') && (
-                <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Rechercher par nom, quartier..." 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                  />
-                </div>
+      <div className="flex-1 flex relative overflow-hidden">
+        {/* Sidebar */}
+        <AnimatePresence>
+          {(isSidebarOpen || (typeof window !== 'undefined' && window.innerWidth >= 1024)) && (
+            <>
+              {/* Mobile overlay */}
+              {isSidebarOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="lg:hidden fixed inset-0 bg-black/20 z-10"
+                />
               )}
-            </div>
-            
-            <div className="flex-1 p-6 overflow-hidden">
-              <AnimatePresence mode="wait">
-                <motion.div 
-                  key={selectionMode} 
-                  initial={{ opacity: 0, y: 20 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  exit={{ opacity: 0, y: -20 }}
-                  className="h-full overflow-y-auto"
-                >
-                  {renderSidebarContent()}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </motion.aside>
 
-          {/* Map */}
-          <motion.main 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="xl:col-span-3 rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative"
-          >
-            <MapComponent 
-              onMapReady={(map) => { mapInstanceRef.current = map; }} 
-              initialCenter={YAOUNDE_CENTER} 
-              initialZoom={YAOUNDE_ZOOM} 
-            />
-            
-            {/* Route Info Overlay */}
-            <AnimatePresence>
-              {(routeData.departurePointName || routeData.arrivalPointName) && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 50 }}
-                  className="absolute bottom-6 left-6 right-6"
-                >
-                  <div className="bg-white/95 backdrop-blur-lg p-6 rounded-2xl shadow-2xl border border-white/20">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-6 flex-1">
-                        {routeData.departurePointName && (
-                          <div className="text-center">
-                            <div className="flex items-center justify-center w-8 h-8 bg-green-500 rounded-full mb-2">
-                              <MapPin className="w-4 h-4 text-white" />
-                            </div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Départ</p>
-                            <p className="font-bold text-gray-800 truncate max-w-32">{routeData.departurePointName}</p>
-                          </div>
-                        )}
-                        
-                        {routeData.departurePointName && routeData.arrivalPointName && (
-                          <div className="flex-1 flex justify-center">
-                            <ArrowRight className="text-orange-500 w-6 h-6" />
-                          </div>
-                        )}
-                        
-                        {routeData.arrivalPointName && (
-                          <div className="text-center">
-                            <div className="flex items-center justify-center w-8 h-8 bg-green-500 rounded-full mb-2">
-                              <Target className="w-4 h-4 text-white" />
-                            </div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Arrivée</p>
-                            <p className="font-bold text-gray-800 truncate max-w-32">{routeData.arrivalPointName}</p>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {(selectionMode === 'destination' || selectionMode === 'recipient') && (
-                        <button 
-                          onClick={() => resetSelection(selectionMode === 'recipient' ? 'destination' : 'origin')} 
-                          className="ml-4 p-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 hover:text-gray-800 transition-colors"
-                          title="Recommencer"
+              <motion.div
+                initial={{ x: -320 }}
+                animate={{ x: 0 }}
+                exit={{ x: -320 }}
+                className="fixed lg:relative z-20 w-80 bg-white shadow-lg lg:shadow-none h-full flex flex-col"
+              >
+                {/* Sidebar header */}
+                <div className="p-4 border-b bg-gray-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-800">Points relais</h3>
+                    <button
+                      onClick={() => setIsSidebarOpen(false)}
+                      className="lg:hidden p-1 hover:bg-gray-200 rounded"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Search bar */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher un point relais..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Points list */}
+                <div className="flex-1 overflow-y-auto p-2">
+                  <div className="space-y-2">
+                    {filteredPoints.map(point => {
+                      const status = getPointStatus(point);
+                      return (
+                        <motion.div
+                          key={point.id}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => handlePointSelect(point)}
+                          className={`p-3 rounded-lg cursor-pointer border transition-all ${
+                            status === 'origin' 
+                              ? 'border-orange-500 bg-orange-50 shadow-md' :
+                            status === 'destination' 
+                              ? 'border-green-500 bg-green-50 shadow-md' : 
+                              'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          }`}
                         >
-                          <Undo2 className="w-5 h-5"/>
-                        </button>
-                      )}
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 mt-1">
+                              {status === 'origin' ? (
+                                <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
+                              ) : status === 'destination' ? (
+                                <div className="w-3 h-3 bg-green-500 rounded-full" />
+                              ) : (
+                                <MapPin className="w-4 h-4 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm text-gray-800 truncate">
+                                {point.name}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {point.quartier}
+                              </p>
+                              {status !== 'available' && (
+                                <p className="text-xs font-medium mt-1 text-orange-600">
+                                  {status === 'origin' ? 'Point de départ' : 'Point d\'arrivée'}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Progress indicator */}
+                <div className="p-4 border-t bg-gray-50">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${
+                        routeData.departurePointId ? 'bg-orange-500' : 'bg-gray-300'
+                      }`} />
+                      <span className={routeData.departurePointId ? 'text-gray-800' : 'text-gray-400'}>
+                        Départ
+                      </span>
+                    </div>
+                    
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                    
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${
+                        routeData.arrivalPointId ? 'bg-green-500' : 'bg-gray-300'
+                      }`} />
+                      <span className={routeData.arrivalPointId ? 'text-gray-800' : 'text-gray-400'}>
+                        Arrivée
+                      </span>
                     </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.main>
-        </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
-        {/* Bottom Navigation */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-6 pt-6 border-t border-gray-200 flex justify-between items-center"
-        >
-          <motion.button 
-            onClick={onBack} 
+        {/* Map */}
+        <div className="flex-1 relative">
+          <MapComponent
+            onMapReady={handleMapReady}
+            initialCenter={YAOUNDE_CENTER}
+            initialZoom={12}
+          />
+
+          {/* Floating route summary */}
+          <AnimatePresence>
+            {(routeData.departurePointId || routeData.arrivalPointId) && (
+              <motion.div
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                className="absolute bottom-4 left-4 right-4 lg:left-auto lg:w-80"
+              >
+                <div className="bg-white rounded-xl shadow-lg border p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-gray-800">Récapitulatif</h4>
+                    <button
+                      onClick={handleReset}
+                      className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                    >
+                      <Undo2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-orange-500 rounded-full flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-500">Départ</p>
+                        <p className="font-medium text-sm truncate">
+                          {routeData.departurePointName || 'À sélectionner'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-500">Arrivée</p>
+                        <p className="font-medium text-sm truncate">
+                          {routeData.arrivalPointName || 'À sélectionner'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {travelPrice > 0 && (
+                      <div className="pt-3 border-t">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">
+                            Distance: {routeData.distanceKm.toFixed(1)} km
+                          </span>
+                          <span className="font-bold text-orange-600">
+                            {travelPrice.toLocaleString()} FCFA
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Bottom action bar */}
+      <div className="bg-white border-t px-4 py-4 flex-shrink-0">
+        <div className="flex justify-between items-center">
+          <div className="hidden sm:flex items-center gap-4 text-sm text-gray-500">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+              <span>Point de départ</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
+              <span>Point d'arrivée</span>
+            </div>
+          </div>
+
+          <motion.button
+            onClick={handleSubmit}
+            disabled={!routeData.arrivalPointId}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="flex items-center gap-3 px-8 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors shadow-md"
+            className="inline-flex items-center justify-center bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            Précédent
+            Continuer
+            <ArrowRight className="w-4 h-4 ml-2" />
           </motion.button>
-          
-          <div className="text-sm text-gray-500">
-            Étape {selectionMode === 'origin' ? '1' : selectionMode === 'destination' ? '2' : '3'} sur 3
-          </div>
-        </motion.div>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

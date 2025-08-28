@@ -1,462 +1,743 @@
 'use client';
-
 import React, { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useNotification } from '@/context/NotificationContext';
-import { notifyOnPackageDeposit } from '@/lib/notification';
-import { CreditCardIcon, DevicePhoneMobileIcon, BanknotesIcon, GiftIcon, ArrowLeftIcon, CheckCircleIcon, LockClosedIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  CreditCardIcon, 
+  DevicePhoneMobileIcon, 
+  BanknotesIcon, 
+  GiftIcon,
+  ArrowLeftIcon, 
+  CheckCircleIcon, 
+  ShareIcon, 
+  ArrowPathIcon,
+  DocumentTextIcon,
+  ClockIcon,
+  ShieldCheckIcon,
+  PrinterIcon
+} from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
+import OriginalQRCode from 'qrcode'; 
+import { supabase } from '@/lib/supabase';
+import { PhoneIcon } from 'lucide-react';
 
-// Interfaces définies une seule fois et correctement typées
-interface SenderData {
-    senderName: string;
-    senderPhone: string;
+interface FinalData {
+  senderName: string;
+  senderPhone: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientEmail: string;
+  designation: string;
+  weight: string;
+  isFragile: boolean;
+  isPerishable: boolean;
+  isInsured: boolean;
+  declaredValue: string;
+  logistics: 'standard' | 'express_24h' | 'express_48h';
+  departurePointId: number | null;
+  arrivalPointId: number | null;
+  departurePointName: string;
+  arrivalPointName: string;
+  distanceKm: number;
+  signatureUrl: string | null;
+  basePrice: number;
+  travelPrice: number;
 }
 
-interface PackageData {
-    weight: string;
-    length: string;
-    width: string;
-    height: string;
-    designation: string;
-    isFragile: boolean;
-    isPerishable: boolean;
-    isInsured: boolean;
-    declaredValue: string;
+interface LoggedInUser {
+  id: string;
 }
-
-interface RouteData {
-    departurePointName: string;
-    arrivalPointName: string;
-    recipientName: string;
-    recipientPhone: string;
-    departurePointId?: number | null;
-    arrivalPointId?: number | null;
-}
-
-interface CurrentUser {
-    id: string;
-    full_name: string | null;
-    phone: string | null;
-    email?: string;
-}
-
-// Interface pour FormData (reconstruite à partir du contexte)
-interface FormData {
-    senderName: string;
-    senderPhone: string;
-    senderAddress: string;
-    recipientName: string;
-    recipientPhone: string;
-    recipientAddress: string;
-    departurePoint: string;
-    arrivalPoint: string;
-    departurePointId: number;
-    arrivalPointId: number;
-}
-
-type PaymentStatusType = 'success' | 'pending_cash' | 'pending_recipient' | 'error' | '';
 
 interface PaymentStepProps {
-    senderData: SenderData;
-    packageData: PackageData;
-    routeData: RouteData;
-    totalPrice: number;
-    currentUser: CurrentUser;
-    onBack: () => void;
-    onSuccess: () => void;
-    onNewTask: () => void;
+  allData: FinalData;
+  onBack: () => void;
+  onPaymentFinalized: (pricing: {basePrice: number, travelPrice: number, operatorFee: number, totalPrice: number}) => void;
+  currentUser: LoggedInUser | null;
 }
 
-export default function PaymentStepExpedition({ 
-    senderData, 
-    packageData, 
-    routeData, 
-    totalPrice,
-    currentUser, 
-    onBack, 
-    onSuccess, 
-    onNewTask 
-}: PaymentStepProps) {
-    const { addNotification } = useNotification();
-    const [selectedMethod, setSelectedMethod] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [processingStep, setProcessingStep] = useState(0);
-    const [paymentStatus, setPaymentStatus] = useState<PaymentStatusType>('');
-    const [trackingNumber, setTrackingNumber] = useState('');
-    const [cardData, setCardData] = useState({ number: '', expiry: '', cvv: '', holder: '' });
-    const [mobileData, setMobileData] = useState({ operator: '', number: '' });
+const PAYMENT_OPERATOR_FEE = 100;
+const APP_NAME = "PicknDrop Link";
+const DEFAULT_COUNTER_USER = {
+  id: '9b0ab148-dbbc-4a54-b952-62f4c736179e',
+  email: 'comptoir_pickndrop@gmail.com',
+  name: 'Comptoir PicknDrop'
+};
 
-    // Reconstruction de formData à partir des props
-    const formData: FormData = {
-        senderName: senderData.senderName,
-        senderPhone: senderData.senderPhone,
-        senderAddress: '', // Valeur par défaut si non fournie
-        recipientName: routeData.recipientName,
-        recipientPhone: routeData.recipientPhone,
-        recipientAddress: '', // Valeur par défaut si non fournie
-        departurePoint: routeData.departurePointName,
-        arrivalPoint: routeData.arrivalPointName,
-        departurePointId: routeData.departurePointId || 0,
-        arrivalPointId: routeData.arrivalPointId || 0,
-    };
+export default function PaymentStep({ allData, onBack, onPaymentFinalized, currentUser }: PaymentStepProps) {
+  const [selectedMethod, setSelectedMethod] = useState<'cash' | 'mobile' | 'recipient'>('cash');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [mobileOperator, setMobileOperator] = useState<'orange' | 'mtn'>('orange');
+  const [mobilePhone, setMobilePhone] = useState('');
 
-    const paymentMethods = [
-        { id: 'card', name: 'Carte bancaire', icon: CreditCardIcon, fee: 0, gradient: 'from-blue-500 to-blue-600', popular: false },
-        { id: 'mobile', name: 'Paiement Mobile', icon: DevicePhoneMobileIcon, fee: 100, gradient: 'from-orange-500 to-orange-600', popular: true },
-        { id: 'cash', name: 'Paiement en espèces', icon: BanknotesIcon, fee: 0, gradient: 'from-gray-500 to-gray-600', popular: false },
-        { id: 'recipient', name: 'Paiement par destinataire', icon: GiftIcon, fee: 0, gradient: 'from-purple-500 to-purple-600', popular: false }
-    ];
+  const operatorFee = selectedMethod === 'mobile' ? PAYMENT_OPERATOR_FEE : 0;
+  const totalPrice = allData.basePrice + allData.travelPrice + operatorFee;
 
-    const calculatePackageBasePrice = (): number => {
-        const weight = parseFloat(packageData.weight) || 0;
-        const volume = (parseFloat(packageData.length) || 0) * (parseFloat(packageData.width) || 0) * (parseFloat(packageData.height) || 0);
-        return Math.max(2000, weight * 500 + volume * 0.1);
-    };
 
-    const calculateAdditionalFees = (): number => {
-        let fees = 0;
-        if (packageData.isFragile) fees += 500;
-        if (packageData.isPerishable) fees += 300;
-        if (packageData.isInsured) fees += parseFloat(packageData.declaredValue) * 0.02;
-        return fees;
-    };
 
-    // Helper function to get selected payment method
-    const getSelectedPaymentMethod = () => {
-        return paymentMethods.find(m => m.id === selectedMethod);
-    };
+  // Validation du numéro de téléphone mobile
+  const validateMobilePhone = (phone: string) => {
+    const cleaned = phone.replace(/\s+/g, '');
+    // Format Cameroun : 6XXXXXXXX ou +237 6XXXXXXXX
+    return /^(\+237\s?)?6[0-9]{8}$/.test(cleaned);
+  };
 
-    const calculateTotalForPayer = (): number => {
-        const basePrice = calculatePackageBasePrice();
-        const additionalFees = calculateAdditionalFees();
-        const selectedPaymentMethod = getSelectedPaymentMethod();
-        const methodFee = selectedPaymentMethod?.fee || 0;
-        return basePrice + additionalFees + methodFee;
-    };
+  const canConfirmPayment = () => {
+    if (selectedMethod === 'mobile') {
+      return validateMobilePhone(mobilePhone);
+    }
+    return true;
+  };
 
-    const generateReceipt = () => {
-        const doc = new jsPDF();
-        const trackingNum = `PDL-${Date.now().toString().slice(-8)}`;
-        
-        doc.setFontSize(20);
-        doc.text('BORDEREAU D\'EXPÉDITION', 105, 30, { align: 'center' });
-        doc.setFontSize(12);
-        doc.text(`N° de suivi: ${trackingNum}`, 20, 50);
-        doc.text(`Date: ${new Date().toLocaleDateString('fr-FR')}`, 150, 50);
-        
-        doc.text('EXPÉDITEUR', 20, 70);
-        doc.text(`${formData.senderName}`, 20, 80);
-        doc.text(`${formData.senderPhone}`, 20, 90);
-        doc.text(`${formData.senderAddress}`, 20, 100);
-        
-        doc.text('DESTINATAIRE', 120, 70);
-        doc.text(`${formData.recipientName}`, 120, 80);
-        doc.text(`${formData.recipientPhone}`, 120, 90);
-        doc.text(`${formData.recipientAddress}`, 120, 100);
-        
-        doc.text('TRAJET', 20, 120);
-        doc.text(`De: ${formData.departurePoint}`, 20, 130);
-        doc.text(`Vers: ${formData.arrivalPoint}`, 20, 140);
-        
-        doc.text('DÉTAILS DU COLIS', 20, 160);
-        doc.text(`Désignation: ${packageData.designation}`, 20, 170);
-        doc.text(`Poids: ${packageData.weight} kg`, 20, 180);
-        doc.text(`Dimensions: ${packageData.length}×${packageData.width}×${packageData.height} cm`, 20, 190);
-        
-        doc.text('RÉCAPITULATIF FINANCIER', 20, 210);
-        doc.text(`Prix de base: ${calculatePackageBasePrice().toLocaleString()} FCFA`, 20, 220);
-        doc.text(`Frais additionnels: ${calculateAdditionalFees().toLocaleString()} FCFA`, 20, 230);
-        doc.text(`TOTAL: ${calculateTotalForPayer().toLocaleString()} FCFA`, 20, 240);
-        
-        doc.save(`bordereau-${trackingNum}.pdf`);
-    };
+  const generateBordereauPDF = async () => {
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 15;
+      let y = 20;
 
-    const handlePayment = async () => {
-        if (!selectedMethod) { 
-            addNotification("Sélectionnez une méthode de paiement", 'error'); 
-            return; 
-        }
-        
-        setIsProcessing(true);
-        const steps = ['Validation des données', 'Traitement du paiement', 'Enregistrement', 'Finalisation'];
-        
-        for (let i = 0; i < steps.length; i++) {
-            setProcessingStep(i);
-            await new Promise(resolve => setTimeout(resolve, 800));
-        }
-        
+      // FONCTIONS UTILITAIRES
+      const addSectionTitle = (title: string) => {
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(45, 55, 72); // Couleur sombre (slate-700)
+        pdf.text(title, margin, y);
+        y += 8;
+        pdf.setLineWidth(0.2);
+        pdf.line(margin, y - 3, pageWidth - margin, y - 3);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(0, 0, 0);
+      };
+      
+      const addField = (label: string, value: string | undefined | null) => {
+        if (!value) return;
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(label, margin, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(String(value), margin + 45, y);
+        y += 6;
+      };
+
+      // 1. EN-TÊTE
+      pdf.setFontSize(22);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(249, 115, 22); // Orange
+      pdf.text(APP_NAME, margin, y - 5);
+      
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'italic');
+      pdf.setTextColor(100, 116, 139); // slate-500
+      pdf.text('Votre solution de livraison de confiance', margin, y);
+
+      const qrDataURL = await OriginalQRCode.toDataURL(trackingNumber, { width: 110, margin: 1 });
+      const qrSize = 28;
+      pdf.addImage(qrDataURL, 'PNG', pageWidth - margin - qrSize, y - 12, qrSize, qrSize);
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0,0,0);
+      pdf.text(`Bordereau d'Expédition`, pageWidth - margin - 35, y - 5, { align: 'right' });
+      
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`N°: ${trackingNumber}`, pageWidth - margin - 35, y, { align: 'right' });
+      pdf.text(`Date: ${new Date().toLocaleDateString('fr-CM')}`, pageWidth - margin - 35, y + 5, { align: 'right' });
+
+      y += qrSize - 5;
+      
+      // 2. EXPÉDITEUR & DESTINATAIRE
+      addSectionTitle('Intervenants');
+      const startYCols = y;
+      addField('Expéditeur:', allData.senderName);
+      addField('Téléphone:', allData.senderPhone);
+      addField('Point de Dépôt:', allData.departurePointName);
+      
+      y = startYCols; // Reset y pour la deuxième colonne
+      pdf.text('', pageWidth / 2, y); // Placeholder pour aligner
+      addField('Destinataire:', allData.recipientName);
+      addField('Téléphone:', allData.recipientPhone);
+      addField('Point de Retrait:', allData.arrivalPointName);
+      y = Math.max(y, startYCols + (3*6)); // S'assurer que 'y' est à la fin de la colonne la plus longue
+      y += 5;
+
+      // 3. DÉTAILS DU COLIS
+      addSectionTitle('Détails du Colis');
+      addField('Désignation:', allData.designation);
+      addField('Poids:', `${allData.weight} kg`);
+      let caracteristiques = [];
+      if (allData.isFragile) caracteristiques.push("Fragile");
+      if (allData.isPerishable) caracteristiques.push("Périssable");
+      if (allData.isInsured) caracteristiques.push(`Assuré (Valeur: ${Number(allData.declaredValue).toLocaleString('fr-FR')} FCFA)`);
+      if (caracteristiques.length > 0) addField('Spécificités:', caracteristiques.join(', '));
+      y += 5;
+      
+      // 4. RÉCAPITULATIF FINANCIER
+      addSectionTitle('Récapitulatif Financier');
+      addField('Coût de base:', `${allData.basePrice.toLocaleString('fr-FR')} FCFA`);
+      addField('Frais de trajet:', `${allData.travelPrice.toLocaleString('fr-FR')} FCFA`);
+      if(operatorFee > 0) addField('Frais transaction:', `${operatorFee.toLocaleString('fr-FR')} FCFA`);
+      pdf.setLineWidth(0.3);
+      pdf.line(margin, y, margin + 85, y);
+      y += 6;
+
+      pdf.setFont('helvetica', 'bold');
+      const paymentStatusText = selectedMethod === 'recipient' 
+        ? 'Total à payer par le Destinataire:' 
+        : 'Total payé par l\'Expéditeur:';
+      addField(paymentStatusText, `${totalPrice.toLocaleString('fr-FR')} FCFA`);
+      pdf.setFont('helvetica', 'normal');
+      y += 10;
+      
+      // 5. SIGNATURE
+      addSectionTitle('Signature');
+      if (allData.signatureUrl) {
         try {
-            const newTrackingNumber = `PDL-${Date.now().toString().slice(-8)}`;
-            const shipmentData = {
-                trackingNumber: newTrackingNumber,
-                status: 'ARRIVE_AU_RELAIS',
-                senderName: formData.senderName,
-                senderPhone: formData.senderPhone,
-                recipientName: formData.recipientName,
-                recipientPhone: formData.recipientPhone,
-                description: packageData.designation,
-                weight: parseFloat(packageData.weight),
-                isFragile: packageData.isFragile,
-                isPerishable: packageData.isPerishable,
-                isInsured: packageData.isInsured,
-                declaredValue: packageData.isInsured ? parseFloat(packageData.declaredValue) : 0,
-                departurePointId: formData.departurePointId,
-                arrivalPointId: formData.arrivalPointId,
-                shippingCost: calculateTotalForPayer(),
-                isPaidAtDeparture: selectedMethod !== 'recipient',
-                amountPaid: selectedMethod !== 'recipient' ? calculateTotalForPayer() : null,
-                paymentMethod: selectedMethod,
-                created_by_user: currentUser.id
-            };
-
-            const { error } = await supabase.from('Shipment').insert(shipmentData);
-            if (error) throw new Error(error.message);
-            
-            setTrackingNumber(newTrackingNumber);
-            setPaymentStatus(selectedMethod === 'cash' ? 'pending_cash' : selectedMethod === 'recipient' ? 'pending_recipient' : 'success');
-            
-            await notifyOnPackageDeposit({
-                trackingNumber: newTrackingNumber,
-                recipientName: formData.recipientName,
-                recipientPhone: formData.recipientPhone,
-                senderName: formData.senderName,
-                senderPhone: formData.senderPhone,
-                arrivalPointName: formData.arrivalPoint
-            });
-
-            addNotification(`Colis ${newTrackingNumber} enregistré avec succès !`, 'success');
-        } catch (err: any) {
-            addNotification(`Erreur: ${err.message}`, 'error');
-            setPaymentStatus('error');
+          pdf.addImage(allData.signatureUrl, 'PNG', margin, y, 50, 20);
+        } catch(e) { 
+          console.error("Erreur d'ajout de signature"); 
         }
-        
-        setIsProcessing(false);
-    };
+      } else {
+        pdf.text('Pas de signature numérique.', margin, y);
+      }
+      pdf.line(margin, y + 25, margin + 60, y + 25);
+      pdf.text("Signature de l'agent", margin + 100, y + 28);
+      pdf.line(margin + 90, y + 25, margin + 150, y + 25);
 
-    const shareTracking = async () => {
-        const text = `🚚 Suivi de colis PDL\n\n📦 Numéro: ${trackingNumber}\n📍 ${formData.departurePoint} → ${formData.arrivalPoint}\n👤 Pour: ${formData.recipientName}\n\n🔗 Suivez votre colis sur notre site`;
-        
-        if (navigator.share) {
-            try {
-                await navigator.share({ title: 'Suivi de colis PDL', text });
-            } catch (err) {
-                navigator.clipboard.writeText(text);
-                addNotification('Informations copiées !', 'success');
-            }
-        } else {
-            navigator.clipboard.writeText(text);
-            addNotification('Informations copiées !', 'success');
-        }
-    };
+      // 6. PIED DE PAGE
+      const finalY = pdf.internal.pageSize.getHeight() - 15;
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, finalY - 5, pageWidth - margin, finalY - 5);
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text(`Document généré le ${new Date().toLocaleString('fr-CM')}. ${APP_NAME} vous remercie.`, pageWidth / 2, finalY, { align: 'center' });
 
-    if (paymentStatus && paymentStatus !== 'error') {
-        const statusConfig: Record<Exclude<PaymentStatusType, 'error' | ''>, { color: string, icon: React.ComponentType<any>, title: string, message: string }> = {
-            success: { color: 'orange', icon: CheckCircleIcon, title: 'Paiement réussi !', message: 'Votre colis est enregistré et sera traité rapidement.' },
-            pending_cash: { color: 'yellow', icon: BanknotesIcon, title: 'En attente de paiement', message: 'Effectuez le paiement au point relais pour finaliser.' },
-            pending_recipient: { color: 'purple', icon: GiftIcon, title: 'Paiement par destinataire', message: 'Le destinataire paiera à la réception du colis.' }
-        };
-        
-        const config = statusConfig[paymentStatus];
-        const IconComponent = config.icon;
-        
-        return (
-            <div className="max-w-2xl mx-auto text-center space-y-6">
-                <div className={`w-24 h-24 mx-auto rounded-full bg-gradient-to-r from-${config.color}-400 to-${config.color}-600 flex items-center justify-center animate-pulse`}>
-                    <IconComponent className="w-12 h-12 text-white" />
-                </div>
-                <div>
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{config.title}</h2>
-                    <p className="text-gray-600 mb-4">{config.message}</p>
-                    <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 mb-6">
-                        <p className="text-sm text-gray-600 mb-1">Numéro de suivi</p>
-                        <p className="text-2xl font-bold text-orange-600">{trackingNumber}</p>
-                    </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <button onClick={generateReceipt} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-700 transition-colors">
-                        Télécharger le bordereau
-                    </button>
-                    <button onClick={shareTracking} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
-                        <ShareIcon className="w-5 h-5" /> Partager
-                    </button>
-                    <button onClick={onNewTask} className="bg-orange-100 text-orange-700 px-6 py-3 rounded-lg font-semibold hover:bg-orange-200 transition-colors">
-                        Nouvelle expédition
-                    </button>
-                </div>
-            </div>
-        );
+      // SAUVEGARDE
+      pdf.save(`Bordereau_Expedition_${trackingNumber}.pdf`);
+    } catch (error) {
+      console.error("Erreur détaillée lors de la génération du PDF:", error);
+      alert("Une erreur est survenue lors de la génération du bordereau PDF.");
+    }
+  };
+
+  const simulateMobilePayment = async () => {
+    setProcessingStep(`Demande de paiement ${mobileOperator.toUpperCase()} Money...`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setProcessingStep('Confirmation du paiement...');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Simuler une validation réussie
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!canConfirmPayment()) {
+      alert('Veuillez vérifier vos informations de paiement');
+      return;
     }
 
-    if (isProcessing) {
-        const steps = ['Validation des données', 'Traitement du paiement', 'Enregistrement', 'Finalisation'];
-        return (
-            <div className="max-w-2xl mx-auto text-center space-y-8">
-                <div className="w-16 h-16 mx-auto border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Traitement en cours...</h2>
-                    <div className="bg-gray-200 rounded-full h-2 mb-4">
-                        <div className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all duration-500" style={{ width: `${((processingStep + 1) / steps.length) * 100}%` }}></div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {steps.map((step, index) => (
-                            <div key={index} className={`p-3 rounded-lg text-sm ${index <= processingStep ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
-                                <div className={`w-6 h-6 mx-auto mb-2 rounded-full flex items-center justify-center ${index <= processingStep ? 'bg-orange-600' : 'bg-gray-300'}`}>
-                                    <span className="text-white text-xs font-bold">{index + 1}</span>
-                                </div>
-                                {step}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        );
+    const userToUse = currentUser || DEFAULT_COUNTER_USER;
+
+    setIsProcessing(true);
+    const newTrackingNumber = `PDL${Date.now().toString().slice(-7)}`;
+    setTrackingNumber(newTrackingNumber);
+    setProcessingStep('Vérification des données...');
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Simuler le paiement mobile si nécessaire
+      if (selectedMethod === 'mobile') {
+        const paymentSuccess = await simulateMobilePayment();
+        if (!paymentSuccess) {
+          throw new Error('Échec du paiement mobile');
+        }
+      }
+
+      setProcessingStep('Enregistrement du colis...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 1. Préparer l'objet de données pour la table 'shipments'
+      const shipmentData = {
+        tracking_number: newTrackingNumber,
+        status: 'AU_DEPART', // Le colis est physiquement déposé
+        sender_name: allData.senderName,
+        sender_phone: allData.senderPhone,
+        recipient_name: allData.recipientName,
+        recipient_phone: allData.recipientPhone,
+        departure_point_id: allData.departurePointId,
+        arrival_point_id: allData.arrivalPointId,
+        description: allData.designation,
+        weight: parseFloat(allData.weight),
+        is_fragile: allData.isFragile,
+        is_perishable: allData.isPerishable,
+        is_insured: allData.isInsured,
+        declared_value: allData.isInsured ? parseFloat(allData.declaredValue) : null,
+        shipping_cost: totalPrice,
+        is_paid_at_departure: selectedMethod !== 'recipient',
+        amount_paid: selectedMethod !== 'recipient' ? totalPrice : null,
+        // Associer l'enregistrement à l'utilisateur qui a fait l'opération
+        created_by_user: userToUse.id,
+      };
+
+      // 2. Insérer les données dans Supabase
+      const { error } = await supabase
+        .from('shipments') // Assurez-vous que le nom de la table est correct
+        .insert(shipmentData);
+
+      // 3. Gérer les erreurs de la base de données
+      if (error) {
+        console.error("Erreur d'insertion Supabase:", error);
+        throw new Error(`Erreur de base de données : ${error.message}`);
+      }
+
+      setProcessingStep('Génération du bordereau...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const finalPricing = { 
+        basePrice: allData.basePrice, 
+        travelPrice: allData.travelPrice, 
+        operatorFee, 
+        totalPrice 
+      };
+
+      setPaymentSuccess(true);
+      onPaymentFinalized(finalPricing);
+      
+    } catch (error: any) {
+      console.error("Erreur lors de la finalisation :", error);
+      alert(`Échec de l'enregistrement du colis : ${error.message}`);
+      // Réinitialiser en cas d'erreur
+      setIsProcessing(false);
+      setProcessingStep('');
     }
+  };
 
-    // Get the selected payment method for the summary
-    const selectedPaymentMethod = getSelectedPaymentMethod();
+  // Animation des variantes
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { 
+        duration: 0.6,
+        staggerChildren: 0.1
+      }
+    }
+  };
 
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
+  };
+
+  if (isProcessing) {
     return (
-        <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                <div className="lg:col-span-3 space-y-6">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Choisissez votre méthode de paiement</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {paymentMethods.map((method) => {
-                                const IconComponent = method.icon;
-                                return (
-                                    <div key={method.id} className={`relative p-6 rounded-xl border-2 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-lg ${selectedMethod === method.id ? `border-orange-500 shadow-lg` : 'border-gray-200'} bg-gradient-to-br ${method.gradient}`}
-                                        onClick={() => setSelectedMethod(method.id)}>
-                                        {method.popular && (
-                                            <div className="absolute -top-2 -right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold">POPULAIRE</div>
-                                        )}
-                                        <div className="flex items-center justify-between mb-4">
-                                            <IconComponent className="w-8 h-8 text-white" />
-                                            {selectedMethod === method.id && (
-                                                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-                                                    <CheckCircleIcon className="w-6 h-6 text-orange-600" />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <h3 className="font-semibold text-white mb-2">{method.name}</h3>
-                                        <p className="text-white/80 text-sm">{method.fee === 0 ? 'Gratuit' : `${method.fee} FCFA de frais`}</p>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {selectedMethod === 'card' && (
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
-                            <h3 className="font-semibold text-lg">Informations de la carte</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <input 
-                                    placeholder="Numéro de carte" 
-                                    value={cardData.number} 
-                                    onChange={(e) => setCardData({...cardData, number: e.target.value})} 
-                                    className="col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
-                                />
-                                <input 
-                                    placeholder="MM/AA" 
-                                    value={cardData.expiry} 
-                                    onChange={(e) => setCardData({...cardData, expiry: e.target.value})} 
-                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
-                                />
-                                <input 
-                                    placeholder="CVV" 
-                                    value={cardData.cvv} 
-                                    onChange={(e) => setCardData({...cardData, cvv: e.target.value})} 
-                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
-                                />
-                                <input 
-                                    placeholder="Nom du titulaire" 
-                                    value={cardData.holder} 
-                                    onChange={(e) => setCardData({...cardData, holder: e.target.value})} 
-                                    className="col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {selectedMethod === 'mobile' && (
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
-                            <h3 className="font-semibold text-lg">Paiement mobile</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <select 
-                                    value={mobileData.operator} 
-                                    onChange={(e) => setMobileData({...mobileData, operator: e.target.value})} 
-                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                >
-                                    <option value="">Opérateur</option>
-                                    <option value="orange">Orange Money</option>
-                                    <option value="mtn">MTN MoMo</option>
-                                </select>
-                                <input 
-                                    placeholder="Numéro" 
-                                    value={mobileData.number} 
-                                    onChange={(e) => setMobileData({...mobileData, number: e.target.value})} 
-                                    className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
-                                />
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="lg:col-span-2">
-                    <div className="sticky top-4 bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-                        <div className="flex items-center gap-2 mb-4">
-                            <LockClosedIcon className="w-5 h-5 text-orange-600" />
-                            <span className="text-sm text-gray-600">Paiement sécurisé</span>
-                        </div>
-                        
-                        <h3 className="font-semibold text-lg">Résumé de la commande</h3>
-                        
-                        <div className="space-y-3 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-gray-600">📦 {packageData.designation}</span>
-                                <span>{calculatePackageBasePrice().toLocaleString()} FCFA</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-600">📍 {formData.departurePoint} → {formData.arrivalPoint}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-600">📞 {currentUser.full_name || 'Utilisateur'}</span>
-                            </div>
-                            
-                            {calculateAdditionalFees() > 0 && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Frais additionnels</span>
-                                    <span>{calculateAdditionalFees().toLocaleString()} FCFA</span>
-                                </div>
-                            )}
-                                                        
-                            {selectedPaymentMethod && selectedPaymentMethod.fee > 0 && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Frais de paiement</span>
-                                    <span>{selectedPaymentMethod.fee.toLocaleString()} FCFA</span>
-                                </div>
-                            )}
-                            
-                            <div className="border-t pt-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="font-semibold">Total</span>
-                                    <span className="text-2xl font-bold text-orange-600">{calculateTotalForPayer().toLocaleString()} FCFA</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div className="space-y-3 pt-4">
-                            <button onClick={onBack} className="w-full flex items-center justify-center gap-2 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
-                                <ArrowLeftIcon className="w-5 h-5" /> Retour
-                            </button>
-                            <button onClick={handlePayment} disabled={!selectedMethod} className="w-full bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 disabled:bg-gray-400 transition-colors">
-                                Confirmer le paiement
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-orange-50">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center p-8"
+        >
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-orange-100 rounded-full mb-6">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            >
+              <ArrowPathIcon className="w-10 h-10 text-orange-600" />
+            </motion.div>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Traitement en cours</h2>
+          <p className="text-orange-600 font-medium text-lg">{processingStep}</p>
+        </motion.div>
+      </div>
     );
+  }
+
+  if (paymentSuccess) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="min-h-screen flex items-center justify-center bg-orange-50 p-4"
+      >
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl text-center">
+          <motion.div
+            animate={{ 
+              scale: [1, 1.1, 1],
+              rotate: [0, 5, -5, 0]
+            }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto drop-shadow-lg"/>
+          </motion.div>
+          
+          <h2 className="text-2xl font-bold text-gray-800 mt-4 mb-2">Expédition confirmée !</h2>
+          <p className="text-gray-600 mb-6">
+            Votre colis a été enregistré avec le numéro de suivi suivant.
+          </p>
+          
+          <div className="bg-orange-50 rounded-2xl p-4 mb-6">
+            <p className="text-sm text-gray-600 mb-1">Numéro de suivi</p>
+            <p className="text-2xl font-bold text-orange-600">{trackingNumber}</p>
+          </div>
+
+          <div className="space-y-3">
+            <motion.button
+              onClick={generateBordereauPDF}
+              className="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-2xl transition-colors shadow-lg"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <PrinterIcon className="w-5 h-5 mr-2" />
+              Télécharger le Bordereau
+            </motion.button>
+            <motion.button 
+              onClick={() => window.location.reload()}
+              className="w-full border-2 border-orange-200 hover:border-orange-300 hover:bg-orange-50 text-orange-600 font-semibold py-3 px-6 rounded-2xl transition-colors"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Nouvelle expédition
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="min-h-screen bg-gray-50 p-4 lg:p-8"
+    >
+      <div className="max-w-7xl mx-auto">
+        {/* En-tête */}
+        <motion.div variants={itemVariants} className="mb-8">
+          <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
+            Finaliser votre expédition
+          </h1>
+          <p className="text-gray-600">Choisissez votre mode de paiement et confirmez votre envoi</p>
+        </motion.div>
+
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Colonne principale - Options de paiement */}
+          <motion.div variants={itemVariants} className="lg:col-span-2 space-y-6">
+            
+            {/* Méthodes de paiement */}
+            <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-lg">
+              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <CreditCardIcon className="w-6 h-6 text-orange-600" />
+                Mode de paiement
+              </h2>
+              
+              <div className="space-y-4">
+                <PaymentOption
+                  id="cash"
+                  label="Paiement en espèces"
+                  description="Payez directement à notre agent"
+                  icon={BanknotesIcon}
+                  fee={0}
+                  selected={selectedMethod}
+                  setSelected={setSelectedMethod}
+                  badge="Recommandé"
+                />
+                
+                <PaymentOption
+                  id="mobile"
+                  label="Paiement Mobile"
+                  description="Orange Money, MTN Mobile Money"
+                  icon={DevicePhoneMobileIcon}
+                  fee={PAYMENT_OPERATOR_FEE}
+                  selected={selectedMethod}
+                  setSelected={setSelectedMethod}
+                />
+                
+                <PaymentOption
+                  id="recipient"
+                  label="Paiement par le destinataire"
+                  description="Le destinataire paie à la réception"
+                  icon={GiftIcon}
+                  fee={0}
+                  selected={selectedMethod}
+                  setSelected={setSelectedMethod}
+                />
+              </div>
+
+              {/* Formulaire de paiement mobile */}
+              <AnimatePresence>
+                {selectedMethod === 'mobile' && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-6 p-6 bg-orange-50 rounded-2xl border-2 border-orange-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <PhoneIcon className="w-5 h-5 text-orange-600" />
+                        Informations de paiement mobile
+                      </h3>
+                      
+                      {/* Sélection de l'opérateur */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Opérateur mobile
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setMobileOperator('orange')}
+                            className={`p-3 rounded-xl border-2 font-medium transition-all ${
+                              mobileOperator === 'orange'
+                                ? 'border-orange-500 bg-orange-100 text-orange-700'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            Orange Money
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMobileOperator('mtn')}
+                            className={`p-3 rounded-xl border-2 font-medium transition-all ${
+                              mobileOperator === 'mtn'
+                                ? 'border-yellow-500 bg-yellow-100 text-yellow-700'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            MTN Mobile Money
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Numéro de téléphone */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Numéro de téléphone
+                        </label>
+                        <input
+                          type="tel"
+                          value={mobilePhone}
+                          onChange={(e) => setMobilePhone(e.target.value)}
+                          placeholder="6XXXXXXXX ou +237 6XXXXXXXX"
+                          className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-colors ${
+                            mobilePhone && validateMobilePhone(mobilePhone)
+                              ? 'border-green-300 focus:border-green-500'
+                              : mobilePhone && !validateMobilePhone(mobilePhone)
+                              ? 'border-red-300 focus:border-red-500'
+                              : 'border-gray-300 focus:border-orange-500'
+                          }`}
+                        />
+                        {mobilePhone && !validateMobilePhone(mobilePhone) && (
+                          <p className="text-red-600 text-sm mt-1">
+                            Format invalide. Utilisez 6XXXXXXXX ou +237 6XXXXXXXX
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-4 p-3 bg-blue-50 rounded-xl">
+                        <p className="text-sm text-blue-700">
+                          <strong>Note :</strong> Vous recevrez un SMS de confirmation pour valider le paiement.
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Détails de l'expédition */}
+            <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-lg">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <DocumentTextIcon className="w-6 h-6 text-orange-600" />
+                Détails de l'expédition
+              </h3>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Expéditeur</p>
+                    <p className="text-lg font-semibold text-gray-900">{allData.senderName}</p>
+                    <p className="text-gray-600">{allData.senderPhone}</p>
+                  </div>
+                  
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Départ</p>
+                    <p className="text-lg font-semibold text-gray-900">{allData.departurePointName}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Destinataire</p>
+                    <p className="text-lg font-semibold text-gray-900">{allData.recipientName}</p>
+                    <p className="text-gray-600">{allData.recipientPhone}</p>
+                  </div>
+                  
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Arrivée</p>
+                    <p className="text-lg font-semibold text-gray-900">{allData.arrivalPointName}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex items-center gap-2 bg-orange-50 px-3 py-2 rounded-xl">
+                    <span className="w-2 h-2 bg-orange-400 rounded-full"></span>
+                    <span className="text-sm font-medium text-gray-700">{allData.designation}</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-xl">
+                    <span className="text-sm font-medium text-gray-700">{allData.weight} kg</span>
+                  </div>
+                  {allData.isFragile && (
+                    <div className="flex items-center gap-2 bg-red-50 px-3 py-2 rounded-xl">
+                      <span className="text-sm font-medium text-red-700">Fragile</span>
+                    </div>
+                  )}
+                  {allData.isInsured && (
+                    <div className="flex items-center gap-2 bg-green-50 px-3 py-2 rounded-xl">
+                      <ShieldCheckIcon className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">Assuré</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Sidebar - Résumé de la commande */}
+          <motion.div variants={itemVariants} className="lg:sticky lg:top-8 h-fit">
+            <div className="bg-white rounded-3xl p-6 shadow-lg border-2 border-orange-100">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Résumé de la commande</h3>
+              
+              <div className="space-y-4 mb-6">
+                <SummaryLine label="Coût de base" value={allData.basePrice} />
+                <SummaryLine label="Coût du trajet" value={allData.travelPrice} />
+                {operatorFee > 0 && (
+                  <SummaryLine label="Frais de transaction" value={operatorFee} />
+                )}
+              </div>
+
+              <div className="border-t border-gray-200 pt-4 mb-6">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-bold text-gray-900">TOTAL</span>
+                  <div className="text-right">
+                    <span className="text-3xl font-black text-orange-600">{totalPrice.toLocaleString()}</span>
+                    <span className="text-lg font-semibold text-gray-600 ml-1">FCFA</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informations sur la livraison */}
+              <div className="bg-orange-50 rounded-2xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <ClockIcon className="w-5 h-5 text-orange-600" />
+                  <span className="font-semibold text-gray-900">Temps de livraison</span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  {allData.logistics === 'express_24h' && 'Livraison en 24h'}
+                  {allData.logistics === 'express_48h' && 'Livraison en 48h'}
+                  {allData.logistics === 'standard' && 'Livraison standard (3-5 jours)'}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Boutons d'action */}
+        <motion.div 
+          variants={itemVariants} 
+          className="mt-8 flex flex-col sm:flex-row gap-4 justify-between items-center"
+        >
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-semibold transition-colors order-2 sm:order-1"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+            Retour
+          </button>
+          
+          <button 
+            onClick={handleSubmit}
+            disabled={isProcessing || !canConfirmPayment()}
+            className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all transform hover:scale-105 disabled:scale-100 order-1 sm:order-2"
+          >
+            {isProcessing ? 'Traitement...' : 'Confirmer l\'expédition'}
+          </button>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
 }
+
+// Composant PaymentOption modernisé
+const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setSelected, badge }: any) => (
+  <motion.div
+    whileHover={{ scale: 1.02 }}
+    whileTap={{ scale: 0.98 }}
+    onClick={() => setSelected(id)}
+    className={`relative p-6 border-2 rounded-2xl cursor-pointer transition-all ${
+      selected === id 
+        ? 'border-orange-500 bg-orange-50 shadow-lg' 
+        : 'border-gray-200 bg-white hover:border-orange-200 hover:shadow-md'
+    }`}
+  >
+    {badge && selected === id && (
+      <span className="absolute -top-2 -right-2 bg-orange-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+        {badge}
+      </span>
+    )}
+    
+    <div className="flex items-start justify-between">
+      <div className="flex items-start gap-4">
+        <div className={`p-3 rounded-xl ${
+          selected === id 
+            ? 'bg-orange-100 text-orange-600' 
+            : 'bg-gray-100 text-gray-600'
+        }`}>
+          <Icon className="w-6 h-6" />
+        </div>
+        
+        <div className="flex-1">
+          <h4 className="font-bold text-gray-900 text-lg mb-1">{label}</h4>
+          <p className="text-gray-600 text-sm mb-2">{description}</p>
+          {fee > 0 && (
+            <p className="text-orange-600 text-sm font-semibold">
+              Frais: +{fee} FCFA
+            </p>
+          )}
+        </div>
+      </div>
+      
+      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+        selected === id 
+          ? 'border-orange-500 bg-orange-500' 
+          : 'border-gray-300'
+      }`}>
+        {selected === id && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <CheckCircleIcon className="w-4 h-4 text-white" />
+          </motion.div>
+        )}
+      </div>
+    </div>
+  </motion.div>
+);
+
+// Composant SummaryLine modernisé
+const SummaryLine = ({ label, value }: { label: string, value: number }) => (
+  <div className="flex justify-between items-center py-2">
+    <span className="text-gray-600 font-medium">{label}</span>
+    <span className="font-bold text-gray-900">{value.toLocaleString()} FCFA</span>
+  </div>
+);

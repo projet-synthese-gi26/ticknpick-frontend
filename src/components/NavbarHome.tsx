@@ -50,7 +50,7 @@ export default function NavbarHome() {
             <div className="flex flex-col items-center gap-6 p-6">
               <Link href="/expedition" onClick={() => setIsOpen(false)} className="text-gray-700 font-semibold text-lg">Envoyer un colis</Link>
               <Link href="#how-it-works" onClick={() => setIsOpen(false)} className="text-gray-700 font-semibold text-lg">Comment ça marche</Link>
-              <Link href="/login" onClick={() => setIsOpen(false)} className="bg-orange-500 text-white font-bold w-full text-center py-3 rounded-full mt-2">Espace PRO</Link>
+              <Link href="/login" onClick={() => setIsOpen(false)} className="bg-orange-500 text-white font-bold w-full text-center py-3 rounded-full mt-2">Devenir PRO</Link>
             </div>
           </motion.div>
         )}
