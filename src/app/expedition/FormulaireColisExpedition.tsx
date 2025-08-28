@@ -31,12 +31,17 @@ const LoadingDots = () => (
 );
 
 const OptionCard = ({ title, description, icon, isSelected, onClick, cost }: {
-  title: string; description?: string; icon: ReactNode; isSelected: boolean;
-  onClick: () => void; cost?: number;
+  title: string; 
+  description?: string; 
+  // Ici on indique que `icon` est un ReactElement qui accepte `className`
+  icon: React.ReactElement<{ className?: string }>; 
+  isSelected: boolean;
+  onClick: () => void; 
+  cost?: number;
 }) => (
   <div className={`border rounded-lg p-2 cursor-pointer transition-all hover:shadow-md flex flex-col items-center text-center text-xs relative ${isSelected ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:border-gray-300'}`} onClick={onClick}>
     <div className={`p-1.5 rounded-full mb-1 ${isSelected ? 'bg-orange-100' : 'bg-gray-100'}`}>
-      {React.cloneElement(icon as React.ReactElement, { className: `w-4 h-4 ${isSelected ? 'text-orange-600' : 'text-gray-500'}` })}
+      {React.cloneElement(icon, { className: `w-4 h-4 ${isSelected ? 'text-orange-600' : 'text-gray-500'}` })}
     </div>
     <span className={`font-medium ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>{title}</span>
     {description && <span className={`text-xs ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>{description}</span>}
