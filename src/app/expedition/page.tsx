@@ -238,16 +238,6 @@ const [formData, setFormData] = useState<ExpeditionFormData>({
         console.error("Erreur de parsing localStorage:", e);
         localStorage.removeItem(EXPEDITION_FORM_STORAGE_KEY); // Nettoyer les données corrompues
       }
-
-      // 2. Proposer de restaurer si des données existent
-      if (shouldAskToRestore) {
-        if (window.confirm("Des données non terminées ont été trouvées. Voulez-vous continuer où vous vous étiez arrêté ?")) {
-          setFormData(restoredData);
-        } else {
-          // L'utilisateur choisit de commencer à zéro, on nettoie
-          localStorage.removeItem(EXPEDITION_FORM_STORAGE_KEY);
-        }
-      }
       
       // 3. Charger les infos de l'utilisateur (logique existante)
       const { data: { session } } = await supabase.auth.getSession();
