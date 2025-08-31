@@ -1,16 +1,17 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Phone, Mail, MapPin, Home, ArrowRight, ArrowLeft, Users, Calendar, Package, Sparkles, Circle, Target } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Home, ArrowRight, ArrowLeft, Target, Sparkles, Circle, Globe, Building, Navigation } from 'lucide-react';
 
 interface RecipientData {
   recipientName: string;
   recipientPhone: string;
   recipientEmail: string;
+  recipientCountry: string;
+  recipientRegion: string;
+  recipientCity: string;
   recipientAddress: string;
   recipientLieuDit: string;
-  recipientGenre: 'homme' | 'femme' | '';
-  recipientAge: string;
 }
 
 interface RecipientInfoStepProps {
@@ -19,12 +20,98 @@ interface RecipientInfoStepProps {
   onBack: () => void;
 }
 
+// Données des pays et régions (identiques à SenderInfoStep)
+const countries = {
+  cameroun: {
+    name: 'Cameroun',
+    regions: {
+      'centre': {
+        name: 'Centre',
+        cities: ['Yaoundé', 'Mbalmayo', 'Akonolinga', 'Bafia', 'Ntui', 'Mfou', 'Obala', 'Okola', 'Soa']
+      },
+      'littoral': {
+        name: 'Littoral', 
+        cities: ['Douala', 'Edéa', 'Nkongsamba', 'Yabassi', 'Loum', 'Manjo', 'Mbanga', 'Mouanko']
+      },
+      'ouest': {
+        name: 'Ouest',
+        cities: ['Bafoussam', 'Dschang', 'Bandjoun', 'Mbouda', 'Bangangté', 'Foumban', 'Kékem']
+      },
+      'nord-ouest': {
+        name: 'Nord-Ouest',
+        cities: ['Bamenda', 'Kumbo', 'Wum', 'Ndop', 'Mbengwi', 'Bali', 'Bafut']
+      },
+      'sud-ouest': {
+        name: 'Sud-Ouest', 
+        cities: ['Buéa', 'Limbe', 'Kumba', 'Mamfe', 'Tiko', 'Idenau', 'Fontem']
+      },
+      'adamaoua': {
+        name: 'Adamaoua',
+        cities: ['Ngaoundéré', 'Meiganga', 'Tibati', 'Tignère', 'Banyo', 'Kontcha']
+      },
+      'nord': {
+        name: 'Nord',
+        cities: ['Garoua', 'Maroua', 'Guider', 'Figuil', 'Poli', 'Rey-Bouba', 'Tcholliré']
+      },
+      'extreme-nord': {
+        name: 'Extrême-Nord',
+        cities: ['Maroua', 'Mokolo', 'Kousséri', 'Yagoua', 'Mora', 'Waza', 'Kaélé']
+      },
+      'est': {
+        name: 'Est',
+        cities: ['Bertoua', 'Batouri', 'Abong-Mbang', 'Yokadouma', 'Kenzou', 'Garoua-Boulaï']
+      },
+      'sud': {
+        name: 'Sud',
+        cities: ['Ebolowa', 'Sangmélima', 'Kribi', 'Ambam', 'Lolodorf', 'Campo', 'Mvangane']
+      }
+    }
+  },
+  nigeria: {
+    name: 'Nigeria',
+    regions: {
+      'lagos': {
+        name: 'Lagos',
+        cities: ['Lagos', 'Ikeja', 'Epe', 'Ikorodu', 'Badagry', 'Mushin', 'Alimosho']
+      },
+      'abuja': {
+        name: 'Abuja FCT',
+        cities: ['Abuja', 'Gwagwalada', 'Kuje', 'Abaji', 'Bwari', 'Kwali']
+      },
+      'kano': {
+        name: 'Kano',
+        cities: ['Kano', 'Wudil', 'Gwarzo', 'Rano', 'Karaye', 'Rimin Gado']
+      },
+      'rivers': {
+        name: 'Rivers',
+        cities: ['Port Harcourt', 'Obio-Akpor', 'Eleme', 'Ikwerre', 'Oyigbo', 'Okrika']
+      },
+      'oyo': {
+        name: 'Oyo',
+        cities: ['Ibadan', 'Ogbomoso', 'Oyo', 'Iseyin', 'Saki', 'Igboho', 'Eruwa']
+      },
+      'kaduna': {
+        name: 'Kaduna', 
+        cities: ['Kaduna', 'Zaria', 'Kafanchan', 'Kagoro', 'Zonkwa', 'Makarfi']
+      },
+      'ogun': {
+        name: 'Ogun',
+        cities: ['Abeokuta', 'Sagamu', 'Ijebu-Ode', 'Ota', 'Ilaro', 'Ayetoro']
+      },
+      'anambra': {
+        name: 'Anambra',
+        cities: ['Awka', 'Onitsha', 'Nnewi', 'Ekwulobia', 'Agulu', 'Ihiala']
+      }
+    }
+  }
+};
+
 const FloatingIcon = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 0.4, y: 0 }}
     transition={{ duration: 0.6, delay, repeat: Infinity, repeatType: "reverse", repeatDelay: 2 }}
-    className="absolute text-orange-200"
+    className="absolute text-orange-200 dark:text-orange-300/40"
   >
     {children}
   </motion.div>
@@ -37,7 +124,7 @@ const InputField = ({ icon: Icon, id, error, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -46,14 +133,14 @@ const InputField = ({ icon: Icon, id, error, ...props }: any) => (
         whileHover={{ scale: 1.1 }}
         transition={{ duration: 0.2 }}
       >
-        <Icon className="w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
+        <Icon className="w-4 h-4 text-gray-400 dark:text-gray-500 group-focus-within:text-orange-500 dark:group-focus-within:text-orange-400 transition-colors" />
       </motion.div>
       <input
         id={id}
         {...props}
-        className={`w-full pl-10 pr-3 py-2.5 text-sm border-2 rounded-lg transition-all duration-200 bg-white/80 backdrop-blur-sm
-          ${error ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-orange-500'}
-          focus:ring-2 focus:ring-orange-500/20 focus:bg-white shadow-sm hover:shadow-md`}
+        className={`w-full pl-10 pr-3 py-2.5 text-sm border-2 rounded-lg transition-all duration-200 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-gray-900 dark:text-gray-100
+          ${error ? 'border-red-300 dark:border-red-400 focus:border-red-500 dark:focus:border-red-400' : 'border-gray-200 dark:border-gray-600 focus:border-orange-500 dark:focus:border-orange-400'}
+          focus:ring-2 focus:ring-orange-500/20 dark:focus:ring-orange-400/20 focus:bg-white dark:focus:bg-gray-800 shadow-sm hover:shadow-md dark:shadow-gray-900/20 dark:hover:shadow-gray-900/40`}
       />
       <AnimatePresence>
         {error && (
@@ -63,7 +150,7 @@ const InputField = ({ icon: Icon, id, error, ...props }: any) => (
             exit={{ opacity: 0, scale: 0.8 }}
             className="absolute right-3 top-1/2 -translate-y-1/2"
           >
-            <Circle className="w-2 h-2 fill-red-500 text-red-500" />
+            <Circle className="w-2 h-2 fill-red-500 dark:fill-red-400 text-red-500 dark:text-red-400" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -78,7 +165,7 @@ const SelectField = ({ icon: Icon, id, error, children, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -87,19 +174,19 @@ const SelectField = ({ icon: Icon, id, error, children, ...props }: any) => (
         whileHover={{ scale: 1.1 }}
         transition={{ duration: 0.2 }}
       >
-        <Icon className="w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
+        <Icon className="w-4 h-4 text-gray-400 dark:text-gray-500 group-focus-within:text-orange-500 dark:group-focus-within:text-orange-400 transition-colors" />
       </motion.div>
       <select
         id={id}
         {...props}
-        className={`w-full pl-10 pr-8 py-2.5 text-sm border-2 rounded-lg appearance-none transition-all duration-200 bg-white/80 backdrop-blur-sm
-          ${error ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-orange-500'}
-          focus:ring-2 focus:ring-orange-500/20 focus:bg-white shadow-sm hover:shadow-md cursor-pointer`}
+        className={`w-full pl-10 pr-8 py-2.5 text-sm border-2 rounded-lg appearance-none transition-all duration-200 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-gray-900 dark:text-gray-100
+          ${error ? 'border-red-300 dark:border-red-400 focus:border-red-500 dark:focus:border-red-400' : 'border-gray-200 dark:border-gray-600 focus:border-orange-500 dark:focus:border-orange-400'}
+          focus:ring-2 focus:ring-orange-500/20 dark:focus:ring-orange-400/20 focus:bg-white dark:focus:bg-gray-800 shadow-sm hover:shadow-md dark:shadow-gray-900/20 dark:hover:shadow-gray-900/40 cursor-pointer`}
       >
         {children}
       </select>
       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
@@ -111,6 +198,22 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
   const [formData, setFormData] = useState<RecipientData>(initialData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset region and city when country changes
+  useEffect(() => {
+    if (formData.recipientCountry && 
+        (!countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions])) {
+      setFormData(prev => ({ ...prev, recipientRegion: '', recipientCity: '' }));
+    }
+  }, [formData.recipientCountry]);
+
+  // Reset city when region changes
+  useEffect(() => {
+    if (formData.recipientCountry && formData.recipientRegion && 
+        (!countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities.includes(formData.recipientCity))) {
+      setFormData(prev => ({ ...prev, recipientCity: '' }));
+    }
+  }, [formData.recipientCountry, formData.recipientRegion]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -128,6 +231,15 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
     if (!/^(6|2)(?:[235-9]\d{7})$/.test(formData.recipientPhone.replace(/\s/g, ''))) {
       newErrors.recipientPhone = "Format invalide";
     }
+    if (!formData.recipientCountry) {
+      newErrors.recipientCountry = "Pays requis";
+    }
+    if (!formData.recipientRegion) {
+      newErrors.recipientRegion = "Région requise";
+    }
+    if (!formData.recipientCity) {
+      newErrors.recipientCity = "Ville requise";
+    }
     if (!formData.recipientAddress.trim()) {
       newErrors.recipientAddress = "Adresse requise";
     }
@@ -137,8 +249,7 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
     return newErrors;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
@@ -150,13 +261,17 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
     setIsSubmitting(false);
   };
 
+  const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as keyof typeof countries]?.regions || {} : {};
+  const availableCities = formData.recipientCountry && formData.recipientRegion ? 
+    countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
+
   return (
-    <div className="min-h-screen bg-transparent relative overflow-hidden">
+    <div className="min-h-screen bg-transparent dark:bg-transparent relative overflow-hidden">
       <FloatingIcon delay={0}>
         <Target className="w-16 h-16 absolute top-20 right-20" />
       </FloatingIcon>
       <FloatingIcon delay={0.5}>
-        <Package className="w-12 h-12 absolute top-40 left-10" />
+        <Circle className="w-12 h-12 absolute top-40 left-10" />
       </FloatingIcon>
       <FloatingIcon delay={1}>
         <Circle className="w-8 h-8 absolute bottom-40 right-40" />
@@ -167,13 +282,13 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
 
       <div className="relative z-10 flex items-center justify-center min-h-screen p-6">
         <motion.div
-          className="w-full max-w-2xl"
+          className="w-full max-w-3xl"
           initial={{ opacity: 0, x: 50 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <motion.div
-            className="bg-white backdrop-blur-md rounded-2xl shadow-xl border border-white/50 p-10"
+            className="bg-white dark:bg-gray-900/95 backdrop-blur-md rounded-2xl shadow-xl dark:shadow-gray-900/50 border border-white/50 dark:border-gray-700/50 p-6"
             initial={{ y: 20 }}
             animate={{ y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
@@ -183,15 +298,15 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="inline-flex items-center justify-center w-16 h-16 bg-orange-100 rounded-full mb-3"
+                className="inline-flex items-center justify-center w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full mb-3"
               >
-                <Target className="w-8 h-8 text-orange-600" />
+                <Target className="w-8 h-8 text-orange-600 dark:text-orange-400" />
               </motion.div>
               <motion.h2
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.3 }}
-                className="text-2xl font-bold text-gray-800 mb-1"
+                className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-1"
               >
                 Informations destinataire
               </motion.h2>
@@ -199,13 +314,13 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.4 }}
-                className="text-sm text-gray-500"
+                className="text-sm text-gray-500 dark:text-gray-400"
               >
                 À qui souhaitez-vous envoyer ce colis ?
               </motion.p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <InputField
                   icon={User}
@@ -228,6 +343,67 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                   error={errors.recipientPhone}
                 />
               </div>
+
+              <InputField
+                icon={Mail}
+                type="email"
+                id="recipientEmail"
+                name="recipientEmail"
+                value={formData.recipientEmail}
+                onChange={handleChange}
+                label="Email (optionnel)"
+                placeholder="nom@exemple.com"
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SelectField
+                  icon={Globe}
+                  id="recipientCountry"
+                  name="recipientCountry"
+                  value={formData.recipientCountry}
+                  onChange={handleChange}
+                  label="Pays de destination"
+                  error={errors.recipientCountry}
+                >
+                  <option value="">Sélectionner un pays</option>
+                  {Object.entries(countries).map(([key, country]) => (
+                    <option key={key} value={key}>{country.name}</option>
+                  ))}
+                </SelectField>
+
+                <SelectField
+                  icon={Building}
+                  id="recipientRegion"
+                  name="recipientRegion"
+                  value={formData.recipientRegion}
+                  onChange={handleChange}
+                  label="Région de destination"
+                  error={errors.recipientRegion}
+                  disabled={!formData.recipientCountry}
+                >
+                  <option value="">Sélectionner une région</option>
+                  {Object.entries(availableRegions).map(([key, region]) => (
+                    <option key={key} value={key}>{region.name}</option>
+                  ))}
+                </SelectField>
+
+                <SelectField
+                  icon={Navigation}
+                  id="recipientCity"
+                  name="recipientCity"
+                  value={formData.recipientCity}
+                  onChange={handleChange}
+                  label="Ville de destination"
+                  error={errors.recipientCity}
+                  disabled={!formData.recipientRegion}
+                >
+                  <option value="">Sélectionner une ville</option>
+                  {availableCities.map((city) => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </SelectField>
+              </div>
+
               <InputField
                 icon={MapPin}
                 id="recipientAddress"
@@ -248,41 +424,6 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                 placeholder="Face Boulangerie Mvan, portail rouge"
                 error={errors.recipientLieuDit}
               />
-              <InputField
-                icon={Mail}
-                type="email"
-                id="recipientEmail"
-                name="recipientEmail"
-                value={formData.recipientEmail}
-                onChange={handleChange}
-                label="Email (optionnel)"
-                placeholder="nom@exemple.com"
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <SelectField
-                  icon={Users}
-                  id="recipientGenre"
-                  name="recipientGenre"
-                  value={formData.recipientGenre}
-                  onChange={handleChange}
-                  label="Genre (optionnel)"
-                >
-                  <option value="">Non spécifié</option>
-                  <option value="homme">Homme</option>
-                  <option value="femme">Femme</option>
-                </SelectField>
-                <InputField
-                  icon={Calendar}
-                  id="recipientAge"
-                  name="recipientAge"
-                  type="number"
-                  value={formData.recipientAge}
-                  onChange={handleChange}
-                  label="Âge (optionnel)"
-                  placeholder="28"
-                />
-              </div>
 
               <AnimatePresence>
                 {Object.values(errors).some(error => error) && (
@@ -290,9 +431,9 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="bg-red-50 border border-red-200 rounded-lg p-3"
+                    className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3"
                   >
-                    <div className="text-xs text-red-600 font-medium">
+                    <div className="text-xs text-red-600 dark:text-red-400 font-medium">
                       Veuillez corriger les erreurs ci-dessus
                     </div>
                   </motion.div>
@@ -305,7 +446,7 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                   onClick={onBack}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="inline-flex items-center px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-200 transition-all duration-200 shadow-sm hover:shadow-md"
+                  className="inline-flex items-center px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-semibold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-gray-900/20 dark:hover:shadow-gray-900/40"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Retour
@@ -313,12 +454,13 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                 <motion.button
                   type="submit"
                   disabled={isSubmitting}
+                  onClick={handleSubmit}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className={`inline-flex items-center justify-center px-6 py-2.5 rounded-lg font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl
+                  className={`inline-flex items-center justify-center px-6 py-2.5 rounded-lg font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl dark:shadow-gray-900/30 dark:hover:shadow-gray-900/50
                     ${isSubmitting 
-                      ? 'bg-gray-400 cursor-not-allowed' 
-                      : 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800'} 
+                      ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed' 
+                      : 'bg-orange-600 dark:bg-orange-600 hover:bg-orange-700 dark:hover:bg-orange-500 active:bg-orange-800 dark:active:bg-orange-700'} 
                     text-white transform hover:-translate-y-0.5`}
                 >
                   <AnimatePresence mode="wait">
@@ -346,7 +488,7 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                   </AnimatePresence>
                 </motion.button>
               </div>
-            </form>
+            </div>
           </motion.div>
         </motion.div>
       </div>

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone, MapPin, Calendar, Users, Truck, Camera, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
 
 const Stepper = ({ currentStep, steps }: { currentStep: number, steps: any[] }) => {
   return (
@@ -157,22 +158,46 @@ export default function RegisterProPage() {
       console.log('📧 Email:', formData.email.trim().toLowerCase());
       console.log('🏢 Type compte:', accountType);
 
-      // Simulation de l'inscription
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        options: {
+          data: {
+            // Correspond à `new.raw_user_meta_data->>'account_type'` dans votre SQL
+            account_type: accountType,
+            
+            // Correspond à `new.raw_user_meta_data->>'manager_name'` dans votre SQL
+            manager_name: formData.manager_name,
+            
+            // Correspond à `new.raw_user_meta_data->>'phone_number'` dans votre SQL
+            phone_number: formData.phone_number
+          },
+          // Redirige l'utilisateur vers la page de connexion après qu'il ait cliqué sur le lien de confirmation
+          emailRedirectTo: `${window.location.origin}/login`
+        }
+      });
+      // --- FIN DE LA CORRECTION ---
 
-      setSuccess("Inscription réussie ! Vérifiez votre boîte mail pour confirmer votre compte.");
+      if (signUpError) {
+        if (signUpError.message.includes('User already registered')) {
+            throw new Error('Un utilisateur avec cet email existe déjà.');
+        }
+        throw signUpError;
+      }
+
+      if (!data.user) {
+        throw new Error("L'inscription a réussi mais aucune donnée utilisateur n'a été retournée.");
+      }
       
-      setTimeout(() => {
-        router.push('/login');
-      }, 3000);
+      setSuccess("Inscription réussie ! Veuillez vérifier votre boîte mail pour confirmer votre compte et pouvoir vous connecter.");
 
     } catch (err: any) {
-      console.error('💥 Erreur inscription:', err);
-      setError(err.message || 'Une erreur inattendue est survenue lors de l\'inscription.');
+      console.error('💥 Erreur d\'inscription:', err);
+      setError(err.message || 'Une erreur inattendue est survenue.');
     } finally {
       setIsLoading(false);
     }
-  };
+};
 
   const renderStep = () => {
     switch(currentStep) {

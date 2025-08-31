@@ -451,29 +451,28 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
     if (routeData.arrivalPointId === point.id) return 'destination';
     return 'available';
   };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="h-screen flex flex-col bg-gray-50"
+      className="h-screen flex flex-col bg-gray-50 dark:bg-transparent"
     >
       {/* Header */}
-      <div className="bg-white shadow-sm border-b px-4 py-4 flex-shrink-0">
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-4 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
+              <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
             
             <div>
-              <h2 className="text-xl font-bold text-gray-800">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
                 {selectionMode === 'origin' ? "Point de départ" : "Point d'arrivée"}
               </h2>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {selectionMode === 'origin' 
                   ? "Cliquez sur la carte ou sélectionnez dans la liste" 
                   : "Choisissez le point d'arrivée"
@@ -485,9 +484,9 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
           {/* Mobile menu button */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="lg:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
-            <Menu className="w-5 h-5 text-gray-600" />
+            <Menu className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
         </div>
       </div>
@@ -504,7 +503,7 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsSidebarOpen(false)}
-                  className="lg:hidden fixed inset-0 bg-black/20 z-10"
+                  className="lg:hidden fixed inset-0 bg-black/20 dark:bg-black/40 z-10"
                 />
               )}
 
@@ -512,29 +511,29 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                 initial={{ x: -320 }}
                 animate={{ x: 0 }}
                 exit={{ x: -320 }}
-                className="fixed lg:relative z-20 w-80 bg-white shadow-lg lg:shadow-none h-full flex flex-col"
+                className="fixed lg:relative z-20 w-80 bg-white dark:bg-gray-800 shadow-lg lg:shadow-none h-full flex flex-col"
               >
                 {/* Sidebar header */}
-                <div className="p-4 border-b bg-gray-50">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-gray-800">Points relais</h3>
+                    <h3 className="font-semibold text-gray-800 dark:text-gray-100">Points relais</h3>
                     <button
                       onClick={() => setIsSidebarOpen(false)}
-                      className="lg:hidden p-1 hover:bg-gray-200 rounded"
+                      className="lg:hidden p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                     </button>
                   </div>
 
                   {/* Search bar */}
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                     <input
                       type="text"
                       placeholder="Rechercher un point relais..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -552,10 +551,10 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                           onClick={() => handlePointSelect(point)}
                           className={`p-3 rounded-lg cursor-pointer border transition-all ${
                             status === 'origin' 
-                              ? 'border-orange-500 bg-orange-50 shadow-md' :
+                              ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 shadow-md' :
                             status === 'destination' 
-                              ? 'border-green-500 bg-green-50 shadow-md' : 
-                              'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-md' : 
+                              'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/30'
                           }`}
                         >
                           <div className="flex items-start gap-3">
@@ -565,18 +564,18 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                               ) : status === 'destination' ? (
                                 <div className="w-3 h-3 bg-green-500 rounded-full" />
                               ) : (
-                                <MapPin className="w-4 h-4 text-gray-400" />
+                                <MapPin className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm text-gray-800 truncate">
+                              <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 truncate">
                                 {point.name}
                               </p>
-                              <p className="text-xs text-gray-500 truncate">
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                 {point.quartier}
                               </p>
                               {status !== 'available' && (
-                                <p className="text-xs font-medium mt-1 text-orange-600">
+                                <p className="text-xs font-medium mt-1 text-orange-600 dark:text-orange-400">
                                   {status === 'origin' ? 'Point de départ' : 'Point d\'arrivée'}
                                 </p>
                               )}
@@ -589,24 +588,24 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                 </div>
 
                 {/* Progress indicator */}
-                <div className="p-4 border-t bg-gray-50">
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded-full ${
-                        routeData.departurePointId ? 'bg-orange-500' : 'bg-gray-300'
+                        routeData.departurePointId ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'
                       }`} />
-                      <span className={routeData.departurePointId ? 'text-gray-800' : 'text-gray-400'}>
+                      <span className={routeData.departurePointId ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
                         Départ
                       </span>
                     </div>
                     
-                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                    <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                     
                     <div className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded-full ${
-                        routeData.arrivalPointId ? 'bg-green-500' : 'bg-gray-300'
+                        routeData.arrivalPointId ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
                       }`} />
-                      <span className={routeData.arrivalPointId ? 'text-gray-800' : 'text-gray-400'}>
+                      <span className={routeData.arrivalPointId ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
                         Arrivée
                       </span>
                     </div>
@@ -634,12 +633,12 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                 exit={{ y: 100, opacity: 0 }}
                 className="absolute bottom-4 left-4 right-4 lg:left-auto lg:w-80"
               >
-                <div className="bg-white rounded-xl shadow-lg border p-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-gray-800">Récapitulatif</h4>
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-100">Récapitulatif</h4>
                     <button
                       onClick={handleReset}
-                      className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400"
                     >
                       <Undo2 className="w-4 h-4" />
                     </button>
@@ -649,8 +648,8 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 bg-orange-500 rounded-full flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-500">Départ</p>
-                        <p className="font-medium text-sm truncate">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Départ</p>
+                        <p className="font-medium text-sm truncate text-gray-800 dark:text-gray-100">
                           {routeData.departurePointName || 'À sélectionner'}
                         </p>
                       </div>
@@ -659,20 +658,20 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-500">Arrivée</p>
-                        <p className="font-medium text-sm truncate">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Arrivée</p>
+                        <p className="font-medium text-sm truncate text-gray-800 dark:text-gray-100">
                           {routeData.arrivalPointName || 'À sélectionner'}
                         </p>
                       </div>
                     </div>
 
                     {travelPrice > 0 && (
-                      <div className="pt-3 border-t">
+                      <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
                             Distance: {routeData.distanceKm.toFixed(1)} km
                           </span>
-                          <span className="font-bold text-orange-600">
+                          <span className="font-bold text-orange-600 dark:text-orange-400">
                             {travelPrice.toLocaleString()} FCFA
                           </span>
                         </div>
@@ -687,9 +686,9 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
       </div>
 
       {/* Bottom action bar */}
-      <div className="bg-white border-t px-4 py-4 flex-shrink-0">
+      <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-4 flex-shrink-0">
         <div className="flex justify-between items-center">
-          <div className="hidden sm:flex items-center gap-4 text-sm text-gray-500">
+          <div className="hidden sm:flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
               <span>Point de départ</span>
@@ -705,7 +704,7 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
             disabled={!routeData.arrivalPointId}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="inline-flex items-center justify-center bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="inline-flex items-center justify-center bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
             Continuer
             <ArrowRight className="w-4 h-4 ml-2" />
