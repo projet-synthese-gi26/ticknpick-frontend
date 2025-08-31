@@ -348,7 +348,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
       setPaymentSuccess(true);
       onPaymentFinalized(finalPricing);
       
-    } catch (error) {
+    }  catch (error: any) { // <-- MODIFICATION APPLIQUÉE ICI
       console.error("Erreur complète lors de la finalisation :", error);
       
       let userMessage = error.message;
