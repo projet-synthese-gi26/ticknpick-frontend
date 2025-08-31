@@ -920,8 +920,8 @@ if (paymentSuccess) {
   );
 };
 
-// Composant PaymentOption modernisé avec support du mode sombre
-const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setSelected, badge }) => (
+
+const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setSelected, badge }: PaymentOptionProps) => (
   <motion.div
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
@@ -979,7 +979,7 @@ const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setS
 );
 
 // Composant SummaryLine modernisé avec support du mode sombre
-const SummaryLine = ({ label, value }) => (
+const SummaryLine = ({ label, value } : { label: string; value: number;}) => (
   <div className="flex justify-between items-center py-2">
     <span className="text-gray-600 dark:text-gray-300 font-medium">{label}</span>
     <span className="font-bold text-gray-900 dark:text-gray-100">{value.toLocaleString()} FCFA</span>
