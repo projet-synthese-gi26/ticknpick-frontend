@@ -13,7 +13,8 @@ import {
   DocumentTextIcon,
   ClockIcon,
   ShieldCheckIcon,
-  PrinterIcon
+  PrinterIcon,
+  EllipsisHorizontalIcon
 } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; 
