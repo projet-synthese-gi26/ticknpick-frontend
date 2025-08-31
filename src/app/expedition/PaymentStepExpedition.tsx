@@ -56,6 +56,18 @@ interface PaymentStepProps {
   currentUser: LoggedInUser | null;
 }
 
+// --- CORRECTION : Définition de l'interface pour le sous-composant ---
+interface PaymentOptionProps {
+  id: 'cash' | 'mobile' | 'recipient';
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  fee: number;
+  selected: 'cash' | 'mobile' | 'recipient';
+  setSelected: (id: 'cash' | 'mobile' | 'recipient') => void;
+  badge?: string; // La prop badge est optionnelle
+}
+
 
 
 const PAYMENT_OPERATOR_FEE = 100;
