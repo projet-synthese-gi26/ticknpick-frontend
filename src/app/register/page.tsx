@@ -150,6 +150,12 @@ export default function RegisterProPage() {
     if (!accountType) {
       return setError("Veuillez sélectionner un type de compte.");
     }
+    if (!formData.manager_name.trim()) {
+      return setError("Le nom du gérant est obligatoire.");
+    }
+    if (!formData.phone_number.trim()) {
+      return setError("Le numéro de téléphone est obligatoire.");
+    }
 
     setIsLoading(true);
 
@@ -158,46 +164,82 @@ export default function RegisterProPage() {
       console.log('📧 Email:', formData.email.trim().toLowerCase());
       console.log('🏢 Type compte:', accountType);
 
+      // Vérifiez d'abord la session actuelle
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('📱 Session actuelle:', sessionData.session?.user?.email || 'Aucune session');
+
+      // Si une session existe déjà, la fermer
+      if (sessionData.session) {
+        await supabase.auth.signOut();
+        console.log('🚪 Session précédente fermée');
+      }
+
+      // Préparer les métadonnées pour le trigger
+      const userMetadata = {
+        account_type: accountType,
+        manager_name: formData.manager_name.trim(),
+        phone_number: formData.phone_number.trim(),
+        birth_date: formData.birth_date || null,
+        nationality: formData.nationality?.trim() || null,
+        home_address: formData.home_address?.trim() || null,
+        id_card_number: formData.id_card_number?.trim() || null,
+        relay_point_name: formData.relay_point_name?.trim() || null,
+        relay_point_address: formData.relay_point_address?.trim() || null,
+        opening_hours: formData.opening_hours?.trim() || null,
+        storage_capacity: formData.storage_capacity || 'Petit'
+      };
+
+      console.log('📦 Métadonnées pour le trigger:', userMetadata);
+
+      // Inscription avec métadonnées - le trigger s'occupera automatiquement de créer le profil
+      console.log('🚀 Inscription avec trigger automatique...');
+      
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         options: {
-          data: {
-            // Correspond à `new.raw_user_meta_data->>'account_type'` dans votre SQL
-            account_type: accountType,
-            
-            // Correspond à `new.raw_user_meta_data->>'manager_name'` dans votre SQL
-            manager_name: formData.manager_name,
-            
-            // Correspond à `new.raw_user_meta_data->>'phone_number'` dans votre SQL
-            phone_number: formData.phone_number
-          },
-          // Redirige l'utilisateur vers la page de connexion après qu'il ait cliqué sur le lien de confirmation
-          emailRedirectTo: `${window.location.origin}/login`
+          data: userMetadata
         }
       });
-      // --- FIN DE LA CORRECTION ---
+
+      console.log('✅ Réponse inscription:', { data, error: signUpError });
 
       if (signUpError) {
-        if (signUpError.message.includes('User already registered')) {
-            throw new Error('Un utilisateur avec cet email existe déjà.');
+        console.error('❌ Erreur signUp:', signUpError);
+        
+        if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
+          throw new Error("Cette adresse email est déjà utilisée.");
         }
-        throw signUpError;
+        if (signUpError.message.includes('Invalid email')) {
+          throw new Error("Format d'email invalide.");
+        }
+        if (signUpError.message.includes('Password should be at least 6 characters')) {
+          throw new Error("Le mot de passe doit faire au moins 6 caractères.");
+        }
+        
+        throw new Error(signUpError.message);
       }
 
       if (!data.user) {
-        throw new Error("L'inscription a réussi mais aucune donnée utilisateur n'a été retournée.");
+        throw new Error("Aucun utilisateur créé.");
       }
+
+      console.log('🎉 Utilisateur créé:', data.user.email, 'ID:', data.user.id);
+      console.log('🔧 Le trigger Supabase va créer le profil automatiquement avec les métadonnées');
+
+      setSuccess("Inscription réussie ! Vérifiez votre boîte mail pour confirmer votre compte.");
       
-      setSuccess("Inscription réussie ! Veuillez vérifier votre boîte mail pour confirmer votre compte et pouvoir vous connecter.");
+      setTimeout(() => {
+        router.push('/');
+      }, 3000);
 
     } catch (err: any) {
-      console.error('💥 Erreur d\'inscription:', err);
-      setError(err.message || 'Une erreur inattendue est survenue.');
+      console.error('💥 Erreur inscription:', err);
+      setError(err.message || 'Une erreur inattendue est survenue lors de l\'inscription.');
     } finally {
       setIsLoading(false);
     }
-};
+  };
 
   const renderStep = () => {
     switch(currentStep) {

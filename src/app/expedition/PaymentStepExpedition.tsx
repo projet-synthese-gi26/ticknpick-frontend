@@ -247,137 +247,125 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
     // Simuler une validation réussie
     return true;
   };
-  const handleSubmit = async () => {
-    if (!canConfirmPayment()) {
-      alert('Veuillez vérifier vos informations de paiement');
-      return;
+const handleSubmit = async () => {
+  if (!canConfirmPayment()) {
+    alert('Veuillez vérifier vos informations de paiement');
+    return;
+  }
+
+  setIsProcessing(true);
+  const newTrackingNumber = `PDL${Date.now().toString().slice(-7)}`;
+  setTrackingNumber(newTrackingNumber);
+  setProcessingStep('Vérification des données...');
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Simuler le paiement mobile si nécessaire
+    if (selectedMethod === 'mobile') {
+      const paymentSuccess = await simulateMobilePayment();
+      if (!paymentSuccess) {
+        throw new Error('Échec du paiement mobile');
+      }
     }
 
-    const userToUse = currentUser || DEFAULT_COUNTER_USER;
+    setProcessingStep('Enregistrement du colis...');
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    setIsProcessing(true);
-    const newTrackingNumber = `PDL${Date.now().toString().slice(-7)}`;
-    setTrackingNumber(newTrackingNumber);
-    setProcessingStep('Vérification des données...');
+    // Déterminer l'utilisateur à utiliser pour créer l'expédition
+    // Si currentUser existe, on l'utilise, sinon on utilise le compte comptoir par défaut
+    const userIdForDb = currentUser ? currentUser.id : DEFAULT_COUNTER_USER.id;
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('Utilisateur utilisé pour l\'enregistrement:', userIdForDb);
 
-      // Simuler le paiement mobile si nécessaire
-      if (selectedMethod === 'mobile') {
-        const paymentSuccess = await simulateMobilePayment();
-        if (!paymentSuccess) {
-          throw new Error('Échec du paiement mobile');
-        }
-      }
+    // Préparer les données pour la table 'shipments'
+    const shipmentData = {
+      tracking_number: newTrackingNumber,
+      status: 'EN_ATTENTE_DE_DEPOT', // Statut initial pour un envoi client
+      sender_name: allData.senderName,
+      sender_phone: allData.senderPhone,
+      recipient_name: allData.recipientName,
+      recipient_phone: allData.recipientPhone,
+      departure_point_id: allData.departurePointId,
+      arrival_point_id: allData.arrivalPointId,
+      description: allData.designation,
+      weight: parseFloat(allData.weight),
+      is_fragile: allData.isFragile,
+      is_perishable: allData.isPerishable,
+      is_insured: allData.isInsured,
+      declared_value: allData.isInsured ? parseFloat(allData.declaredValue) : null,
+      shipping_cost: totalPrice,
+      is_paid_at_departure: selectedMethod !== 'recipient',
+      amount_paid: selectedMethod !== 'recipient' ? totalPrice : 0,
+      created_by_user: userIdForDb, // Utilise soit l'utilisateur connecté soit le comptoir
+    };
 
-      setProcessingStep('Enregistrement du colis...');
-      await new Promise(resolve => setTimeout(resolve, 500));
+    console.log("Données à insérer pour le colis :", shipmentData);
 
-      // ===================================================================
-      // == DÉBUT DE LA LOGIQUE D'ENREGISTREMENT DANS LA BASE DE DONNÉES ==
-      // ===================================================================
+    // Insérer les données dans Supabase
+    const { data, error } = await supabase
+      .from('shipments')
+      .insert(shipmentData)
+      .select()
+      .single();
 
-      // 1. Vérifier que l'utilisateur est bien authentifié
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (error) {
+      console.error("Erreur détaillée Supabase:", error);
       
-      if (authError || !user) {
-        console.error("Erreur d'authentification:", authError);
-        throw new Error("Utilisateur non authentifié. Veuillez vous connecter.");
-      }
-
-      // 2. Préparer l'objet de données pour la table 'shipments'
-      const shipmentData = {
-        tracking_number: newTrackingNumber,
-        status: 'AU_DEPART', // Ou 'EN_ATTENTE_DE_DEPOT'
-        sender_name: allData.senderName,
-        sender_phone: allData.senderPhone,
-        recipient_name: allData.recipientName,
-        recipient_phone: allData.recipientPhone,
-        departure_point_id: allData.departurePointId,
-        arrival_point_id: allData.arrivalPointId,
-        description: allData.designation,
-        weight: parseFloat(allData.weight),
-        is_fragile: allData.isFragile,
-        is_perishable: allData.isPerishable,
-        is_insured: allData.isInsured,
-        declared_value: allData.isInsured ? parseFloat(allData.declaredValue) : null,
-        shipping_cost: totalPrice,
-        is_paid_at_departure: selectedMethod !== 'recipient',
-        amount_paid: selectedMethod !== 'recipient' ? totalPrice : 0,
-        created_by_user: user.id, // Utiliser l'ID de l'utilisateur authentifié
-      };
-
-      console.log("Données à insérer:", shipmentData);
-      console.log("Utilisateur authentifié:", user.id);
-
-      // 3. Insérer les données dans la table 'shipments' de Supabase
-      const { data, error } = await supabase
-        .from('shipments')
-        .insert(shipmentData)
-        .select();
-
-      // 4. Gérer une éventuelle erreur de la base de données
-      if (error) {
-        console.error("Erreur détaillée Supabase:", error);
-        console.error("Code d'erreur:", error.code);
-        console.error("Message:", error.message);
-        console.error("Détails:", error.details);
-        console.error("Hint:", error.hint);
-        
-        // Messages d'erreur plus explicites selon le type d'erreur
-        let errorMessage = error.message;
-        if (error.code === '42501' || error.message.includes('row-level security')) {
-          errorMessage = "Permissions insuffisantes. Veuillez vous assurer d'être connecté avec un compte autorisé.";
-        } else if (error.code === '23503') {
-          errorMessage = "Erreur de référence : vérifiez que les points de départ et d'arrivée existent.";
-        } else if (error.code === '23505') {
-          errorMessage = "Ce numéro de suivi existe déjà. Veuillez réessayer.";
-        }
-        
-        throw new Error(`Erreur de base de données : ${errorMessage}`);
+      // Messages d'erreur plus spécifiques selon le type d'erreur
+      let errorMessage = 'Erreur lors de l\'enregistrement du colis';
+      
+      if (error.code === 'PGRST301') {
+        errorMessage = 'Erreur de permissions. Contactez l\'administrateur.';
+      } else if (error.code === '23505') {
+        errorMessage = 'Ce numéro de suivi existe déjà. Veuillez réessayer.';
+      } else if (error.code === '23503') {
+        errorMessage = 'Erreur de référence des points de relais. Vérifiez les points sélectionnés.';
+      } else {
+        errorMessage = `Erreur de base de données : ${error.message}`;
       }
       
-      if (!data || data.length === 0) {
-        throw new Error("Aucune donnée retournée après l'insertion");
-      }
-      
-      console.log('Colis enregistré avec succès:', data[0]);
-      
-      // ===============================================================
-      // == FIN DE LA LOGIQUE D'ENREGISTREMENT DANS LA BASE DE DONNÉES ==
-      // ===============================================================
-
-      setProcessingStep('Génération du bordereau...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const finalPricing = { 
-        basePrice: allData.basePrice, 
-        travelPrice: allData.travelPrice, 
-        operatorFee, 
-        totalPrice 
-      };
-
-      setPaymentSuccess(true);
-      onPaymentFinalized(finalPricing);
-      
-    }  catch (error: any) { // <-- MODIFICATION APPLIQUÉE ICI
-      console.error("Erreur complète lors de la finalisation :", error);
-      
-      let userMessage = error.message;
-      if (error.message.includes('row-level security')) {
-        userMessage = "Erreur de permissions. Assurez-vous d'être connecté avec un compte autorisé à créer des expéditions.";
-      }
-      
-      alert(`Échec de l'enregistrement du colis : ${userMessage}`);
-      
-      // Réinitialiser en cas d'erreur
-      setIsProcessing(false);
-      setProcessingStep('');
-      setPaymentSuccess(false);
-      setTrackingNumber('');
+      throw new Error(errorMessage);
     }
-  };
+    
+    console.log('Colis enregistré avec succès:', data);
+    
+    setProcessingStep('Génération du bordereau...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const finalPricing = { 
+      basePrice: allData.basePrice, 
+      travelPrice: allData.travelPrice, 
+      operatorFee, 
+      totalPrice 
+    };
+
+    setPaymentSuccess(true);
+    onPaymentFinalized(finalPricing);
+    
+  } catch (error: any) {
+    console.error("Erreur complète lors de la finalisation :", error);
+    
+    let userMessage = error.message;
+    
+    // Gestion spécifique des erreurs courantes
+    if (error.message.includes('row-level security')) {
+      userMessage = "Erreur de permissions. L'utilisateur comptoir n'est pas autorisé à créer des expéditions.";
+    } else if (error.message.includes('Network request failed')) {
+      userMessage = "Problème de connexion réseau. Vérifiez votre connexion internet.";
+    } else if (error.message.includes('JWT')) {
+      userMessage = "Erreur d'authentification. Veuillez rafraîchir la page et réessayer.";
+    }
+    
+    alert(`Échec de l'enregistrement du colis : ${userMessage}`);
+    
+    // Réinitialiser en cas d'erreur
+    setIsProcessing(false);
+    setProcessingStep('');
+    setPaymentSuccess(false);
+    setTrackingNumber('');
+  }
+};
 
 
   // Animation des variantes
