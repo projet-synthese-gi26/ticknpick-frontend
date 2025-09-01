@@ -21,11 +21,10 @@ import ServiceCardPage from './ServiceCard'; // Existant, sera adapté
 import SettingsPage from './Settings'; // NOUVEAU composant
 
 // --- Type du profil utilisateur PRO ---
-// --- Type du profil utilisateur PRO ---
 export interface ProProfile {
     id: string; // uuid de Supabase auth.users
     created_at: string;
-    account_type: 'FREELANCE' | 'AGENCY';
+    account_type: 'FREELANCE' | 'AGENCY' | 'freelance' | 'agence' | 'client' | 'livreur';
 
     // Étape 1: Identification Gérant
     manager_name: string | null;
@@ -57,6 +56,9 @@ export interface ProProfile {
     // Étape 5: Infos Financières et autres (JSONB)
     payment_info: any | null; // jsonb peut être n'importe quel objet
     
+    // Champs basiques qui peuvent être présents dans 'profiles'
+    email?: string | null;
+    
     // Pour permettre un accès dynamique si besoin
     [key: string]: any;
 }
@@ -71,7 +73,6 @@ const baseNavItems = [
 ];
 
 const agencyNavItem = { id: 'staff', label: 'Personnel', icon: Users };
-
 
 // --- Composants UI (Sidebar, Header) ---
 const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen }: any) => {
@@ -167,7 +168,16 @@ const Header = ({ user, setIsSidebarOpen }: any) => (
                     Bonjour, {user?.manager_name || 'PRO'} ! 👋
                 </h2>
                 <p className="text-gray-500 text-sm md:text-base mt-1 hidden sm:block">
-                    {user?.account_type === 'FREELANCE' ? 'Tableau de bord Freelance' : 'Tableau de bord Agence'}
+                    {user?.account_type?.toLowerCase() === 'freelance' || user?.account_type === 'FREELANCE' 
+                        ? 'Tableau de bord Freelance' 
+                        : user?.account_type?.toLowerCase() === 'agence' || user?.account_type === 'AGENCY'
+                            ? 'Tableau de bord Agence'
+                            : user?.account_type?.toLowerCase() === 'client'
+                                ? 'Tableau de bord Client'
+                                : user?.account_type?.toLowerCase() === 'livreur'
+                                    ? 'Tableau de bord Livreur'
+                                    : 'Tableau de bord PRO'
+                    }
                 </p>
             </div>
         </div>
@@ -193,57 +203,137 @@ export default function ProDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [navigationItems, setNavigationItems] = useState(baseNavItems);
 
-  // --- Fetch des données utilisateur au chargement ---
+  // --- FIX : Fetch des données utilisateur avec la même logique que login/home ---
   useEffect(() => {
     const fetchUserProfile = async () => {
-      setIsLoading(true); // <--- Mettre isLoading ici
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
-      }
-      
-      const { data, error } = await supabase
-        .from('profiles_pro')
-        .select('*') // <--- On prend tout pour les pages Profil, Service Card, etc.
-        .eq('id', session.user.id)
-        .single();
-      
-      if (error || !data) {
-        console.error("Erreur critique: Profil PRO non trouvé pour l'utilisateur authentifié.", error);
-        await supabase.auth.signOut();
-        router.push('/');
-        return;
-      }
+      try {
+        setIsLoading(true);
+        console.log('🔍 [Dashboard] Vérification de la session...');
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          console.log('❌ [Dashboard] Pas de session, redirection vers login');
+          router.push('/');
+          return;
+        }
 
-      setUserProfile(data as ProProfile);
+        console.log('✅ [Dashboard] Session trouvée, ID utilisateur:', session.user.id);
 
-      // Définir la navigation en fonction du type de compte
-      if (data.account_type === 'AGENCY') {
+        // --- FIX : Même logique que dans login et home ---
+        console.log('👤 [Dashboard] Récupération du profil depuis profiles...');
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*') // Récupérer tous les champs
+          .eq('id', session.user.id)
+          .single();
+
+        console.log('📋 [Dashboard] Résultat profiles:', { profile, error: profileError });
+
+        let finalProfile = profile;
+        let fromTable = 'profiles';
+        
+        // Si pas trouvé dans 'profiles', essayer 'profiles_pro'
+        if (profileError && profileError.code === 'PGRST116') {
+          console.log('🔄 [Dashboard] Profil non trouvé dans profiles, tentative profiles_pro...');
+          const { data: profilePro, error: profileProError } = await supabase
+            .from('profiles_pro')
+            .select('*') // Récupérer tous les champs
+            .eq('id', session.user.id)
+            .single();
+          
+          console.log('📋 [Dashboard] Résultat profiles_pro:', { profilePro, error: profileProError });
+          
+          if (profileProError || !profilePro) {
+            console.error("❌ [Dashboard] Aucun profil trouvé dans les deux tables");
+            throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous reconnecter.");
+          }
+          
+          finalProfile = profilePro;
+          fromTable = 'profiles_pro';
+          console.log('✅ [Dashboard] Profil trouvé dans profiles_pro');
+        } else if (profileError) {
+          console.error("❌ [Dashboard] Erreur lors de la récupération du profil:", profileError);
+          throw new Error(`Erreur profil: ${profileError.message}`);
+        }
+
+        if (!finalProfile) {
+          throw new Error("Profil introuvable.");
+        }
+
+        console.log('✅ [Dashboard] Profil final chargé depuis', fromTable, ':', finalProfile.manager_name);
+        console.log('🎭 [Dashboard] Type de compte:', finalProfile.account_type);
+
+        setUserProfile(finalProfile as ProProfile);
+
+        // Définir la navigation en fonction du type de compte
+        const accountType = finalProfile.account_type?.toLowerCase();
+        if (accountType === 'agency' || accountType === 'agence') {
           const agencyNav = [...baseNavItems];
           // Insérer 'Personnel' à la 3ème position (index 2)
           agencyNav.splice(2, 0, agencyNavItem);
           setNavigationItems(agencyNav);
-      } else {
+          console.log('📋 [Dashboard] Navigation agence configurée');
+        } else {
           setNavigationItems(baseNavItems);
-      }
+          console.log('📋 [Dashboard] Navigation standard configurée');
+        }
 
-      setIsLoading(false);
+      } catch (error: any) {
+        console.error('💥 [Dashboard] Erreur complète lors du chargement:', error);
+        // En cas d'erreur, déconnecter et rediriger
+        await supabase.auth.signOut();
+        localStorage.removeItem('pickndrop_currentUser');
+        router.push('/');
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchUserProfile();
   }, [router]);
   
-
   // --- Mettre à jour le profil (passé en props aux enfants) ---
   const updateUserProfile = async () => {
-    if(!userProfile) return;
-    const { data } = await supabase.from('profiles_pro').select('*').eq('id', userProfile.id).single();
-    if (data) setUserProfile(data as ProProfile);
+    if (!userProfile) return;
+    
+    try {
+      console.log('🔄 [Dashboard] Mise à jour du profil...');
+      
+      // Essayer d'abord profiles, puis profiles_pro
+      let updatedProfile = null;
+      
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userProfile.id)
+        .single();
+      
+      if (profileError && profileError.code === 'PGRST116') {
+        // Essayer profiles_pro
+        const { data: profileProData, error: profileProError } = await supabase
+          .from('profiles_pro')
+          .select('*')
+          .eq('id', userProfile.id)
+          .single();
+        
+        if (profileProData && !profileProError) {
+          updatedProfile = profileProData;
+        }
+      } else if (profileData && !profileError) {
+        updatedProfile = profileData;
+      }
+      
+      if (updatedProfile) {
+        setUserProfile(updatedProfile as ProProfile);
+        console.log('✅ [Dashboard] Profil mis à jour');
+      }
+    } catch (error) {
+      console.error('❌ [Dashboard] Erreur lors de la mise à jour du profil:', error);
+    }
   };
 
   const renderContent = () => {
-    if (!userProfile) return null; // ou un spinner
+    if (!userProfile) return null;
     
     switch(activeTab) {
         case 'overview': return <OverviewDashboard />;
@@ -251,7 +341,9 @@ export default function ProDashboard() {
         case 'profile': return <ProfilePage profile={userProfile} onUpdate={updateUserProfile} />;
         case 'service-card': return <ServiceCardPage profile={userProfile} />;
         case 'settings': return <SettingsPage profile={userProfile} onUpdate={updateUserProfile} />;
-        case 'staff': return userProfile.account_type === 'AGENCY' ? <PersonnelPage /> : null;
+        case 'staff': 
+          const accountType = userProfile.account_type?.toLowerCase();
+          return (accountType === 'agency' || accountType === 'agence') ? <PersonnelPage /> : null;
         default: return null;
     }
   };
@@ -259,10 +351,29 @@ export default function ProDashboard() {
   if (isLoading) {
     return (
      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-       <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
-       <p className="ml-4 text-lg font-semibold text-gray-700">Chargement de votre espace...</p>
+       <div className="flex items-center">
+         <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
+         <p className="ml-4 text-lg font-semibold text-gray-700">Chargement de votre espace...</p>
+       </div>
      </div>
    );
+  }
+
+  if (!userProfile) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+          <div className="text-center">
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">Erreur de chargement</h2>
+              <p className="text-gray-600 mb-4">Impossible de charger votre profil de dashboard.</p>
+              <button 
+                  onClick={() => router.push('/')}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+              >
+                  Retour à la connexion
+              </button>
+          </div>
+      </div>
+    );
   }
 
   return (

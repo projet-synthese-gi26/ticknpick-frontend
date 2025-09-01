@@ -146,7 +146,7 @@ export default function HomePage() {
           mainIcon: <Package className='text-white h-12 w-12' />,
           services: [
             { title: "Envoyer un colis", description: "Initiez une nouvelle expédition rapidement.", href: "/expedition", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-sky-400 to-sky-500" },
-            { title: "Retrouver un colis", description: "Suivez votre colis en temps réel.", href: "/tracking", icon: <Search className="h-8 w-8 text-white" />, color: "from-cyan-400 to-cyan-500" },
+            { title: "Retrouver un colis", description: "Suivez votre colis en temps réel.", href: "/track-package", icon: <Search className="h-8 w-8 text-white" />, color: "from-cyan-400 to-cyan-500" },
             { title: "Mon compte", description: "Gérez votre profil et vos informations.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-sky-500 to-cyan-600" },
           ]
         };
