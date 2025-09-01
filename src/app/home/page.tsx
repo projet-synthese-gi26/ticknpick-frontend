@@ -2,7 +2,7 @@
 'use client';
 
 // --- MODIFIÉ : Import des icônes supplémentaires nécessaires pour les nouveaux services ---
-import { PackagePlus, PackageOpen, User, MapPinHouse, Truck, Search, Archive } from 'lucide-react';
+import { PackagePlus, PackageOpen, User, MapPinHouse, Truck, Search, Archive, Package } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo, ReactNode } from 'react';
