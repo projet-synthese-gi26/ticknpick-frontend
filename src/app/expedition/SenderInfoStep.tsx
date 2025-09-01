@@ -331,7 +331,7 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
                   </SelectField>
                   <SelectField icon={Navigation} id="senderCity" name="senderCity" value={formData.senderCity} onChange={handleChange} label="Ville" error={errors.senderCity} disabled={!formData.senderRegion}>
                     <option value="">Sélectionner une ville</option>
-                    {availableCities.map((city) => (<option key={city} value={city}>{city}</option>))}
+                    {availableCities.map((city: string) => (<option key={city} value={city}>{city}</option>))}
                   </SelectField>
                 </div>
 
