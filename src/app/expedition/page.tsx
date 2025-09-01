@@ -241,8 +241,11 @@ export default function ShippingPage() {
             setFormData(prev => ({
               ...prev,
               senderData: {
+                // --- CORRECTION: Préserver les champs par défaut comme le pays tout en remplissant le profil ---
+                ...prev.senderData, 
                 senderName: connectedUser.full_name || '',
                 senderPhone: connectedUser.phone || '',
+                senderEmail: connectedUser.email || '', // Email ajouté
                 senderAddress: connectedUser.address || '',
                 senderLieuDit: connectedUser.lieu_dit || '',
               }
