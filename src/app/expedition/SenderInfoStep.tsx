@@ -71,7 +71,7 @@ const InputField = ({ icon: Icon, id, error, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -113,7 +113,7 @@ const SelectField = ({ icon: Icon, id, error, children, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 tracking-wider">
       {props.label}
     </label>
     <div className="relative">

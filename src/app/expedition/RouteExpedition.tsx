@@ -631,11 +631,11 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                 initial={{ y: 100, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 100, opacity: 0 }}
-                className="absolute bottom-4 left-4 right-4 lg:left-auto lg:w-80"
+                className="absolute top-4 left-4 right-4 lg:left-auto lg:w-80"
               >
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-100">Récapitulatif</h4>
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-100">Coût du trajet</h4>
                     <button
                       onClick={handleReset}
                       className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400"
