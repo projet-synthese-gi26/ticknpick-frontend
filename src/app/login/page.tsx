@@ -13,104 +13,122 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsLoading(true);
+  setError(null);
 
-    try {
-      console.log('🔍 Tentative de connexion...');
-      console.log('📧 Email saisi:', email.trim().toLowerCase());
+  try {
+    console.log('🔍 Tentative de connexion...');
+    console.log('📧 Email saisi:', email.trim().toLowerCase());
+    
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password,
+    });
+
+    console.log('📋 Réponse signIn:', { data, error: signInError });
+
+    if (signInError) {
+      console.error('❌ Erreur signIn:', signInError);
       
-      // Vérifier d'abord si l'utilisateur existe dans auth.users
-      const { data: authUser, error: userError } = await supabase.auth.getUser();
-      console.log('👤 Utilisateur auth actuel:', authUser);
-
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(), // Normaliser l'email
-        password: password,
-      });
-
-      console.log('📋 Réponse signIn:', { data, error: signInError });
-
-      if (signInError) {
-        console.error('❌ Erreur signIn:', signInError);
-        
-        // Messages d'erreur plus spécifiques
-        if (signInError.message.includes('Invalid login credentials')) {
-          throw new Error("Email ou mot de passe incorrect. Vérifiez vos informations.");
-        }
-        if (signInError.message.includes('Email not confirmed')) {
-          throw new Error("Veuillez confirmer votre email avant de vous connecter. Vérifiez votre boîte mail.");
-        }
-        if (signInError.message.includes('Too many requests')) {
-          throw new Error("Trop de tentatives de connexion. Veuillez patienter quelques minutes.");
-        }
-        
-        throw new Error(signInError.message);
+      // Messages d'erreur plus spécifiques
+      if (signInError.message.includes('Invalid login credentials')) {
+        throw new Error("Email ou mot de passe incorrect. Vérifiez vos informations.");
       }
-
-      if (!data.user) {
-        throw new Error("Aucune données utilisateur reçues.");
+      if (signInError.message.includes('Email not confirmed')) {
+        throw new Error("Veuillez confirmer votre email avant de vous connecter. Vérifiez votre boîte mail.");
       }
+      if (signInError.message.includes('Too many requests')) {
+        throw new Error("Trop de tentatives de connexion. Veuillez patienter quelques minutes.");
+      }
+      
+      throw new Error(signInError.message);
+    }
 
-      console.log('🎉 Connexion réussie! User ID:', data.user.id);
-      console.log('📧 Email confirmé:', data.user.email_confirmed_at ? 'Oui' : 'Non');
+    if (!data.user) {
+      throw new Error("Aucune données utilisateur reçues.");
+    }
 
-      // Vérifier si l'email est confirmé
-      if (!data.user.email_confirmed_at) {
-        setError("Votre email n'est pas encore confirmé. Vérifiez votre boîte mail et cliquez sur le lien de confirmation.");
-        await supabase.auth.signOut();
-        setIsLoading(false);
+    console.log('🎉 Connexion réussie! User ID:', data.user.id);
+    console.log('📧 Email confirmé:', data.user.email_confirmed_at ? 'Oui' : 'Non');
+
+    // Vérifier si l'email est confirmé
+    if (!data.user.email_confirmed_at) {
+      setError("Votre email n'est pas encore confirmé. Vérifiez votre boîte mail et cliquez sur le lien de confirmation.");
+      await supabase.auth.signOut();
+      setIsLoading(false);
+      return;
+    }
+
+    // Récupérer le profil dans la table 'profiles' (pas 'profiles_pro')
+    console.log('👤 Récupération du profil...');
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('manager_name, account_type, email')
+      .eq('id', data.user.id)
+      .single();
+
+    console.log('📋 Profil récupéré:', { profile, error: profileError });
+
+    if (profileError) {
+      console.error('❌ Erreur profil:', profileError);
+      
+      if (profileError.code === 'PGRST116') {
+        // Si pas trouvé dans 'profiles', essayer dans 'profiles_pro' comme fallback
+        console.log('🔄 Tentative de récupération depuis profiles_pro...');
+        const { data: profilePro, error: profileProError } = await supabase
+          .from('profiles_pro')
+          .select('manager_name, account_type, email')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileProError || !profilePro) {
+          throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous inscrire d'abord ou contactez le support.");
+        }
+        
+        // Utiliser le profil trouvé dans profiles_pro
+        const userProfileForStorage = {
+          name: profilePro.manager_name,
+          email: data.user.email,
+          account_type: profilePro.account_type
+        };
+        
+        localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
+        console.log('💾 Profil PRO stocké dans localStorage');
+        router.push('/home');
         return;
       }
-
-      // Récupérer le profil PRO
-      console.log('👤 Récupération du profil PRO...');
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles_pro')
-        .select('manager_name, account_type, email')
-        .eq('id', data.user.id)
-        .single();
-
-      console.log('📋 Profil PRO:', { profile, error: profileError });
-
-      if (profileError) {
-        console.error('❌ Erreur profil:', profileError);
-        
-        if (profileError.code === 'PGRST116') {
-          throw new Error("Aucun profil PRO trouvé pour ce compte. Veuillez vous inscrire d'abord.");
-        }
-        
-        throw new Error(`Erreur lors du chargement du profil: ${profileError.message}`);
-      }
-
-      if (!profile) {
-        throw new Error("Profil PRO introuvable. Contactez le support.");
-      }
-
-      console.log('✅ Profil PRO chargé:', profile.manager_name);
-
-      // Stockage des informations utilisateur
-      const userProfileForStorage = {
-        name: profile.manager_name,
-        email: data.user.email,
-        account_type: profile.account_type
-      };
       
-      localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
-      console.log('💾 Profil stocké dans localStorage');
-
-      // Redirection vers le dashboard
-      router.push('/home');
-
-    } catch (err: any) {
-      console.error('💥 Erreur complète de connexion:', err);
-      setError(err.message || 'Une erreur inattendue est survenue.');
-    } finally {
-      setIsLoading(false);
+      throw new Error(`Erreur lors du chargement du profil: ${profileError.message}`);
     }
-  };
+
+    if (!profile) {
+      throw new Error("Profil introuvable. Contactez le support.");
+    }
+
+    console.log('✅ Profil chargé:', profile.manager_name);
+
+    // Stockage des informations utilisateur
+    const userProfileForStorage = {
+      name: profile.manager_name,
+      email: data.user.email,
+      account_type: profile.account_type
+    };
+    
+    localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
+    console.log('💾 Profil stocké dans localStorage');
+
+    // Redirection vers le dashboard
+    router.push('/home');
+
+  } catch (err: any) {
+    console.error('💥 Erreur complète de connexion:', err);
+    setError(err.message || 'Une erreur inattendue est survenue.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 flex items-center justify-center p-4">
