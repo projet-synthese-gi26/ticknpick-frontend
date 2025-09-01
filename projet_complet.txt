@@ -10132,31 +10132,166 @@ export default function ProfilePage({
   }, []);
 
   const handlePhotoUpload = async (file: File) => {
-    if (!file) return;
+  if (!file) return;
+  
+  // Validation du fichier
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    alert('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.');
+    return;
+  }
+
+  // Vérification de la taille (max 5MB)
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (file.size > maxSize) {
+    alert('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.');
+    return;
+  }
+  
+  setUploadingPhoto(true);
+  
+  try {
+    // Générer un nom de fichier unique
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    const timestamp = Date.now();
+    const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
     
-    setUploadingPhoto(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${profile.id}/profile.${fileExt}`;
-      
-      const { data, error } = await supabase.storage
-        .from('profile-photos')
-        .upload(fileName, file, { upsert: true });
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl(fileName);
-
-      setFormData(prev => ({ ...prev, identity_photo_url: publicUrl }));
-    } catch (error) {
-      console.error('Erreur lors du téléchargement:', error);
-      alert('Erreur lors du téléchargement de la photo');
-    } finally {
-      setUploadingPhoto(false);
+    // Supprimer l'ancienne photo si elle existe
+    if (formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
+      try {
+        const urlParts = formData.identity_photo_url.split('/');
+        const existingFileName = urlParts[urlParts.length - 1];
+        if (existingFileName) {
+          await supabase.storage
+            .from('profile-photos')
+            .remove([`${profile.id}/${existingFileName}`]);
+        }
+      } catch (deleteError) {
+        console.warn('Erreur lors de la suppression de l\'ancienne photo:', deleteError);
+      }
     }
+    
+    // Télécharger le nouveau fichier
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('profile-photos')
+      .upload(fileName, file, { 
+        upsert: true,
+        cacheControl: '3600'
+      });
+
+    if (uploadError) {
+      throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
+    }
+
+    // Obtenir l'URL publique
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile-photos')
+      .getPublicUrl(fileName);
+
+    if (!publicUrl) {
+      throw new Error('Impossible d\'obtenir l\'URL de la photo');
+    }
+
+    // Mettre à jour les données du formulaire
+    setFormData(prev => ({ 
+      ...prev, 
+      identity_photo_url: publicUrl 
+    }));
+
+    // Afficher un message de succès
+    const successMessage = document.createElement('div');
+    successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+    successMessage.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        Photo téléchargée avec succès !
+      </div>
+    `;
+    document.body.appendChild(successMessage);
+    
+    setTimeout(() => {
+      if (successMessage.parentNode) {
+        successMessage.remove();
+      }
+    }, 3000);
+
+  } catch (error: any) {
+    console.error('Erreur lors du téléchargement:', error);
+    
+    // Afficher un message d'erreur
+    const errorMessage = document.createElement('div');
+    errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+    errorMessage.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+        Erreur: ${error.message || 'Erreur lors du téléchargement'}
+      </div>
+    `;
+    document.body.appendChild(errorMessage);
+    
+    setTimeout(() => {
+      if (errorMessage.parentNode) {
+        errorMessage.remove();
+      }
+    }, 5000);
+    
+  } finally {
+    setUploadingPhoto(false);
+    // Réinitialiser l'input file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+};
+
+// Ajoutez cette fonction pour gérer le changement de fichier
+const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (file) {
+    handlePhotoUpload(file);
+  }
+};
+
+// Ajoutez ce composant pour la gestion d'erreur des images
+const ProfileImagePreview = ({ src, alt, className }: {
+  src: string;
+  alt: string;
+  className: string;
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoading(false);
   };
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    setImageError(false);
+  };
+
+  return (
+    <div className="relative w-full h-full">
+      {imageLoading && (
+        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+        </div>
+      )}
+      <img 
+        src={imageError ? '/avatars/default.png' : src}
+        alt={alt}
+        className={`${className} ${imageLoading ? 'invisible' : 'visible'}`}
+        onError={handleImageError}
+        onLoad={handleImageLoad}
+      />
+    </div>
+  );
+};
 
   const handleSaveChanges = async () => {
     setIsLoading(true);
@@ -10297,33 +10432,57 @@ export default function ProfilePage({
             <div className="text-center flex-shrink-0">
               <div className="relative group">
                 <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
-                  <img 
-                    src={formData.identity_photo_url || '/avatars/default.png'} 
-                    alt="Photo de profil" 
+                  <ProfileImagePreview
+                    src={formData.identity_photo_url || '/avatars/default.png'}
+                    alt="Photo de profil"
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                   />
                   {uploadingPhoto && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
+                        <p className="text-white text-sm font-medium">Téléchargement...</p>
+                      </div>
                     </div>
                   )}
                 </div>
+                
                 {isEditing && (
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12"
-                  >
-                    <Camera className="w-5 h-5"/>
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingPhoto}
+                      className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Changer la photo de profil"
+                    >
+                      {uploadingPhoto ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Camera className="w-5 h-5" />
+                      )}
+                    </button>
+                    
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={handleFileInputChange}
+                      disabled={uploadingPhoto}
+                    />
+                  </>
                 )}
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && handlePhotoUpload(e.target.files[0])}
-                />
+                
+                {/* Tooltip avec les formats supportés */}
+                {isEditing && !uploadingPhoto && (
+                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                    <div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">
+                      Formats: JPG, PNG, WebP (max 5MB)
+                    </div>
+                  </div>
+                )}
               </div>
+              
               <div className="mt-6">
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">
                   {formData.manager_name || 'Nom non renseigné'}
@@ -11028,9 +11187,41 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\register\page.tsx
 'use client';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone, MapPin, Calendar, Users, Truck, Camera, Upload } from 'lucide-react';
+import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone, MapPin, Calendar, Users, Truck, Camera, Upload, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+
+// Données des pays et régions
+const countries = {
+  cameroun: {
+    name: 'Cameroun',
+    regions: {
+      'centre': { name: 'Centre', cities: ['Yaoundé', 'Mbalmayo', 'Akonolinga', 'Bafia', 'Ntui', 'Mfou', 'Obala', 'Okola', 'Soa'] },
+      'littoral': { name: 'Littoral', cities: ['Douala', 'Edéa', 'Nkongsamba', 'Yabassi', 'Loum', 'Manjo', 'Mbanga', 'Mouanko'] },
+      'ouest': { name: 'Ouest', cities: ['Bafoussam', 'Dschang', 'Bandjoun', 'Mbouda', 'Bangangté', 'Foumban', 'Kékem'] },
+      'nord-ouest': { name: 'Nord-Ouest', cities: ['Bamenda', 'Kumbo', 'Wum', 'Ndop', 'Mbengwi', 'Bali', 'Bafut'] },
+      'sud-ouest': { name: 'Sud-Ouest', cities: ['Buéa', 'Limbe', 'Kumba', 'Mamfe', 'Tiko', 'Idenau', 'Fontem'] },
+      'adamaoua': { name: 'Adamaoua', cities: ['Ngaoundéré', 'Meiganga', 'Tibati', 'Tignère', 'Banyo', 'Kontcha'] },
+      'nord': { name: 'Nord', cities: ['Garoua', 'Maroua', 'Guider', 'Figuil', 'Poli', 'Rey-Bouba', 'Tcholliré'] },
+      'extreme-nord': { name: 'Extrême-Nord', cities: ['Maroua', 'Mokolo', 'Kousséri', 'Yagoua', 'Mora', 'Waza', 'Kaélé'] },
+      'est': { name: 'Est', cities: ['Bertoua', 'Batouri', 'Abong-Mbang', 'Yokadouma', 'Kenzou', 'Garoua-Boulaï'] },
+      'sud': { name: 'Sud', cities: ['Ebolowa', 'Sangmélima', 'Kribi', 'Ambam', 'Lolodorf', 'Campo', 'Mvangane'] }
+    }
+  },
+  nigeria: {
+    name: 'Nigeria',
+    regions: {
+      'lagos': { name: 'Lagos', cities: ['Lagos', 'Ikeja', 'Epe', 'Ikorodu', 'Badagry', 'Mushin', 'Alimosho'] },
+      'abuja': { name: 'Abuja FCT', cities: ['Abuja', 'Gwagwalada', 'Kuje', 'Abaji', 'Bwari', 'Kwali'] },
+      'kano': { name: 'Kano', cities: ['Kano', 'Wudil', 'Gwarzo', 'Rano', 'Karaye', 'Rimin Gado'] },
+      'rivers': { name: 'Rivers', cities: ['Port Harcourt', 'Obio-Akpor', 'Eleme', 'Ikwerre', 'Oyigbo', 'Okrika'] },
+      'oyo': { name: 'Oyo', cities: ['Ibadan', 'Ogbomoso', 'Oyo', 'Iseyin', 'Saki', 'Igboho', 'Eruwa'] },
+      'kaduna': { name: 'Kaduna', cities: ['Kaduna', 'Zaria', 'Kafanchan', 'Kagoro', 'Zonkwa', 'Makarfi'] },
+      'ogun': { name: 'Ogun', cities: ['Abeokuta', 'Sagamu', 'Ijebu-Ode', 'Ota', 'Ilaro', 'Ayetoro'] },
+      'anambra': { name: 'Anambra', cities: ['Awka', 'Onitsha', 'Nnewi', 'Ekwulobia', 'Agulu', 'Ihiala'] }
+    }
+  }
+};
 
 const Stepper = ({ currentStep, steps }: { currentStep: number, steps: any[] }) => {
   return (
@@ -11071,6 +11262,42 @@ const InputField = ({ id, label, type = 'text', value, onChange, placeholder, re
   </div>
 );
 
+const SelectField = ({ icon: Icon, id, label, children, ...props }: any) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    className="group space-y-1"
+  >
+    <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+      {label}
+    </label>
+    <div className="relative">
+      <motion.div
+        className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
+        whileHover={{ scale: 1.1 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Icon className="w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
+      </motion.div>
+      <select
+        id={id}
+        {...props}
+        className="w-full pl-10 pr-8 py-2.5 text-sm text-gray-800 border-2 rounded-lg appearance-none transition-all duration-200 
+          bg-white/80 backdrop-blur-sm border-gray-200 focus:border-orange-500
+          focus:ring-2 focus:ring-orange-500/20 focus:bg-white shadow-sm hover:shadow-md cursor-pointer"
+      >
+        {children}
+      </select>
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+    </div>
+  </motion.div>
+);
+
 const FileUploadField = ({ id, label, onChange, required = true, accept = "image/*" }: any) => (
   <div className="space-y-1">
     <label htmlFor={id} className="block text-sm font-medium text-gray-700">{label}</label>
@@ -11100,7 +11327,9 @@ export default function RegisterProPage() {
     // Identification
     manager_name: '', email: '', password: '', confirmPassword: '',
     // Coordonnées
-    phone_number: '', birth_date: '', nationality: '', home_address: '', home_address_locality: '', 
+    phone_number: '', birth_date: '', 
+    country: '', region: '', city: '', // Remplace nationality
+    home_address: '', home_address_locality: '', 
     id_card_number: '', niu: '',
     // Point Relais (Freelance/Agence)
     relay_point_name: '', relay_point_address: '', relay_point_locality: '', opening_hours: '', storage_capacity: 'Petit',
@@ -11108,6 +11337,26 @@ export default function RegisterProPage() {
     vehicle_type: '', vehicle_brand: '', vehicle_registration: '', vehicle_color: '', trunk_dimensions: '',
     driving_license_front: null, driving_license_back: null, accident_history: ''
   });
+
+  // Effets pour gérer la réinitialisation des sélecteurs dépendants
+  useEffect(() => {
+    if (formData.country) {
+      const countryData = countries[formData.country as keyof typeof countries];
+      if (countryData && !countryData.regions.hasOwnProperty(formData.region)) {
+        setFormData(prev => ({ ...prev, region: '', city: '' }));
+      }
+    }
+  }, [formData.country]);
+
+  useEffect(() => {
+    if (formData.country && formData.region) {
+      const countryData = countries[formData.country as keyof typeof countries];
+      const regionData = (countryData?.regions as any)?.[formData.region];
+      if (regionData && !regionData.cities.includes(formData.city)) {
+        setFormData(prev => ({ ...prev, city: '' }));
+      }
+    }
+  }, [formData.country, formData.region]);
 
   // Définir les étapes selon le type de compte
   const getStepsForAccountType = (type: string | null) => {
@@ -11177,6 +11426,12 @@ export default function RegisterProPage() {
     if (!accountType) {
       return setError("Veuillez sélectionner un type de compte.");
     }
+    if (!formData.manager_name.trim()) {
+      return setError("Le nom du gérant est obligatoire.");
+    }
+    if (!formData.phone_number.trim()) {
+      return setError("Le numéro de téléphone est obligatoire.");
+    }
 
     setIsLoading(true);
 
@@ -11185,46 +11440,81 @@ export default function RegisterProPage() {
       console.log('📧 Email:', formData.email.trim().toLowerCase());
       console.log('🏢 Type compte:', accountType);
 
+      // Vérifiez d'abord la session actuelle
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('📱 Session actuelle:', sessionData.session?.user?.email || 'Aucune session');
+
+      // Si une session existe déjà, la fermer
+      if (sessionData.session) {
+        await supabase.auth.signOut();
+        console.log('🚪 Session précédente fermée');
+      }
+
+      // Préparer les métadonnées pour le trigger
+      const userMetadata = {
+        account_type: accountType,
+        manager_name: formData.manager_name.trim(),
+        phone_number: formData.phone_number.trim(),
+        birth_date: formData.birth_date || null,
+        home_address: formData.home_address?.trim() || null,
+        id_card_number: formData.id_card_number?.trim() || null,
+        relay_point_name: formData.relay_point_name?.trim() || null,
+        relay_point_address: formData.relay_point_address?.trim() || null,
+        opening_hours: formData.opening_hours?.trim() || null,
+        storage_capacity: formData.storage_capacity || 'Petit'
+      };
+
+      console.log('📦 Métadonnées pour le trigger:', userMetadata);
+
+      // Inscription avec métadonnées - le trigger s'occupera automatiquement de créer le profil
+      console.log('🚀 Inscription avec trigger automatique...');
+      
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         options: {
-          data: {
-            // Correspond à `new.raw_user_meta_data->>'account_type'` dans votre SQL
-            account_type: accountType,
-            
-            // Correspond à `new.raw_user_meta_data->>'manager_name'` dans votre SQL
-            manager_name: formData.manager_name,
-            
-            // Correspond à `new.raw_user_meta_data->>'phone_number'` dans votre SQL
-            phone_number: formData.phone_number
-          },
-          // Redirige l'utilisateur vers la page de connexion après qu'il ait cliqué sur le lien de confirmation
-          emailRedirectTo: `${window.location.origin}/login`
+          data: userMetadata
         }
       });
-      // --- FIN DE LA CORRECTION ---
+
+      console.log('✅ Réponse inscription:', { data, error: signUpError });
 
       if (signUpError) {
-        if (signUpError.message.includes('User already registered')) {
-            throw new Error('Un utilisateur avec cet email existe déjà.');
+        console.error('❌ Erreur signUp:', signUpError);
+        
+        if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
+          throw new Error("Cette adresse email est déjà utilisée.");
         }
-        throw signUpError;
+        if (signUpError.message.includes('Invalid email')) {
+          throw new Error("Format d'email invalide.");
+        }
+        if (signUpError.message.includes('Password should be at least 6 characters')) {
+          throw new Error("Le mot de passe doit faire au moins 6 caractères.");
+        }
+        
+        throw new Error(signUpError.message);
       }
 
       if (!data.user) {
-        throw new Error("L'inscription a réussi mais aucune donnée utilisateur n'a été retournée.");
+        throw new Error("Aucun utilisateur créé.");
       }
+
+      console.log('🎉 Utilisateur créé:', data.user.email, 'ID:', data.user.id);
+      console.log('🔧 Le trigger Supabase va créer le profil automatiquement avec les métadonnées');
+
+      setSuccess("Inscription réussie ! Vérifiez votre boîte mail pour confirmer votre compte.");
       
-      setSuccess("Inscription réussie ! Veuillez vérifier votre boîte mail pour confirmer votre compte et pouvoir vous connecter.");
+      setTimeout(() => {
+        router.push('/');
+      }, 3000);
 
     } catch (err: any) {
-      console.error('💥 Erreur d\'inscription:', err);
-      setError(err.message || 'Une erreur inattendue est survenue.');
+      console.error('💥 Erreur inscription:', err);
+      setError(err.message || 'Une erreur inattendue est survenue lors de l\'inscription.');
     } finally {
       setIsLoading(false);
     }
-};
+  };
 
   const renderStep = () => {
     switch(currentStep) {
@@ -11253,6 +11543,7 @@ export default function RegisterProPage() {
           <h3 className="text-xl font-bold mb-4">Informations d'identification</h3>
           <InputField id="manager_name" label="Nom et Prénoms" value={formData.manager_name} onChange={handleChange} placeholder="Ex: Mballa Joseph" icon={User} />
           <InputField id="email" label="Adresse Email" type="email" value={formData.email} onChange={handleChange} placeholder="contact@exemple.com" icon={Mail} />
+          <InputField id="phone_number" label="Numéro de téléphone" type="tel" value={formData.phone_number} onChange={handleChange} placeholder="Ex: 6XX XXX XXX" icon={Phone} />
           <InputField id="password" label="Mot de passe" type="password" value={formData.password} onChange={handleChange} placeholder="••••••••" icon={Lock} />
           <InputField id="confirmPassword" label="Confirmer le mot de passe" type="password" value={formData.confirmPassword} onChange={handleChange} placeholder="••••••••" icon={Lock} />
         </motion.form>
@@ -11280,9 +11571,56 @@ export default function RegisterProPage() {
         return (
           <motion.form initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} onSubmit={(e) => { e.preventDefault(); handleNextStep(); }} className="space-y-4">
             <h3 className="text-xl font-bold mb-4">Coordonnées et informations</h3>
-            <InputField id="phone_number" label="Numéro de téléphone" type="tel" value={formData.phone_number} onChange={handleChange} placeholder="Ex: 6XX XXX XXX" icon={Phone} />
-            <InputField id="birth_date" label="Date de naissance" type="date" value={formData.birth_date} onChange={handleChange} icon={Calendar} />
-            <InputField id="nationality" label="Nationalité" value={formData.nationality} onChange={handleChange} placeholder="Ex: Camerounaise" />
+            {/* Sélecteurs Pays/Région/Ville */}
+            <SelectField 
+              icon={Globe} 
+              id="country" 
+              name="country"
+              label="Pays" 
+              value={formData.country} 
+              onChange={handleChange}
+              required
+            >
+              <option value="">Sélectionnez un pays</option>
+              {Object.entries(countries).map(([key, country]) => (
+                <option key={key} value={key}>{country.name}</option>
+              ))}
+            </SelectField>
+
+            {formData.country && (
+              <SelectField 
+                icon={MapPin} 
+                id="region" 
+                name="region"
+                label="Région" 
+                value={formData.region} 
+                onChange={handleChange}
+                required
+              >
+                <option value="">Sélectionnez une région</option>
+                {Object.entries(countries[formData.country as keyof typeof countries]?.regions || {}).map(([key, region]) => (
+                  <option key={key} value={key}>{(region as any).name}</option>
+                ))}
+              </SelectField>
+            )}
+
+            {formData.country && formData.region && (
+              <SelectField 
+                icon={Building} 
+                id="city" 
+                name="city"
+                label="Ville" 
+                value={formData.city} 
+                onChange={handleChange}
+                required
+              >
+                <option value="">Sélectionnez une ville</option>
+                {((countries[formData.country as keyof typeof countries]?.regions as any)?.[formData.region]?.cities || []).map((city: string) => (
+                  <option key={city} value={city}>{city}</option>
+                ))}
+              </SelectField>
+            )}
+
             <InputField id="home_address" label="Adresse personnelle" value={formData.home_address} onChange={handleChange} placeholder="Ex: Quartier Bastos, Yaoundé" icon={MapPin} />
             <InputField id="home_address_locality" label="Lieu dit de l'adresse" value={formData.home_address_locality} onChange={handleChange} placeholder="Ex: Face Pharmacie du Rond Point" />
             <InputField id="id_card_number" label="Numéro CNI" value={formData.id_card_number} onChange={handleChange} placeholder="Ex: 123456789" />
@@ -11377,6 +11715,9 @@ export default function RegisterProPage() {
             <p><strong>Nom :</strong> {formData.manager_name}</p>
             <p><strong>Email :</strong> {formData.email}</p>
             <p><strong>Téléphone :</strong> {formData.phone_number}</p>
+            {formData.country && formData.region && formData.city && (
+              <p><strong>Localisation :</strong> {formData.city}, {countries[formData.country as keyof typeof countries]?.regions?.[formData.region as keyof typeof countries[keyof typeof countries]['regions']]?.name}, {countries[formData.country as keyof typeof countries]?.name}</p>
+            )}
             {accountType === 'LIVREUR' && formData.vehicle_type && (
               <p><strong>Véhicule :</strong> {formData.vehicle_type} - {formData.vehicle_brand}</p>
             )}
@@ -11468,104 +11809,122 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsLoading(true);
+  setError(null);
 
-    try {
-      console.log('🔍 Tentative de connexion...');
-      console.log('📧 Email saisi:', email.trim().toLowerCase());
+  try {
+    console.log('🔍 Tentative de connexion...');
+    console.log('📧 Email saisi:', email.trim().toLowerCase());
+    
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password,
+    });
+
+    console.log('📋 Réponse signIn:', { data, error: signInError });
+
+    if (signInError) {
+      console.error('❌ Erreur signIn:', signInError);
       
-      // Vérifier d'abord si l'utilisateur existe dans auth.users
-      const { data: authUser, error: userError } = await supabase.auth.getUser();
-      console.log('👤 Utilisateur auth actuel:', authUser);
-
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(), // Normaliser l'email
-        password: password,
-      });
-
-      console.log('📋 Réponse signIn:', { data, error: signInError });
-
-      if (signInError) {
-        console.error('❌ Erreur signIn:', signInError);
-        
-        // Messages d'erreur plus spécifiques
-        if (signInError.message.includes('Invalid login credentials')) {
-          throw new Error("Email ou mot de passe incorrect. Vérifiez vos informations.");
-        }
-        if (signInError.message.includes('Email not confirmed')) {
-          throw new Error("Veuillez confirmer votre email avant de vous connecter. Vérifiez votre boîte mail.");
-        }
-        if (signInError.message.includes('Too many requests')) {
-          throw new Error("Trop de tentatives de connexion. Veuillez patienter quelques minutes.");
-        }
-        
-        throw new Error(signInError.message);
+      // Messages d'erreur plus spécifiques
+      if (signInError.message.includes('Invalid login credentials')) {
+        throw new Error("Email ou mot de passe incorrect. Vérifiez vos informations.");
       }
-
-      if (!data.user) {
-        throw new Error("Aucune données utilisateur reçues.");
+      if (signInError.message.includes('Email not confirmed')) {
+        throw new Error("Veuillez confirmer votre email avant de vous connecter. Vérifiez votre boîte mail.");
       }
+      if (signInError.message.includes('Too many requests')) {
+        throw new Error("Trop de tentatives de connexion. Veuillez patienter quelques minutes.");
+      }
+      
+      throw new Error(signInError.message);
+    }
 
-      console.log('🎉 Connexion réussie! User ID:', data.user.id);
-      console.log('📧 Email confirmé:', data.user.email_confirmed_at ? 'Oui' : 'Non');
+    if (!data.user) {
+      throw new Error("Aucune données utilisateur reçues.");
+    }
 
-      // Vérifier si l'email est confirmé
-      if (!data.user.email_confirmed_at) {
-        setError("Votre email n'est pas encore confirmé. Vérifiez votre boîte mail et cliquez sur le lien de confirmation.");
-        await supabase.auth.signOut();
-        setIsLoading(false);
+    console.log('🎉 Connexion réussie! User ID:', data.user.id);
+    console.log('📧 Email confirmé:', data.user.email_confirmed_at ? 'Oui' : 'Non');
+
+    // Vérifier si l'email est confirmé
+    if (!data.user.email_confirmed_at) {
+      setError("Votre email n'est pas encore confirmé. Vérifiez votre boîte mail et cliquez sur le lien de confirmation.");
+      await supabase.auth.signOut();
+      setIsLoading(false);
+      return;
+    }
+
+    // Récupérer le profil dans la table 'profiles' (pas 'profiles_pro')
+    console.log('👤 Récupération du profil...');
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('manager_name, account_type, email')
+      .eq('id', data.user.id)
+      .single();
+
+    console.log('📋 Profil récupéré:', { profile, error: profileError });
+
+    if (profileError) {
+      console.error('❌ Erreur profil:', profileError);
+      
+      if (profileError.code === 'PGRST116') {
+        // Si pas trouvé dans 'profiles', essayer dans 'profiles_pro' comme fallback
+        console.log('🔄 Tentative de récupération depuis profiles_pro...');
+        const { data: profilePro, error: profileProError } = await supabase
+          .from('profiles_pro')
+          .select('manager_name, account_type, email')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileProError || !profilePro) {
+          throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous inscrire d'abord ou contactez le support.");
+        }
+        
+        // Utiliser le profil trouvé dans profiles_pro
+        const userProfileForStorage = {
+          name: profilePro.manager_name,
+          email: data.user.email,
+          account_type: profilePro.account_type
+        };
+        
+        localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
+        console.log('💾 Profil PRO stocké dans localStorage');
+        router.push('/home');
         return;
       }
-
-      // Récupérer le profil PRO
-      console.log('👤 Récupération du profil PRO...');
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles_pro')
-        .select('manager_name, account_type, email')
-        .eq('id', data.user.id)
-        .single();
-
-      console.log('📋 Profil PRO:', { profile, error: profileError });
-
-      if (profileError) {
-        console.error('❌ Erreur profil:', profileError);
-        
-        if (profileError.code === 'PGRST116') {
-          throw new Error("Aucun profil PRO trouvé pour ce compte. Veuillez vous inscrire d'abord.");
-        }
-        
-        throw new Error(`Erreur lors du chargement du profil: ${profileError.message}`);
-      }
-
-      if (!profile) {
-        throw new Error("Profil PRO introuvable. Contactez le support.");
-      }
-
-      console.log('✅ Profil PRO chargé:', profile.manager_name);
-
-      // Stockage des informations utilisateur
-      const userProfileForStorage = {
-        name: profile.manager_name,
-        email: data.user.email,
-        account_type: profile.account_type
-      };
       
-      localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
-      console.log('💾 Profil stocké dans localStorage');
-
-      // Redirection vers le dashboard
-      router.push('/home');
-
-    } catch (err: any) {
-      console.error('💥 Erreur complète de connexion:', err);
-      setError(err.message || 'Une erreur inattendue est survenue.');
-    } finally {
-      setIsLoading(false);
+      throw new Error(`Erreur lors du chargement du profil: ${profileError.message}`);
     }
-  };
+
+    if (!profile) {
+      throw new Error("Profil introuvable. Contactez le support.");
+    }
+
+    console.log('✅ Profil chargé:', profile.manager_name);
+
+    // Stockage des informations utilisateur
+    const userProfileForStorage = {
+      name: profile.manager_name,
+      email: data.user.email,
+      account_type: profile.account_type
+    };
+    
+    localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
+    console.log('💾 Profil stocké dans localStorage');
+
+    // Redirection vers le dashboard
+    router.push('/home');
+
+  } catch (err: any) {
+    console.error('💥 Erreur complète de connexion:', err);
+    setError(err.message || 'Une erreur inattendue est survenue.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 flex items-center justify-center p-4">
@@ -12188,7 +12547,7 @@ const InputField = ({ icon: Icon, id, error, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -12230,7 +12589,7 @@ const SelectField = ({ icon: Icon, id, error, children, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -13149,11 +13508,11 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                 initial={{ y: 100, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 100, opacity: 0 }}
-                className="absolute bottom-4 left-4 right-4 lg:left-auto lg:w-80"
+                className="absolute top-4 left-4 right-4 lg:left-auto lg:w-80"
               >
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-100">Récapitulatif</h4>
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-100">Coût du trajet</h4>
                     <button
                       onClick={handleReset}
                       className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400"
@@ -13487,137 +13846,125 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
     // Simuler une validation réussie
     return true;
   };
-  const handleSubmit = async () => {
-    if (!canConfirmPayment()) {
-      alert('Veuillez vérifier vos informations de paiement');
-      return;
+const handleSubmit = async () => {
+  if (!canConfirmPayment()) {
+    alert('Veuillez vérifier vos informations de paiement');
+    return;
+  }
+
+  setIsProcessing(true);
+  const newTrackingNumber = `PDL${Date.now().toString().slice(-7)}`;
+  setTrackingNumber(newTrackingNumber);
+  setProcessingStep('Vérification des données...');
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Simuler le paiement mobile si nécessaire
+    if (selectedMethod === 'mobile') {
+      const paymentSuccess = await simulateMobilePayment();
+      if (!paymentSuccess) {
+        throw new Error('Échec du paiement mobile');
+      }
     }
 
-    const userToUse = currentUser || DEFAULT_COUNTER_USER;
+    setProcessingStep('Enregistrement du colis...');
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    setIsProcessing(true);
-    const newTrackingNumber = `PDL${Date.now().toString().slice(-7)}`;
-    setTrackingNumber(newTrackingNumber);
-    setProcessingStep('Vérification des données...');
+    // Déterminer l'utilisateur à utiliser pour créer l'expédition
+    // Si currentUser existe, on l'utilise, sinon on utilise le compte comptoir par défaut
+    const userIdForDb = currentUser ? currentUser.id : DEFAULT_COUNTER_USER.id;
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('Utilisateur utilisé pour l\'enregistrement:', userIdForDb);
 
-      // Simuler le paiement mobile si nécessaire
-      if (selectedMethod === 'mobile') {
-        const paymentSuccess = await simulateMobilePayment();
-        if (!paymentSuccess) {
-          throw new Error('Échec du paiement mobile');
-        }
-      }
+    // Préparer les données pour la table 'shipments'
+    const shipmentData = {
+      tracking_number: newTrackingNumber,
+      status: 'EN_ATTENTE_DE_DEPOT', // Statut initial pour un envoi client
+      sender_name: allData.senderName,
+      sender_phone: allData.senderPhone,
+      recipient_name: allData.recipientName,
+      recipient_phone: allData.recipientPhone,
+      departure_point_id: allData.departurePointId,
+      arrival_point_id: allData.arrivalPointId,
+      description: allData.designation,
+      weight: parseFloat(allData.weight),
+      is_fragile: allData.isFragile,
+      is_perishable: allData.isPerishable,
+      is_insured: allData.isInsured,
+      declared_value: allData.isInsured ? parseFloat(allData.declaredValue) : null,
+      shipping_cost: totalPrice,
+      is_paid_at_departure: selectedMethod !== 'recipient',
+      amount_paid: selectedMethod !== 'recipient' ? totalPrice : 0,
+      created_by_user: userIdForDb, // Utilise soit l'utilisateur connecté soit le comptoir
+    };
 
-      setProcessingStep('Enregistrement du colis...');
-      await new Promise(resolve => setTimeout(resolve, 500));
+    console.log("Données à insérer pour le colis :", shipmentData);
 
-      // ===================================================================
-      // == DÉBUT DE LA LOGIQUE D'ENREGISTREMENT DANS LA BASE DE DONNÉES ==
-      // ===================================================================
+    // Insérer les données dans Supabase
+    const { data, error } = await supabase
+      .from('shipments')
+      .insert(shipmentData)
+      .select()
+      .single();
 
-      // 1. Vérifier que l'utilisateur est bien authentifié
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (error) {
+      console.error("Erreur détaillée Supabase:", error);
       
-      if (authError || !user) {
-        console.error("Erreur d'authentification:", authError);
-        throw new Error("Utilisateur non authentifié. Veuillez vous connecter.");
-      }
-
-      // 2. Préparer l'objet de données pour la table 'shipments'
-      const shipmentData = {
-        tracking_number: newTrackingNumber,
-        status: 'AU_DEPART', // Ou 'EN_ATTENTE_DE_DEPOT'
-        sender_name: allData.senderName,
-        sender_phone: allData.senderPhone,
-        recipient_name: allData.recipientName,
-        recipient_phone: allData.recipientPhone,
-        departure_point_id: allData.departurePointId,
-        arrival_point_id: allData.arrivalPointId,
-        description: allData.designation,
-        weight: parseFloat(allData.weight),
-        is_fragile: allData.isFragile,
-        is_perishable: allData.isPerishable,
-        is_insured: allData.isInsured,
-        declared_value: allData.isInsured ? parseFloat(allData.declaredValue) : null,
-        shipping_cost: totalPrice,
-        is_paid_at_departure: selectedMethod !== 'recipient',
-        amount_paid: selectedMethod !== 'recipient' ? totalPrice : 0,
-        created_by_user: user.id, // Utiliser l'ID de l'utilisateur authentifié
-      };
-
-      console.log("Données à insérer:", shipmentData);
-      console.log("Utilisateur authentifié:", user.id);
-
-      // 3. Insérer les données dans la table 'shipments' de Supabase
-      const { data, error } = await supabase
-        .from('shipments')
-        .insert(shipmentData)
-        .select();
-
-      // 4. Gérer une éventuelle erreur de la base de données
-      if (error) {
-        console.error("Erreur détaillée Supabase:", error);
-        console.error("Code d'erreur:", error.code);
-        console.error("Message:", error.message);
-        console.error("Détails:", error.details);
-        console.error("Hint:", error.hint);
-        
-        // Messages d'erreur plus explicites selon le type d'erreur
-        let errorMessage = error.message;
-        if (error.code === '42501' || error.message.includes('row-level security')) {
-          errorMessage = "Permissions insuffisantes. Veuillez vous assurer d'être connecté avec un compte autorisé.";
-        } else if (error.code === '23503') {
-          errorMessage = "Erreur de référence : vérifiez que les points de départ et d'arrivée existent.";
-        } else if (error.code === '23505') {
-          errorMessage = "Ce numéro de suivi existe déjà. Veuillez réessayer.";
-        }
-        
-        throw new Error(`Erreur de base de données : ${errorMessage}`);
+      // Messages d'erreur plus spécifiques selon le type d'erreur
+      let errorMessage = 'Erreur lors de l\'enregistrement du colis';
+      
+      if (error.code === 'PGRST301') {
+        errorMessage = 'Erreur de permissions. Contactez l\'administrateur.';
+      } else if (error.code === '23505') {
+        errorMessage = 'Ce numéro de suivi existe déjà. Veuillez réessayer.';
+      } else if (error.code === '23503') {
+        errorMessage = 'Erreur de référence des points de relais. Vérifiez les points sélectionnés.';
+      } else {
+        errorMessage = `Erreur de base de données : ${error.message}`;
       }
       
-      if (!data || data.length === 0) {
-        throw new Error("Aucune donnée retournée après l'insertion");
-      }
-      
-      console.log('Colis enregistré avec succès:', data[0]);
-      
-      // ===============================================================
-      // == FIN DE LA LOGIQUE D'ENREGISTREMENT DANS LA BASE DE DONNÉES ==
-      // ===============================================================
-
-      setProcessingStep('Génération du bordereau...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const finalPricing = { 
-        basePrice: allData.basePrice, 
-        travelPrice: allData.travelPrice, 
-        operatorFee, 
-        totalPrice 
-      };
-
-      setPaymentSuccess(true);
-      onPaymentFinalized(finalPricing);
-      
-    }  catch (error: any) { // <-- MODIFICATION APPLIQUÉE ICI
-      console.error("Erreur complète lors de la finalisation :", error);
-      
-      let userMessage = error.message;
-      if (error.message.includes('row-level security')) {
-        userMessage = "Erreur de permissions. Assurez-vous d'être connecté avec un compte autorisé à créer des expéditions.";
-      }
-      
-      alert(`Échec de l'enregistrement du colis : ${userMessage}`);
-      
-      // Réinitialiser en cas d'erreur
-      setIsProcessing(false);
-      setProcessingStep('');
-      setPaymentSuccess(false);
-      setTrackingNumber('');
+      throw new Error(errorMessage);
     }
-  };
+    
+    console.log('Colis enregistré avec succès:', data);
+    
+    setProcessingStep('Génération du bordereau...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const finalPricing = { 
+      basePrice: allData.basePrice, 
+      travelPrice: allData.travelPrice, 
+      operatorFee, 
+      totalPrice 
+    };
+
+    setPaymentSuccess(true);
+    onPaymentFinalized(finalPricing);
+    
+  } catch (error: any) {
+    console.error("Erreur complète lors de la finalisation :", error);
+    
+    let userMessage = error.message;
+    
+    // Gestion spécifique des erreurs courantes
+    if (error.message.includes('row-level security')) {
+      userMessage = "Erreur de permissions. L'utilisateur comptoir n'est pas autorisé à créer des expéditions.";
+    } else if (error.message.includes('Network request failed')) {
+      userMessage = "Problème de connexion réseau. Vérifiez votre connexion internet.";
+    } else if (error.message.includes('JWT')) {
+      userMessage = "Erreur d'authentification. Veuillez rafraîchir la page et réessayer.";
+    }
+    
+    alert(`Échec de l'enregistrement du colis : ${userMessage}`);
+    
+    // Réinitialiser en cas d'erreur
+    setIsProcessing(false);
+    setProcessingStep('');
+    setPaymentSuccess(false);
+    setTrackingNumber('');
+  }
+};
 
 
   // Animation des variantes
@@ -15038,7 +15385,7 @@ const InputField = ({ icon: Icon, id, error, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -15079,7 +15426,7 @@ const SelectField = ({ icon: Icon, id, error, children, ...props }: any) => (
     transition={{ duration: 0.3 }}
     className="group"
   >
-    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
+    <label htmlFor={id} className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 tracking-wider">
       {props.label}
     </label>
     <div className="relative">
@@ -17931,7 +18278,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\register\page\app-build-manifest
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
       "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
       "static/chunks/src_ac86f657._.js",
-      "static/chunks/node_modules_bae3c4b8._.js",
+      "static/chunks/node_modules_f53a599d._.js",
       "static/chunks/src_app_register_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
@@ -18352,13 +18699,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
-================================================================================
-
-{}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 ================================================================================
 
@@ -18371,27 +18711,15 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
-================================================================================
-
-{
-  "node": {},
-  "edge": {},
-  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 ================================================================================
 
 {
   "/_not-found/page": "app/_not-found/page.js",
   "/expedition/page": "app/expedition/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/home/page": "app/home/page.js",
   "/login/page": "app/login/page.js",
-  "/page": "app/page.js"
+  "/page": "app/page.js",
+  "/register/page": "app/register/page.js"
 }
 
 
@@ -18404,6 +18732,24 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
   "middleware": {},
   "sortedMiddleware": [],
   "functions": {}
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {},
+  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
 }
 
 
@@ -19380,6 +19726,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     pointer-events: none;
   }
 
+  .invisible {
+    visibility: hidden;
+  }
+
   .visible {
     visibility: visible;
   }
@@ -19607,6 +19957,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-bottom-2 {
     bottom: calc(var(--spacing) * -2);
+  }
+
+  .-bottom-10 {
+    bottom: calc(var(--spacing) * -10);
   }
 
   .-bottom-32 {
@@ -21301,6 +21655,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @supports (color: color-mix(in lab, red, red)) {
     .bg-black\/60 {
       background-color: color-mix(in oklab, var(--color-black) 60%, transparent);
+    }
+  }
+
+  .bg-black\/80 {
+    background-color: rgba(0, 0, 0, .8);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-black\/80 {
+      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);
     }
   }
 
@@ -23497,16 +23861,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     }
   }
 
-  .shadow-orange-500\/30 {
-    --tw-shadow-color: rgba(254, 110, 0, .3);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .shadow-orange-500\/30 {
-      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-orange-500) 30%, transparent) var(--tw-shadow-alpha), transparent);
-    }
-  }
-
   .outline {
     outline-style: var(--tw-outline-style);
     outline-width: 1px;
@@ -25547,18 +25901,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:border-orange-900\/20 {
-      border-color: rgba(126, 42, 12, .2);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:border-orange-900\/20 {
-        border-color: color-mix(in oklab, var(--color-orange-900) 20%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:border-purple-800 {
       border-color: var(--color-purple-800);
     }
@@ -25998,14 +26340,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:via-black {
-      --tw-gradient-via: var(--color-black);
-      --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
-      --tw-gradient-stops: var(--tw-gradient-via-stops);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:to-amber-400 {
       --tw-gradient-to: var(--color-amber-400);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -26045,13 +26379,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:to-gray-800 {
       --tw-gradient-to: var(--color-gray-800);
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:to-gray-900 {
-      --tw-gradient-to: var(--color-gray-900);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
     }
   }
@@ -28509,38 +28836,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\package.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
-================================================================================
-
-{
-  "pages": {
-    "/_app": []
-  },
-  "devFiles": [],
-  "ampDevFiles": [],
-  "polyfillFiles": [
-    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
-  ],
-  "lowPriorityFiles": [
-    "static/development/_ssgManifest.js",
-    "static/development/_buildManifest.js"
-  ],
-  "rootMainFiles": [
-    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-    "static/chunks/node_modules_next_dist_445d8acf._.js",
-    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-    "static/chunks/_e69f0d32._.js",
-    "static/chunks/_01f48b92._.js"
-  ],
-  "ampFirstPages": []
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
 ================================================================================
 
@@ -28592,28 +28887,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
     ],
-    "/home/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/node_modules_325934f0._.js",
-      "static/chunks/src_aec4d5f4._.js",
-      "static/chunks/src_app_home_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
     "/login/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
@@ -28655,8 +28928,62 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
+    ],
+    "/register/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_8ece2e07._.js",
+      "static/chunks/src_ed325b91._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
+      "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
+      "static/chunks/src_ac86f657._.js",
+      "static/chunks/node_modules_2abc916f._.js",
+      "static/chunks/src_app_register_page_tsx_2e88f23e._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
     ]
   }
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
+================================================================================
+
+{
+  "pages": {
+    "/_app": []
+  },
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [
+    "static/development/_ssgManifest.js",
+    "static/development/_buildManifest.js"
+  ],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+    "static/chunks/node_modules_next_dist_445d8acf._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+    "static/chunks/_e69f0d32._.js",
+    "static/chunks/_01f48b92._.js"
+  ],
+  "ampFirstPages": []
 }
 
 
@@ -28677,9 +29004,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "c270f6715039f124ef08ec4ceecb4eae",
-    "previewModeSigningKey": "7edf6041be37f670be80e8fb29b5e01576cd528b21a5fbff6d7cb6830a54f233",
-    "previewModeEncryptionKey": "9d4651f29933a3a8a2aba0fa8c6e1c2c69332dd5aca9c75dcf86cda51b4d0e4a"
+    "previewModeId": "bcdc382c5c6c00eb350a8d051df71687",
+    "previewModeSigningKey": "0c443bab163e698401ebca3748c647447242b1464ac5a07ba0999b0fcd6f9977",
+    "previewModeEncryptionKey": "bcd447a059209f3d651424205c52d7607bab13ad3691ca234cf0e3dee61ec225"
   }
 }
 

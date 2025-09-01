@@ -1,9 +1,41 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone, MapPin, Calendar, Users, Truck, Camera, Upload } from 'lucide-react';
+import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone, MapPin, Calendar, Users, Truck, Camera, Upload, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+
+// Données des pays et régions
+const countries = {
+  cameroun: {
+    name: 'Cameroun',
+    regions: {
+      'centre': { name: 'Centre', cities: ['Yaoundé', 'Mbalmayo', 'Akonolinga', 'Bafia', 'Ntui', 'Mfou', 'Obala', 'Okola', 'Soa'] },
+      'littoral': { name: 'Littoral', cities: ['Douala', 'Edéa', 'Nkongsamba', 'Yabassi', 'Loum', 'Manjo', 'Mbanga', 'Mouanko'] },
+      'ouest': { name: 'Ouest', cities: ['Bafoussam', 'Dschang', 'Bandjoun', 'Mbouda', 'Bangangté', 'Foumban', 'Kékem'] },
+      'nord-ouest': { name: 'Nord-Ouest', cities: ['Bamenda', 'Kumbo', 'Wum', 'Ndop', 'Mbengwi', 'Bali', 'Bafut'] },
+      'sud-ouest': { name: 'Sud-Ouest', cities: ['Buéa', 'Limbe', 'Kumba', 'Mamfe', 'Tiko', 'Idenau', 'Fontem'] },
+      'adamaoua': { name: 'Adamaoua', cities: ['Ngaoundéré', 'Meiganga', 'Tibati', 'Tignère', 'Banyo', 'Kontcha'] },
+      'nord': { name: 'Nord', cities: ['Garoua', 'Maroua', 'Guider', 'Figuil', 'Poli', 'Rey-Bouba', 'Tcholliré'] },
+      'extreme-nord': { name: 'Extrême-Nord', cities: ['Maroua', 'Mokolo', 'Kousséri', 'Yagoua', 'Mora', 'Waza', 'Kaélé'] },
+      'est': { name: 'Est', cities: ['Bertoua', 'Batouri', 'Abong-Mbang', 'Yokadouma', 'Kenzou', 'Garoua-Boulaï'] },
+      'sud': { name: 'Sud', cities: ['Ebolowa', 'Sangmélima', 'Kribi', 'Ambam', 'Lolodorf', 'Campo', 'Mvangane'] }
+    }
+  },
+  nigeria: {
+    name: 'Nigeria',
+    regions: {
+      'lagos': { name: 'Lagos', cities: ['Lagos', 'Ikeja', 'Epe', 'Ikorodu', 'Badagry', 'Mushin', 'Alimosho'] },
+      'abuja': { name: 'Abuja FCT', cities: ['Abuja', 'Gwagwalada', 'Kuje', 'Abaji', 'Bwari', 'Kwali'] },
+      'kano': { name: 'Kano', cities: ['Kano', 'Wudil', 'Gwarzo', 'Rano', 'Karaye', 'Rimin Gado'] },
+      'rivers': { name: 'Rivers', cities: ['Port Harcourt', 'Obio-Akpor', 'Eleme', 'Ikwerre', 'Oyigbo', 'Okrika'] },
+      'oyo': { name: 'Oyo', cities: ['Ibadan', 'Ogbomoso', 'Oyo', 'Iseyin', 'Saki', 'Igboho', 'Eruwa'] },
+      'kaduna': { name: 'Kaduna', cities: ['Kaduna', 'Zaria', 'Kafanchan', 'Kagoro', 'Zonkwa', 'Makarfi'] },
+      'ogun': { name: 'Ogun', cities: ['Abeokuta', 'Sagamu', 'Ijebu-Ode', 'Ota', 'Ilaro', 'Ayetoro'] },
+      'anambra': { name: 'Anambra', cities: ['Awka', 'Onitsha', 'Nnewi', 'Ekwulobia', 'Agulu', 'Ihiala'] }
+    }
+  }
+};
 
 const Stepper = ({ currentStep, steps }: { currentStep: number, steps: any[] }) => {
   return (
@@ -44,6 +76,42 @@ const InputField = ({ id, label, type = 'text', value, onChange, placeholder, re
   </div>
 );
 
+const SelectField = ({ icon: Icon, id, label, children, ...props }: any) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    className="group space-y-1"
+  >
+    <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+      {label}
+    </label>
+    <div className="relative">
+      <motion.div
+        className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
+        whileHover={{ scale: 1.1 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Icon className="w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
+      </motion.div>
+      <select
+        id={id}
+        {...props}
+        className="w-full pl-10 pr-8 py-2.5 text-sm text-gray-800 border-2 rounded-lg appearance-none transition-all duration-200 
+          bg-white/80 backdrop-blur-sm border-gray-200 focus:border-orange-500
+          focus:ring-2 focus:ring-orange-500/20 focus:bg-white shadow-sm hover:shadow-md cursor-pointer"
+      >
+        {children}
+      </select>
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+    </div>
+  </motion.div>
+);
+
 const FileUploadField = ({ id, label, onChange, required = true, accept = "image/*" }: any) => (
   <div className="space-y-1">
     <label htmlFor={id} className="block text-sm font-medium text-gray-700">{label}</label>
@@ -73,7 +141,9 @@ export default function RegisterProPage() {
     // Identification
     manager_name: '', email: '', password: '', confirmPassword: '',
     // Coordonnées
-    phone_number: '', birth_date: '', nationality: '', home_address: '', home_address_locality: '', 
+    phone_number: '', birth_date: '', 
+    country: '', region: '', city: '', // Remplace nationality
+    home_address: '', home_address_locality: '', 
     id_card_number: '', niu: '',
     // Point Relais (Freelance/Agence)
     relay_point_name: '', relay_point_address: '', relay_point_locality: '', opening_hours: '', storage_capacity: 'Petit',
@@ -81,6 +151,26 @@ export default function RegisterProPage() {
     vehicle_type: '', vehicle_brand: '', vehicle_registration: '', vehicle_color: '', trunk_dimensions: '',
     driving_license_front: null, driving_license_back: null, accident_history: ''
   });
+
+  // Effets pour gérer la réinitialisation des sélecteurs dépendants
+  useEffect(() => {
+    if (formData.country) {
+      const countryData = countries[formData.country as keyof typeof countries];
+      if (countryData && !countryData.regions.hasOwnProperty(formData.region)) {
+        setFormData(prev => ({ ...prev, region: '', city: '' }));
+      }
+    }
+  }, [formData.country]);
+
+  useEffect(() => {
+    if (formData.country && formData.region) {
+      const countryData = countries[formData.country as keyof typeof countries];
+      const regionData = (countryData?.regions as any)?.[formData.region];
+      if (regionData && !regionData.cities.includes(formData.city)) {
+        setFormData(prev => ({ ...prev, city: '' }));
+      }
+    }
+  }, [formData.country, formData.region]);
 
   // Définir les étapes selon le type de compte
   const getStepsForAccountType = (type: string | null) => {
@@ -180,7 +270,6 @@ export default function RegisterProPage() {
         manager_name: formData.manager_name.trim(),
         phone_number: formData.phone_number.trim(),
         birth_date: formData.birth_date || null,
-        nationality: formData.nationality?.trim() || null,
         home_address: formData.home_address?.trim() || null,
         id_card_number: formData.id_card_number?.trim() || null,
         relay_point_name: formData.relay_point_name?.trim() || null,
@@ -268,6 +357,7 @@ export default function RegisterProPage() {
           <h3 className="text-xl font-bold mb-4">Informations d'identification</h3>
           <InputField id="manager_name" label="Nom et Prénoms" value={formData.manager_name} onChange={handleChange} placeholder="Ex: Mballa Joseph" icon={User} />
           <InputField id="email" label="Adresse Email" type="email" value={formData.email} onChange={handleChange} placeholder="contact@exemple.com" icon={Mail} />
+          <InputField id="phone_number" label="Numéro de téléphone" type="tel" value={formData.phone_number} onChange={handleChange} placeholder="Ex: 6XX XXX XXX" icon={Phone} />
           <InputField id="password" label="Mot de passe" type="password" value={formData.password} onChange={handleChange} placeholder="••••••••" icon={Lock} />
           <InputField id="confirmPassword" label="Confirmer le mot de passe" type="password" value={formData.confirmPassword} onChange={handleChange} placeholder="••••••••" icon={Lock} />
         </motion.form>
@@ -295,9 +385,56 @@ export default function RegisterProPage() {
         return (
           <motion.form initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} onSubmit={(e) => { e.preventDefault(); handleNextStep(); }} className="space-y-4">
             <h3 className="text-xl font-bold mb-4">Coordonnées et informations</h3>
-            <InputField id="phone_number" label="Numéro de téléphone" type="tel" value={formData.phone_number} onChange={handleChange} placeholder="Ex: 6XX XXX XXX" icon={Phone} />
-            <InputField id="birth_date" label="Date de naissance" type="date" value={formData.birth_date} onChange={handleChange} icon={Calendar} />
-            <InputField id="nationality" label="Nationalité" value={formData.nationality} onChange={handleChange} placeholder="Ex: Camerounaise" />
+            {/* Sélecteurs Pays/Région/Ville */}
+            <SelectField 
+              icon={Globe} 
+              id="country" 
+              name="country"
+              label="Pays" 
+              value={formData.country} 
+              onChange={handleChange}
+              required
+            >
+              <option value="">Sélectionnez un pays</option>
+              {Object.entries(countries).map(([key, country]) => (
+                <option key={key} value={key}>{country.name}</option>
+              ))}
+            </SelectField>
+
+            {formData.country && (
+              <SelectField 
+                icon={MapPin} 
+                id="region" 
+                name="region"
+                label="Région" 
+                value={formData.region} 
+                onChange={handleChange}
+                required
+              >
+                <option value="">Sélectionnez une région</option>
+                {Object.entries(countries[formData.country as keyof typeof countries]?.regions || {}).map(([key, region]) => (
+                  <option key={key} value={key}>{(region as any).name}</option>
+                ))}
+              </SelectField>
+            )}
+
+            {formData.country && formData.region && (
+              <SelectField 
+                icon={Building} 
+                id="city" 
+                name="city"
+                label="Ville" 
+                value={formData.city} 
+                onChange={handleChange}
+                required
+              >
+                <option value="">Sélectionnez une ville</option>
+                {((countries[formData.country as keyof typeof countries]?.regions as any)?.[formData.region]?.cities || []).map((city: string) => (
+                  <option key={city} value={city}>{city}</option>
+                ))}
+              </SelectField>
+            )}
+
             <InputField id="home_address" label="Adresse personnelle" value={formData.home_address} onChange={handleChange} placeholder="Ex: Quartier Bastos, Yaoundé" icon={MapPin} />
             <InputField id="home_address_locality" label="Lieu dit de l'adresse" value={formData.home_address_locality} onChange={handleChange} placeholder="Ex: Face Pharmacie du Rond Point" />
             <InputField id="id_card_number" label="Numéro CNI" value={formData.id_card_number} onChange={handleChange} placeholder="Ex: 123456789" />
@@ -392,6 +529,9 @@ export default function RegisterProPage() {
             <p><strong>Nom :</strong> {formData.manager_name}</p>
             <p><strong>Email :</strong> {formData.email}</p>
             <p><strong>Téléphone :</strong> {formData.phone_number}</p>
+            {formData.country && formData.region && formData.city && (
+              <p><strong>Localisation :</strong> {formData.city}, {countries[formData.country as keyof typeof countries]?.regions?.[formData.region as keyof typeof countries[keyof typeof countries]['regions']]?.name}, {countries[formData.country as keyof typeof countries]?.name}</p>
+            )}
             {accountType === 'LIVREUR' && formData.vehicle_type && (
               <p><strong>Véhicule :</strong> {formData.vehicle_type} - {formData.vehicle_brand}</p>
             )}

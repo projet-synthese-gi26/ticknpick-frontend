@@ -155,31 +155,166 @@ export default function ProfilePage({
   }, []);
 
   const handlePhotoUpload = async (file: File) => {
-    if (!file) return;
+  if (!file) return;
+  
+  // Validation du fichier
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    alert('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.');
+    return;
+  }
+
+  // Vérification de la taille (max 5MB)
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (file.size > maxSize) {
+    alert('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.');
+    return;
+  }
+  
+  setUploadingPhoto(true);
+  
+  try {
+    // Générer un nom de fichier unique
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    const timestamp = Date.now();
+    const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
     
-    setUploadingPhoto(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${profile.id}/profile.${fileExt}`;
-      
-      const { data, error } = await supabase.storage
-        .from('profile-photos')
-        .upload(fileName, file, { upsert: true });
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl(fileName);
-
-      setFormData(prev => ({ ...prev, identity_photo_url: publicUrl }));
-    } catch (error) {
-      console.error('Erreur lors du téléchargement:', error);
-      alert('Erreur lors du téléchargement de la photo');
-    } finally {
-      setUploadingPhoto(false);
+    // Supprimer l'ancienne photo si elle existe
+    if (formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
+      try {
+        const urlParts = formData.identity_photo_url.split('/');
+        const existingFileName = urlParts[urlParts.length - 1];
+        if (existingFileName) {
+          await supabase.storage
+            .from('profile-photos')
+            .remove([`${profile.id}/${existingFileName}`]);
+        }
+      } catch (deleteError) {
+        console.warn('Erreur lors de la suppression de l\'ancienne photo:', deleteError);
+      }
     }
+    
+    // Télécharger le nouveau fichier
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('profile-photos')
+      .upload(fileName, file, { 
+        upsert: true,
+        cacheControl: '3600'
+      });
+
+    if (uploadError) {
+      throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
+    }
+
+    // Obtenir l'URL publique
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile-photos')
+      .getPublicUrl(fileName);
+
+    if (!publicUrl) {
+      throw new Error('Impossible d\'obtenir l\'URL de la photo');
+    }
+
+    // Mettre à jour les données du formulaire
+    setFormData(prev => ({ 
+      ...prev, 
+      identity_photo_url: publicUrl 
+    }));
+
+    // Afficher un message de succès
+    const successMessage = document.createElement('div');
+    successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+    successMessage.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        Photo téléchargée avec succès !
+      </div>
+    `;
+    document.body.appendChild(successMessage);
+    
+    setTimeout(() => {
+      if (successMessage.parentNode) {
+        successMessage.remove();
+      }
+    }, 3000);
+
+  } catch (error: any) {
+    console.error('Erreur lors du téléchargement:', error);
+    
+    // Afficher un message d'erreur
+    const errorMessage = document.createElement('div');
+    errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+    errorMessage.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+        Erreur: ${error.message || 'Erreur lors du téléchargement'}
+      </div>
+    `;
+    document.body.appendChild(errorMessage);
+    
+    setTimeout(() => {
+      if (errorMessage.parentNode) {
+        errorMessage.remove();
+      }
+    }, 5000);
+    
+  } finally {
+    setUploadingPhoto(false);
+    // Réinitialiser l'input file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+};
+
+// Ajoutez cette fonction pour gérer le changement de fichier
+const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (file) {
+    handlePhotoUpload(file);
+  }
+};
+
+// Ajoutez ce composant pour la gestion d'erreur des images
+const ProfileImagePreview = ({ src, alt, className }: {
+  src: string;
+  alt: string;
+  className: string;
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoading(false);
   };
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    setImageError(false);
+  };
+
+  return (
+    <div className="relative w-full h-full">
+      {imageLoading && (
+        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+        </div>
+      )}
+      <img 
+        src={imageError ? '/avatars/default.png' : src}
+        alt={alt}
+        className={`${className} ${imageLoading ? 'invisible' : 'visible'}`}
+        onError={handleImageError}
+        onLoad={handleImageLoad}
+      />
+    </div>
+  );
+};
 
   const handleSaveChanges = async () => {
     setIsLoading(true);
@@ -320,33 +455,57 @@ export default function ProfilePage({
             <div className="text-center flex-shrink-0">
               <div className="relative group">
                 <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
-                  <img 
-                    src={formData.identity_photo_url || '/avatars/default.png'} 
-                    alt="Photo de profil" 
+                  <ProfileImagePreview
+                    src={formData.identity_photo_url || '/avatars/default.png'}
+                    alt="Photo de profil"
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                   />
                   {uploadingPhoto && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
+                        <p className="text-white text-sm font-medium">Téléchargement...</p>
+                      </div>
                     </div>
                   )}
                 </div>
+                
                 {isEditing && (
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12"
-                  >
-                    <Camera className="w-5 h-5"/>
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingPhoto}
+                      className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Changer la photo de profil"
+                    >
+                      {uploadingPhoto ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Camera className="w-5 h-5" />
+                      )}
+                    </button>
+                    
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={handleFileInputChange}
+                      disabled={uploadingPhoto}
+                    />
+                  </>
                 )}
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  accept="image/*"
-                  onChange={(e) => e.target.files?.[0] && handlePhotoUpload(e.target.files[0])}
-                />
+                
+                {/* Tooltip avec les formats supportés */}
+                {isEditing && !uploadingPhoto && (
+                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                    <div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">
+                      Formats: JPG, PNG, WebP (max 5MB)
+                    </div>
+                  </div>
+                )}
               </div>
+              
               <div className="mt-6">
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">
                   {formData.manager_name || 'Nom non renseigné'}
