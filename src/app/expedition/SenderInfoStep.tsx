@@ -195,6 +195,7 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [notificationTimer, setNotificationTimer] = useState<NodeJS.Timeout | null>(null);
   const router = useRouter();
 
   // --- CORRECTION START ---
@@ -218,6 +219,23 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
       }
     }
   }, [formData.senderCountry, formData.senderRegion, formData.senderCity]);
+
+   // Effet pour gérer la disparition automatique de la notification et continuer automatiquement
+  useEffect(() => {
+    if (showNotification) {
+      const timer = setTimeout(() => {
+        setShowNotification(false);
+        // Avancer automatiquement à l'étape suivante après la disparition de la notification
+        onContinue(formData);
+      }, 10000);
+      
+      setNotificationTimer(timer);
+      
+      return () => {
+        if (timer) clearTimeout(timer);
+      };
+    }
+  }, [showNotification, formData, onContinue]);
   // --- CORRECTION END ---
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -240,7 +258,7 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
     return newErrors;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
@@ -253,7 +271,11 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
     if (!currentUser) {
       setShowNotification(true);
       setIsSubmitting(false);
-      setTimeout(() => setShowNotification(false), 10000);
+      // Timeout qui ferme la notification et continue automatiquement après 10 secondes
+      setTimeout(() => {
+        setShowNotification(false);
+        onContinue(formData); // Continue automatiquement
+      }, 10000);
     } else {
       onContinue(formData);
       setIsSubmitting(false);
@@ -291,7 +313,7 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
     <>
       <BreakingNewsNotification isVisible={showNotification} onClose={handleCloseNotification} onRegister={handleRegister} onContinueWithout={handleContinueWithout} />
       
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 dark:from-gray-900 dark:via-black dark:to-gray-900 relative overflow-hidden transition-colors duration-300">
+      <div className="min-h-screen bg-transparent relative overflow-hidden transition-colors duration-300">
         <FloatingIcon delay={0}><Send className="w-16 h-16 absolute top-20 right-20" /></FloatingIcon>
         <FloatingIcon delay={0.5}><Sparkles className="w-12 h-12 absolute top-40 left-10" /></FloatingIcon>
         <FloatingIcon delay={1}><Circle className="w-8 h-8 absolute bottom-40 right-40" /></FloatingIcon>

@@ -392,7 +392,7 @@ export default function ShippingPage() {
           transition={{ duration: 0.5 }}
         >
           <button 
-            onClick={() => router.push('/home')} 
+            onClick={() => router.push('/')} 
             className="mb-2 group flex items-center mx-auto text-orange-600 dark:text-orange-400 text-sm hover:text-orange-700 dark:hover:text-orange-300 transition-colors duration-200"
           >
             <ArrowUturnLeftIcon className="w-4 h-4 mr-1" /> Retour à l'accueil
