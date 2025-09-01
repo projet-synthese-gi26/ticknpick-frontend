@@ -104,6 +104,13 @@ const countries = {
       }
     }
   }
+} as const;
+
+// Add type definitions for better type safety
+type CountryKey = keyof typeof countries;
+type RegionData = {
+  name: string;
+  cities: string[];
 };
 
 const FloatingIcon = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => (
@@ -268,19 +275,18 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
     setIsSubmitting(false);
   };
 
-  const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as keyof typeof countries]?.regions || {} : {};
+  const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as CountryKey]?.regions || {} : {};
   const availableCities = (() => {
     if (formData.recipientCountry && formData.recipientRegion) {
-      const countryData = countries[formData.recipientCountry as keyof typeof countries];
+      const countryData = countries[formData.recipientCountry as CountryKey];
       if (countryData) {
-        // Accès sûr à la région
-        const regionData = (countryData.regions as any)[formData.recipientRegion];
+        // Type-safe access to the region with proper typing
+        const regionData = countryData.regions[formData.recipientRegion as keyof typeof countryData.regions] as RegionData | undefined;
         return regionData?.cities || [];
       }
     }
     return [];
   })();
-  // --- FIN DE LA CORRECTION ---
   
 
   return (
@@ -401,7 +407,7 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                 >
                   <option value="">Sélectionner une région</option>
                   {Object.entries(availableRegions).map(([key, region]) => (
-                    <option key={key} value={key}>{region.name}</option>
+                    <option key={key} value={key}>{(region as RegionData).name}</option>
                   ))}
                 </SelectField>
 
