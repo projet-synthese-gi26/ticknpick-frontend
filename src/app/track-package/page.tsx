@@ -38,6 +38,7 @@ import {
   Route,
 } from 'lucide-react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
+import NavbarHome from '@/components/NavbarHome';
 
 interface TrackingInfo {
   trackingNumber: string;
@@ -347,6 +348,7 @@ const TrackPackagePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 text-slate-800 p-0 font-sans relative overflow-hidden">
+      <NavbarHome />
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <motion.div 

@@ -27,6 +27,7 @@ import PackageInfoStep from './FormulaireColisExpedition';
 import RouteSelectionStep from './RouteExpedition';
 import SignatureStep from './SignatureStep';
 import PaymentStep from './PaymentStepExpedition';
+import NavbarHome from '@/components/NavbarHome';
 
 const EXPEDITION_FORM_STORAGE_KEY = 'expedition_form_in_progress';
 
@@ -383,7 +384,7 @@ export default function ShippingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50 dark:from-gray-900 dark:to-gray-800">
-      <div className="h-12" />
+      <NavbarHome />
       <main className="container mx-auto px-4 py-4">
         <motion.div 
           className="text-center mb-4"

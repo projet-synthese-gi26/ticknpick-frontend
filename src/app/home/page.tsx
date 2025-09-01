@@ -37,38 +37,83 @@ export default function HomePage() {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // --- MODIFIÉ : Hook useEffect pour récupérer les informations complètes de l'utilisateur ---
+  // --- FIX : Hook useEffect pour récupérer les informations avec la même logique que login ---
   useEffect(() => {
     const fetchUserData = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
+        try {
+            console.log('🔍 Vérification de la session...');
+            const { data: { session } } = await supabase.auth.getSession();
 
-        if (!session) {
-            router.push('/login'); // --- Logique de redirection pour utilisateur non connecté ---
-            return;
-        }
+            if (!session) {
+                console.log('❌ Pas de session, redirection vers login');
+                router.push('/');
+                return;
+            }
 
-        // --- On récupère maintenant le nom ET le type de compte ---
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles_pro')
-            .select('manager_name, account_type') 
-            .eq('id', session.user.id)
-            .single();
+            console.log('✅ Session trouvée, ID utilisateur:', session.user.id);
+            console.log('📧 Email utilisateur:', session.user.email);
 
-        if (profileError || !profile) {
-            console.error("Profil PRO introuvable, déconnexion.", profileError);
+            // --- FIX : Même logique que dans page.tsx - essayer 'profiles' d'abord ---
+            console.log('👤 Récupération du profil depuis profiles...');
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('manager_name, account_type, email')
+                .eq('id', session.user.id)
+                .single();
+
+            console.log('📋 Résultat profiles:', { profile, error: profileError });
+
+            let finalProfile = profile;
+            
+            // Si pas trouvé dans 'profiles', essayer 'profiles_pro'
+            if (profileError && profileError.code === 'PGRST116') {
+                console.log('🔄 Profil non trouvé dans profiles, tentative profiles_pro...');
+                const { data: profilePro, error: profileProError } = await supabase
+                    .from('profiles_pro')
+                    .select('manager_name, account_type, email')
+                    .eq('id', session.user.id)
+                    .single();
+                
+                console.log('📋 Résultat profiles_pro:', { profilePro, error: profileProError });
+                
+                if (profileProError || !profilePro) {
+                    console.error("❌ Aucun profil trouvé dans les deux tables");
+                    throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous reconnecter.");
+                }
+                
+                finalProfile = profilePro;
+                console.log('✅ Profil trouvé dans profiles_pro');
+            } else if (profileError) {
+                console.error("❌ Erreur lors de la récupération du profil:", profileError);
+                throw new Error(`Erreur profil: ${profileError.message}`);
+            }
+
+            if (!finalProfile) {
+                throw new Error("Profil introuvable.");
+            }
+
+            console.log('✅ Profil final chargé:', finalProfile.manager_name);
+            console.log('🎭 Type de compte:', finalProfile.account_type);
+            
+            // --- Stockage des informations complètes ---
+            setUser({ 
+                name: finalProfile.manager_name, 
+                email: session.user.email!, 
+                role: finalProfile.account_type.toLowerCase() as UserRole 
+            });
+            
+            setIsVisible(true);
+            
+        } catch (error: any) {
+            console.error('💥 Erreur complète lors du chargement:', error);
+            // En cas d'erreur, déconnecter et rediriger
             await supabase.auth.signOut();
-            router.push('/login');
-            return;
+            router.push('/');
+        } finally {
+            setIsLoading(false);
         }
-        
-        // --- On stocke les informations complètes, en s'assurant que le rôle est en minuscule ---
-        setUser({ 
-            name: profile.manager_name, 
-            email: session.user.email!, 
-            role: profile.account_type.toLowerCase() as UserRole 
-        });
-        setIsVisible(true);
     };
 
     fetchUserData();
@@ -77,6 +122,8 @@ export default function HomePage() {
   // --- NOUVEAU : Logique pour définir dynamiquement le contenu de la page ---
   const pageConfig: PageConfig | null = useMemo(() => {
     if (!user) return null;
+
+    console.log('🎯 Configuration de la page pour le rôle:', user.role);
 
     // Configuration par défaut (Freelance & Agence)
     let config: PageConfig = {
@@ -123,10 +170,28 @@ export default function HomePage() {
   }, [user]);
 
   // Affiche un écran de chargement tant que les données ne sont pas prêtes
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+          <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600">Chargement de votre espace...</p>
+      </div>
+    );
+  }
+
   if (!isVisible || !user || !pageConfig) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+          <div className="text-center">
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">Erreur de chargement</h2>
+              <p className="text-gray-600 mb-4">Impossible de charger votre profil.</p>
+              <button 
+                  onClick={() => router.push('/')}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+              >
+                  Retour à la connexion
+              </button>
+          </div>
       </div>
     );
   }

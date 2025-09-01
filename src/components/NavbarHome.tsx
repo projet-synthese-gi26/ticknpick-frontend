@@ -104,6 +104,13 @@ export default function NavbarHome() {
                 Envoyer un colis
               </Link>
               <Link 
+                href="/track-package" 
+                onClick={() => setIsOpen(false)} 
+                className="text-gray-700 dark:text-gray-300 font-semibold text-lg hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                Envoyer un colis
+              </Link>
+              <Link 
                 href="#how-it-works" 
                 onClick={() => setIsOpen(false)} 
                 className="text-gray-700 dark:text-gray-300 font-semibold text-lg hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
