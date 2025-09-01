@@ -11735,27 +11735,42 @@ interface ExpeditionFormData {
 interface SenderData {
   senderName: string;
   senderPhone: string;
+  senderEmail: string;      // Ajouté
+  senderCountry: string;    // Ajouté
+  senderRegion: string;     // Ajouté
+  senderCity: string;       // Ajouté
   senderAddress: string;
   senderLieuDit: string;
 }
+
+// 2. Mise à jour de l'interface RecipientData
 interface RecipientData {
   recipientName: string;
   recipientPhone: string;
   recipientEmail: string;
+  recipientCountry: string; // Ajouté
+  recipientRegion: string;  // Ajouté
+  recipientCity: string;    // Ajouté
   recipientAddress: string;
   recipientLieuDit: string;
-  recipientGenre: 'homme' | 'femme' | '';
-  recipientAge: string;
+  // Les champs genre et age n'existent pas dans le composant enfant, on les retire pour la cohérence
 }
 interface PackageData {
+  photo: string | null;
   designation: string;
   description: string;
   weight: string;
+  length: string;
+  width: string;
+  height: string;
   isFragile: boolean;
   isPerishable: boolean;
+  isLiquid: boolean;
   isInsured: boolean;
   declaredValue: string;
-  logistics: 'standard' | 'express_24h' | 'express_48h';
+  logistics: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | ''; // Type mis à jour
+  pickup: boolean;
+  delivery: boolean;
 }
 interface RouteData {
   departurePointId: number | null;
@@ -11848,9 +11863,19 @@ export default function ShippingPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [formData, setFormData] = useState<ExpeditionFormData>({
     currentStep: 1,
-    senderData: { senderName: '', senderPhone: '', senderAddress: '', senderLieuDit: '' },
-    recipientData: { recipientName: '', recipientPhone: '', recipientEmail: '', recipientAddress: '', recipientLieuDit: '', recipientGenre: '', recipientAge: '' },
-    packageData: { designation: '', description: '', weight: '', isFragile: false, isPerishable: false, isInsured: false, declaredValue: '', logistics: 'standard' },
+    senderData: { 
+      senderName: '', senderPhone: '', senderAddress: '', senderLieuDit: '',
+      senderEmail: '', senderCountry: '', senderRegion: '', senderCity: ''
+    },
+    recipientData: { 
+      recipientName: '', recipientPhone: '', recipientEmail: '', recipientAddress: '', recipientLieuDit: '',
+      recipientCountry: '', recipientRegion: '', recipientCity: ''
+    },
+    packageData: { 
+      photo: null, designation: '', description: '', weight: '', length: '', width: '', height: '',
+      isFragile: false, isPerishable: false, isLiquid: false, isInsured: false, declaredValue: '', 
+      logistics: '', pickup: false, delivery: false 
+    },
     routeData: { departurePointId: null, arrivalPointId: null, departurePointName: '', arrivalPointName: '', distanceKm: 0 },
     signatureData: { signatureUrl: null },
     pricing: { basePrice: 0, travelPrice: 0, operatorFee: 0, totalPrice: 0 },
@@ -11903,8 +11928,11 @@ export default function ShippingPage() {
             setFormData(prev => ({
               ...prev,
               senderData: {
+                // --- CORRECTION: Préserver les champs par défaut comme le pays tout en remplissant le profil ---
+                ...prev.senderData, 
                 senderName: connectedUser.full_name || '',
                 senderPhone: connectedUser.phone || '',
+                senderEmail: connectedUser.email || '', // Email ajouté
                 senderAddress: connectedUser.address || '',
                 senderLieuDit: connectedUser.lieu_dit || '',
               }
@@ -12282,20 +12310,28 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
   const [showNotification, setShowNotification] = useState(false);
   const router = useRouter();
 
+  // --- CORRECTION START ---
+  // Effet pour réinitialiser la région et la ville si le pays change et que la région n'est plus valide.
   useEffect(() => {
-    const countryData = countries[formData.senderCountry as keyof typeof countries];
-    if (formData.senderCountry && (!countryData || !countryData.regions[formData.senderRegion as keyof typeof countryData.regions])) {
+    if (formData.senderCountry) {
+      const countryData = countries[formData.senderCountry as keyof typeof countries];
+      if (countryData && !countryData.regions.hasOwnProperty(formData.senderRegion)) {
         setFormData(prev => ({ ...prev, senderRegion: '', senderCity: '' }));
+      }
     }
   }, [formData.senderCountry, formData.senderRegion]);
 
+  // Effet pour réinitialiser la ville si la région change et que la ville n'est plus valide.
   useEffect(() => {
-    const countryData = countries[formData.senderCountry as keyof typeof countries];
-    const regionData = countryData?.regions[formData.senderRegion as keyof typeof countryData.regions];
-    if (formData.senderRegion && (!regionData || !regionData.cities.includes(formData.senderCity))) {
+    if (formData.senderCountry && formData.senderRegion) {
+      const countryData = countries[formData.senderCountry as keyof typeof countries];
+      const regionData = (countryData.regions as any)[formData.senderRegion];
+      if (regionData && !regionData.cities.includes(formData.senderCity)) {
         setFormData(prev => ({ ...prev, senderCity: '' }));
+      }
     }
-  }, [formData.senderRegion, formData.senderCity]);
+  }, [formData.senderCountry, formData.senderRegion, formData.senderCity]);
+  // --- CORRECTION END ---
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -12352,8 +12388,18 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
   };
 
   const availableRegions = formData.senderCountry ? countries[formData.senderCountry as keyof typeof countries]?.regions || {} : {};
-  const availableCities = formData.senderCountry && formData.senderRegion ? countries[formData.senderCountry as keyof typeof countries]?.regions[formData.senderRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
-
+  // --- CORRECTION ---
+  const availableCities = (() => {
+    if (formData.senderCountry && formData.senderRegion) {
+        const countryData = countries[formData.senderCountry as keyof typeof countries];
+        if (countryData) {
+            const regionData = (countryData.regions as any)[formData.senderRegion];
+            return regionData?.cities || [];
+        }
+    }
+    return [];
+  })();
+  // --- FIN DE LA CORRECTION ---
   return (
     <>
       <BreakingNewsNotification isVisible={showNotification} onClose={handleCloseNotification} onRegister={handleRegister} onContinueWithout={handleContinueWithout} />
@@ -12398,7 +12444,7 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
                   </SelectField>
                   <SelectField icon={Navigation} id="senderCity" name="senderCity" value={formData.senderCity} onChange={handleChange} label="Ville" error={errors.senderCity} disabled={!formData.senderRegion}>
                     <option value="">Sélectionner une ville</option>
-                    {availableCities.map((city) => (<option key={city} value={city}>{city}</option>))}
+                    {availableCities.map((city: string) => (<option key={city} value={city}>{city}</option>))}
                   </SelectField>
                 </div>
 
@@ -13181,7 +13227,8 @@ import {
   DocumentTextIcon,
   ClockIcon,
   ShieldCheckIcon,
-  PrinterIcon
+  PrinterIcon,
+  EllipsisHorizontalIcon
 } from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; 
@@ -13221,6 +13268,18 @@ interface PaymentStepProps {
   onBack: () => void;
   onPaymentFinalized: (pricing: {basePrice: number, travelPrice: number, operatorFee: number, totalPrice: number}) => void;
   currentUser: LoggedInUser | null;
+}
+
+// --- CORRECTION : Définition de l'interface pour le sous-composant ---
+interface PaymentOptionProps {
+  id: 'cash' | 'mobile' | 'recipient';
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  fee: number;
+  selected: 'cash' | 'mobile' | 'recipient';
+  setSelected: (id: 'cash' | 'mobile' | 'recipient') => void;
+  badge?: string; // La prop badge est optionnelle
 }
 
 
@@ -13516,7 +13575,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
       setPaymentSuccess(true);
       onPaymentFinalized(finalPricing);
       
-    } catch (error) {
+    }  catch (error: any) { // <-- MODIFICATION APPLIQUÉE ICI
       console.error("Erreur complète lors de la finalisation :", error);
       
       let userMessage = error.message;
@@ -14087,8 +14146,8 @@ if (paymentSuccess) {
   );
 };
 
-// Composant PaymentOption modernisé avec support du mode sombre
-const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setSelected, badge }) => (
+
+const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setSelected, badge }: PaymentOptionProps) => (
   <motion.div
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
@@ -14146,7 +14205,7 @@ const PaymentOption = ({ id, label, description, icon: Icon, fee, selected, setS
 );
 
 // Composant SummaryLine modernisé avec support du mode sombre
-const SummaryLine = ({ label, value }) => (
+const SummaryLine = ({ label, value } : { label: string; value: number;}) => (
   <div className="flex justify-between items-center py-2">
     <span className="text-gray-600 dark:text-gray-300 font-medium">{label}</span>
     <span className="font-bold text-gray-900 dark:text-gray-100">{value.toLocaleString()} FCFA</span>
@@ -14922,6 +14981,13 @@ const countries = {
       }
     }
   }
+} as const;
+
+// Add type definitions for better type safety
+type CountryKey = keyof typeof countries;
+type RegionData = {
+  name: string;
+  cities: string[];
 };
 
 const FloatingIcon = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => (
@@ -15017,21 +15083,28 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reset region and city when country changes
+  // --- CORRECTION START ---
+  // Effet pour réinitialiser la région et la ville si le pays change et que la région n'est plus valide.
   useEffect(() => {
-    if (formData.recipientCountry && 
-        (!countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions])) {
-      setFormData(prev => ({ ...prev, recipientRegion: '', recipientCity: '' }));
-    }
-  }, [formData.recipientCountry]);
-
-  // Reset city when region changes
-  useEffect(() => {
-    if (formData.recipientCountry && formData.recipientRegion && 
-        (!countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities.includes(formData.recipientCity))) {
-      setFormData(prev => ({ ...prev, recipientCity: '' }));
+    if (formData.recipientCountry) {
+      const countryData = countries[formData.recipientCountry as keyof typeof countries];
+      if (countryData && !countryData.regions.hasOwnProperty(formData.recipientRegion)) {
+        setFormData(prev => ({ ...prev, recipientRegion: '', recipientCity: '' }));
+      }
     }
   }, [formData.recipientCountry, formData.recipientRegion]);
+
+  // Effet pour réinitialiser la ville si la région change et que la ville n'est plus valide.
+  useEffect(() => {
+    if (formData.recipientCountry && formData.recipientRegion) {
+      const countryData = countries[formData.recipientCountry as keyof typeof countries];
+      const regionData = (countryData.regions as any)[formData.recipientRegion];
+      if (regionData && !regionData.cities.includes(formData.recipientCity)) {
+        setFormData(prev => ({ ...prev, recipientCity: '' }));
+      }
+    }
+  }, [formData.recipientCountry, formData.recipientRegion, formData.recipientCity]);
+  // --- CORRECTION END ---
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -15079,9 +15152,19 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
     setIsSubmitting(false);
   };
 
-  const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as keyof typeof countries]?.regions || {} : {};
-  const availableCities = formData.recipientCountry && formData.recipientRegion ? 
-    countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
+  const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as CountryKey]?.regions || {} : {};
+  const availableCities = (() => {
+    if (formData.recipientCountry && formData.recipientRegion) {
+      const countryData = countries[formData.recipientCountry as CountryKey];
+      if (countryData) {
+        // Type-safe access to the region with proper typing
+        const regionData = countryData.regions[formData.recipientRegion as keyof typeof countryData.regions] as RegionData | undefined;
+        return regionData?.cities || [];
+      }
+    }
+    return [];
+  })();
+  
 
   return (
     <div className="min-h-screen bg-transparent dark:bg-transparent relative overflow-hidden">
@@ -15201,7 +15284,7 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
                 >
                   <option value="">Sélectionner une région</option>
                   {Object.entries(availableRegions).map(([key, region]) => (
-                    <option key={key} value={key}>{region.name}</option>
+                    <option key={key} value={key}>{(region as RegionData).name}</option>
                   ))}
                 </SelectField>
 
@@ -15584,38 +15667,39 @@ export const ProcessingAnimation = () => {
 
     return () => clearInterval(interval);
   }, []);
+  
   const steps = [
     {
       id: 1,
       icon: PrinterIcon,
       title: "Imprimer le bordereau",
       description: "Téléchargez et imprimez le bordereau d'expédition",
-      color: "blue"
+      color: "blue" as const
     },
     {
       id: 2,
       icon: ArchiveBoxIcon,
       title: "Emballer le colis",
       description: "Placez votre article dans un carton adapté",
-      color: "green"
+      color: "green" as const
     },
     {
       id: 3,
       icon: DocumentTextIcon,
       title: "Coller le bordereau",
       description: "Fixez solidement le bordereau sur le colis",
-      color: "purple"
+      color: "purple" as const
     },
     {
       id: 4,
       icon: BuildingOfficeIcon,
       title: "Déposer en agence",
       description: "Apportez votre colis à l'agence de départ",
-      color: "orange"
+      color: "orange" as const
     }
   ];
 
-  const getStepColor = (color) => {
+  const getStepColor = (color: 'blue' | 'green' | 'purple' | 'orange'): string => {
     const colors = {
       blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
       green: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800",
@@ -17812,7 +17896,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\expedition\page\app-build-manife
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/_3e51902c._.js",
+      "static/chunks/_c8166adc._.js",
       "static/chunks/src_86534bfe._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
       "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
@@ -17820,7 +17904,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\expedition\page\app-build-manife
       "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
       "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
       "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_e81f2d82._.js",
+      "static/chunks/node_modules_82e050a8._.js",
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
       "static/chunks/src_app_expedition_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
@@ -17875,7 +17959,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\expedition\page\react-loadable-m
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
       "static/chunks/node_modules_lucide-react_dist_esm_icons_065ff4b3._.js",
       "static/chunks/src_app_emit-package_MapComponent_tsx_be0374e9._.js",
-      "static/chunks/src_app_emit-package_MapComponent_tsx_4d71d30d._.js"
+      "static/chunks/src_app_emit-package_MapComponent_tsx_0d70bdf8._.js"
     ]
   }
 }
@@ -18156,22 +18240,15 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 ================================================================================
 
 {
-  "version": 3,
-  "middleware": {},
-  "sortedMiddleware": [],
-  "functions": {}
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
 }
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
-================================================================================
-
-{}
 
 
 ================================================================================
@@ -18187,14 +18264,21 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 ================================================================================
 
 {
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
+  "version": 3,
+  "middleware": {},
+  "sortedMiddleware": [],
+  "functions": {}
 }
 
 
@@ -19252,6 +19336,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     top: calc(var(--spacing) * 0);
   }
 
+  .top-1 {
+    top: calc(var(--spacing) * 1);
+  }
+
   .top-1\/2 {
     top: 50%;
   }
@@ -19262,6 +19350,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .top-2 {
     top: calc(var(--spacing) * 2);
+  }
+
+  .top-3 {
+    top: calc(var(--spacing) * 3);
   }
 
   .top-3\/4 {
@@ -19344,6 +19436,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     right: calc(var(--spacing) * 0);
   }
 
+  .right-1 {
+    right: calc(var(--spacing) * 1);
+  }
+
   .right-1\/4 {
     right: 25%;
   }
@@ -19396,6 +19492,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     bottom: calc(var(--spacing) * 0);
   }
 
+  .bottom-1 {
+    bottom: calc(var(--spacing) * 1);
+  }
+
   .bottom-1\/4 {
     bottom: 25%;
   }
@@ -19446,6 +19546,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .left-0 {
     left: calc(var(--spacing) * 0);
+  }
+
+  .left-1 {
+    left: calc(var(--spacing) * 1);
   }
 
   .left-1\/2 {
@@ -19605,6 +19709,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-mt-16 {
     margin-top: calc(var(--spacing) * -16);
+  }
+
+  .mt-0 {
+    margin-top: calc(var(--spacing) * 0);
   }
 
   .mt-0\.5 {
@@ -19783,6 +19891,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     aspect-ratio: 1;
   }
 
+  .h-0 {
+    height: calc(var(--spacing) * 0);
+  }
+
   .h-0\.5 {
     height: calc(var(--spacing) * .5);
   }
@@ -19942,6 +20054,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .w-0 {
     width: calc(var(--spacing) * 0);
+  }
+
+  .w-1 {
+    width: calc(var(--spacing) * 1);
   }
 
   .w-1\.5 {
@@ -20124,6 +20240,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     flex: 1;
   }
 
+  .flex-shrink {
+    flex-shrink: 1;
+  }
+
   .flex-shrink-0, .shrink-0 {
     flex-shrink: 0;
   }
@@ -20132,8 +20252,17 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     flex-grow: 1;
   }
 
+  .border-collapse {
+    border-collapse: collapse;
+  }
+
   .origin-left {
     transform-origin: 0;
+  }
+
+  .-translate-x-1 {
+    --tw-translate-x: calc(var(--spacing) * -1);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
   .-translate-x-1\/2 {
@@ -20153,6 +20282,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .translate-x-full {
     --tw-translate-x: 100%;
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  .-translate-y-1 {
+    --tw-translate-y: calc(var(--spacing) * -1);
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -20234,6 +20368,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .touch-none {
     touch-action: none;
+  }
+
+  .resize {
+    resize: both;
   }
 
   .resize-none {
@@ -20590,6 +20728,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   :where(.space-x-6 > :not(:last-child)):is(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
     margin-right: calc(calc(var(--spacing) * 6) * var(--tw-space-x-reverse));
     margin-left: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-x-reverse)));
+  }
+
+  .gap-y-1 {
+    row-gap: calc(var(--spacing) * 1);
   }
 
   .gap-y-1\.5 {
@@ -20975,6 +21117,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     background-color: var(--color-amber-100);
   }
 
+  .bg-amber-200 {
+    background-color: var(--color-amber-200);
+  }
+
   .bg-amber-200\/30 {
     background-color: rgba(254, 230, 133, .3);
   }
@@ -21071,6 +21217,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .bg-blue-600 {
     background-color: var(--color-blue-600);
+  }
+
+  .bg-emerald-50 {
+    background-color: var(--color-emerald-50);
   }
 
   .bg-emerald-50\/30 {
@@ -21305,6 +21455,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     background-color: var(--color-red-600);
   }
 
+  .bg-sky-50 {
+    background-color: var(--color-sky-50);
+  }
+
   .bg-sky-50\/80 {
     background-color: rgba(240, 249, 255, .8);
   }
@@ -21313,6 +21467,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     .bg-sky-50\/80 {
       background-color: color-mix(in oklab, var(--color-sky-50) 80%, transparent);
     }
+  }
+
+  .bg-sky-500 {
+    background-color: var(--color-sky-500);
   }
 
   .bg-sky-500\/70 {
@@ -21480,6 +21638,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .from-black {
+    --tw-gradient-from: var(--color-black);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .from-black\/30 {
     --tw-gradient-from: rgba(0, 0, 0, .3);
   }
@@ -21510,6 +21673,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .from-blue-50 {
     --tw-gradient-from: var(--color-blue-50);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-blue-200 {
+    --tw-gradient-from: var(--color-blue-200);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -21601,6 +21769,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .from-green-200 {
+    --tw-gradient-from: var(--color-green-200);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .from-green-200\/20 {
     --tw-gradient-from: rgba(185, 248, 207, .2);
   }
@@ -21681,6 +21854,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .from-orange-600 {
     --tw-gradient-from: var(--color-orange-600);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-purple-200 {
+    --tw-gradient-from: var(--color-purple-200);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -21973,6 +22151,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-emerald-300 {
+    --tw-gradient-to: var(--color-emerald-300);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .to-emerald-300\/20 {
     --tw-gradient-to: rgba(94, 233, 181, .2);
   }
@@ -22096,6 +22279,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-pink-300 {
+    --tw-gradient-to: var(--color-pink-300);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .to-pink-300\/15 {
     --tw-gradient-to: rgba(253, 165, 213, .15);
   }
@@ -22122,6 +22310,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .to-red-600 {
     --tw-gradient-to: var(--color-red-600);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-sky-300 {
+    --tw-gradient-to: var(--color-sky-300);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -22290,6 +22483,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     padding-inline: calc(var(--spacing) * 10);
   }
 
+  .py-0 {
+    padding-block: calc(var(--spacing) * 0);
+  }
+
   .py-0\.5 {
     padding-block: calc(var(--spacing) * .5);
   }
@@ -22340,6 +22537,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .py-20 {
     padding-block: calc(var(--spacing) * 20);
+  }
+
+  .pt-0 {
+    padding-top: calc(var(--spacing) * 0);
   }
 
   .pt-0\.5 {
@@ -22594,6 +22795,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     color: var(--color-blue-200);
   }
 
+  .text-blue-300 {
+    color: var(--color-blue-300);
+  }
+
   .text-blue-300\/30 {
     color: rgba(144, 197, 255, .3);
   }
@@ -22618,6 +22823,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .text-blue-800 {
     color: var(--color-blue-800);
+  }
+
+  .text-emerald-300 {
+    color: var(--color-emerald-300);
   }
 
   .text-emerald-300\/25 {
@@ -22688,6 +22897,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .text-green-200 {
     color: var(--color-green-200);
+  }
+
+  .text-green-300 {
+    color: var(--color-green-300);
   }
 
   .text-green-300\/30 {
@@ -22895,6 +23108,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     color: var(--color-gray-500);
   }
 
+  .placeholder-white::placeholder {
+    color: var(--color-white);
+  }
+
   .placeholder-white\/70::placeholder {
     color: rgba(255, 255, 255, .7);
   }
@@ -22975,6 +23192,28 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .shadow-emerald-500 {
+    --tw-shadow-color: #00bb7f;
+  }
+
+  @supports (color: color(display-p3 0 0 0)) {
+    .shadow-emerald-500 {
+      --tw-shadow-color: color(display-p3 .267113 .726847 .508397);
+    }
+  }
+
+  @supports (color: lab(0% 0 0)) {
+    .shadow-emerald-500 {
+      --tw-shadow-color: lab(66.9756% -58.27 19.5419);
+    }
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-emerald-500 {
+      --tw-shadow-color: color-mix(in oklab, var(--color-emerald-500) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
   .shadow-emerald-500\/30 {
     --tw-shadow-color: rgba(0, 187, 127, .3);
   }
@@ -22982,6 +23221,28 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @supports (color: color-mix(in lab, red, red)) {
     .shadow-emerald-500\/30 {
       --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-emerald-500) 30%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
+  .shadow-green-200 {
+    --tw-shadow-color: #b9f8cf;
+  }
+
+  @supports (color: color(display-p3 0 0 0)) {
+    .shadow-green-200 {
+      --tw-shadow-color: color(display-p3 .776442 .964383 .823412);
+    }
+  }
+
+  @supports (color: lab(0% 0 0)) {
+    .shadow-green-200 {
+      --tw-shadow-color: lab(92.4222% -26.4702 12.9427);
+    }
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-green-200 {
+      --tw-shadow-color: color-mix(in oklab, var(--color-green-200) var(--tw-shadow-alpha), transparent);
     }
   }
 
@@ -22995,6 +23256,28 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     }
   }
 
+  .shadow-green-400 {
+    --tw-shadow-color: #05df72;
+  }
+
+  @supports (color: color(display-p3 0 0 0)) {
+    .shadow-green-400 {
+      --tw-shadow-color: color(display-p3 .399536 .862346 .49324);
+    }
+  }
+
+  @supports (color: lab(0% 0 0)) {
+    .shadow-green-400 {
+      --tw-shadow-color: lab(78.503% -64.9265 39.7492);
+    }
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-green-400 {
+      --tw-shadow-color: color-mix(in oklab, var(--color-green-400) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
   .shadow-green-400\/50 {
     --tw-shadow-color: rgba(5, 223, 114, .5);
   }
@@ -23002,6 +23285,28 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @supports (color: color-mix(in lab, red, red)) {
     .shadow-green-400\/50 {
       --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-green-400) 50%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
+  .shadow-green-500 {
+    --tw-shadow-color: #00c758;
+  }
+
+  @supports (color: color(display-p3 0 0 0)) {
+    .shadow-green-500 {
+      --tw-shadow-color: color(display-p3 .308734 .774754 .374307);
+    }
+  }
+
+  @supports (color: lab(0% 0 0)) {
+    .shadow-green-500 {
+      --tw-shadow-color: lab(70.5521% -66.5147 45.8072);
+    }
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-green-500 {
+      --tw-shadow-color: color-mix(in oklab, var(--color-green-500) var(--tw-shadow-alpha), transparent);
     }
   }
 
@@ -23022,6 +23327,28 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @supports (color: color-mix(in lab, red, red)) {
     .shadow-green-500\/30 {
       --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-green-500) 30%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
+  .shadow-orange-500 {
+    --tw-shadow-color: #fe6e00;
+  }
+
+  @supports (color: color(display-p3 0 0 0)) {
+    .shadow-orange-500 {
+      --tw-shadow-color: color(display-p3 .946589 .449788 .0757345);
+    }
+  }
+
+  @supports (color: lab(0% 0 0)) {
+    .shadow-orange-500 {
+      --tw-shadow-color: lab(64.272% 57.1788 90.3583);
+    }
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-orange-500 {
+      --tw-shadow-color: color-mix(in oklab, var(--color-orange-500) var(--tw-shadow-alpha), transparent);
     }
   }
 
@@ -23092,6 +23419,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
   }
 
+  .filter {
+    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
+  }
+
   .backdrop-blur-lg {
     --tw-backdrop-blur: blur(var(--blur-lg));
     -webkit-backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
@@ -23112,6 +23443,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .backdrop-blur-xl {
     --tw-backdrop-blur: blur(var(--blur-xl));
+    -webkit-backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+    backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+  }
+
+  .backdrop-filter {
     -webkit-backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
     backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
   }
@@ -27902,38 +28238,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\package.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
-================================================================================
-
-{
-  "pages": {
-    "/_app": []
-  },
-  "devFiles": [],
-  "ampDevFiles": [],
-  "polyfillFiles": [
-    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
-  ],
-  "lowPriorityFiles": [
-    "static/development/_ssgManifest.js",
-    "static/development/_buildManifest.js"
-  ],
-  "rootMainFiles": [
-    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-    "static/chunks/node_modules_next_dist_445d8acf._.js",
-    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-    "static/chunks/_e69f0d32._.js",
-    "static/chunks/_01f48b92._.js"
-  ],
-  "ampFirstPages": []
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
 ================================================================================
 
@@ -27964,7 +28268,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/_3e51902c._.js",
+      "static/chunks/_c8166adc._.js",
       "static/chunks/src_86534bfe._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
       "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
@@ -27972,7 +28276,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
       "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
       "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_e81f2d82._.js",
+      "static/chunks/node_modules_82e050a8._.js",
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
       "static/chunks/src_app_expedition_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
@@ -28006,6 +28310,38 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/_01f48b92._.js"
     ]
   }
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
+================================================================================
+
+{
+  "pages": {
+    "/_app": []
+  },
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [
+    "static/development/_ssgManifest.js",
+    "static/development/_buildManifest.js"
+  ],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+    "static/chunks/node_modules_next_dist_445d8acf._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+    "static/chunks/_e69f0d32._.js",
+    "static/chunks/_01f48b92._.js"
+  ],
+  "ampFirstPages": []
 }
 
 

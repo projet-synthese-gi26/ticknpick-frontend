@@ -20,6 +20,7 @@ import {
   MdDeliveryDining
 } from 'react-icons/md';
 
+// --- Interface de Données Corrigée ---
 interface PackageData {
   photo: string | null;
   designation: string;
@@ -33,7 +34,8 @@ interface PackageData {
   isLiquid: boolean;
   isInsured: boolean;
   declaredValue: string;
-  logistics: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | '';
+  transportMethod: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | ''; // << CORRIGÉ: Renommage de 'logistics'
+  logistics: 'standard' | 'express_48h' | 'express_24h';              // << CORRIGÉ: Nouvelle propriété pour la vitesse
   pickup: boolean;
   delivery: boolean;
 }
@@ -116,6 +118,7 @@ const OptionCard = ({ title, subtitle, icon, additionalCost, isSelected, onClick
 );
 
 export default function PackageRegistration({ initialData = {}, onContinue, onBack }: PackageRegistrationProps) {
+  // << CORRIGÉ: Initialisation de l'état avec la nouvelle structure
   const [packageData, setPackageData] = useState<PackageData>({
     photo: null,
     designation: '',
@@ -129,7 +132,8 @@ export default function PackageRegistration({ initialData = {}, onContinue, onBa
     isLiquid: false,
     isInsured: false,
     declaredValue: '',
-    logistics: '',
+    transportMethod: '',
+    logistics: 'standard',
     pickup: false,
     delivery: false,
     ...initialData

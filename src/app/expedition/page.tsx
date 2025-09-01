@@ -68,6 +68,7 @@ interface RecipientData {
   recipientLieuDit: string;
   // Les champs genre et age n'existent pas dans le composant enfant, on les retire pour la cohérence
 }
+// << CORRIGÉ: Mise à jour de l'interface PackageData >>
 interface PackageData {
   photo: string | null;
   designation: string;
@@ -81,7 +82,8 @@ interface PackageData {
   isLiquid: boolean;
   isInsured: boolean;
   declaredValue: string;
-  logistics: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | ''; // Type mis à jour
+  transportMethod: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | ''; // Renommage
+  logistics: 'standard' | 'express_48h' | 'express_24h';              // Nouveau champ
   pickup: boolean;
   delivery: boolean;
 }
@@ -178,16 +180,18 @@ export default function ShippingPage() {
     currentStep: 1,
     senderData: { 
       senderName: '', senderPhone: '', senderAddress: '', senderLieuDit: '',
-      senderEmail: '', senderCountry: '', senderRegion: '', senderCity: ''
+      senderEmail: '', senderCountry: 'cameroun', senderRegion: 'centre', senderCity: 'Yaoundé'
     },
     recipientData: { 
       recipientName: '', recipientPhone: '', recipientEmail: '', recipientAddress: '', recipientLieuDit: '',
-      recipientCountry: '', recipientRegion: '', recipientCity: ''
+      recipientCountry: 'cameroun', recipientRegion: 'centre', recipientCity: 'Yaoundé'
     },
     packageData: { 
       photo: null, designation: '', description: '', weight: '', length: '', width: '', height: '',
       isFragile: false, isPerishable: false, isLiquid: false, isInsured: false, declaredValue: '', 
-      logistics: '', pickup: false, delivery: false 
+      transportMethod: '',
+      logistics: 'standard',
+      pickup: false, delivery: false 
     },
     routeData: { departurePointId: null, arrivalPointId: null, departurePointName: '', arrivalPointName: '', distanceKm: 0 },
     signatureData: { signatureUrl: null },
