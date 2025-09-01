@@ -27,38 +27,39 @@ export const ProcessingAnimation = () => {
 
     return () => clearInterval(interval);
   }, []);
+  
   const steps = [
     {
       id: 1,
       icon: PrinterIcon,
       title: "Imprimer le bordereau",
       description: "Téléchargez et imprimez le bordereau d'expédition",
-      color: "blue"
+      color: "blue" as const
     },
     {
       id: 2,
       icon: ArchiveBoxIcon,
       title: "Emballer le colis",
       description: "Placez votre article dans un carton adapté",
-      color: "green"
+      color: "green" as const
     },
     {
       id: 3,
       icon: DocumentTextIcon,
       title: "Coller le bordereau",
       description: "Fixez solidement le bordereau sur le colis",
-      color: "purple"
+      color: "purple" as const
     },
     {
       id: 4,
       icon: BuildingOfficeIcon,
       title: "Déposer en agence",
       description: "Apportez votre colis à l'agence de départ",
-      color: "orange"
+      color: "orange" as const
     }
   ];
 
-  const getStepColor = (color) => {
+  const getStepColor = (color: 'blue' | 'green' | 'purple' | 'orange'): string => {
     const colors = {
       blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
       green: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800",
