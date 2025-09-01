@@ -48,27 +48,42 @@ interface ExpeditionFormData {
 interface SenderData {
   senderName: string;
   senderPhone: string;
+  senderEmail: string;      // Ajouté
+  senderCountry: string;    // Ajouté
+  senderRegion: string;     // Ajouté
+  senderCity: string;       // Ajouté
   senderAddress: string;
   senderLieuDit: string;
 }
+
+// 2. Mise à jour de l'interface RecipientData
 interface RecipientData {
   recipientName: string;
   recipientPhone: string;
   recipientEmail: string;
+  recipientCountry: string; // Ajouté
+  recipientRegion: string;  // Ajouté
+  recipientCity: string;    // Ajouté
   recipientAddress: string;
   recipientLieuDit: string;
-  recipientGenre: 'homme' | 'femme' | '';
-  recipientAge: string;
+  // Les champs genre et age n'existent pas dans le composant enfant, on les retire pour la cohérence
 }
 interface PackageData {
+  photo: string | null;
   designation: string;
   description: string;
   weight: string;
+  length: string;
+  width: string;
+  height: string;
   isFragile: boolean;
   isPerishable: boolean;
+  isLiquid: boolean;
   isInsured: boolean;
   declaredValue: string;
-  logistics: 'standard' | 'express_24h' | 'express_48h';
+  logistics: 'truck' | 'tricycle' | 'moto' | 'bike' | 'car' | ''; // Type mis à jour
+  pickup: boolean;
+  delivery: boolean;
 }
 interface RouteData {
   departurePointId: number | null;
@@ -161,9 +176,19 @@ export default function ShippingPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [formData, setFormData] = useState<ExpeditionFormData>({
     currentStep: 1,
-    senderData: { senderName: '', senderPhone: '', senderAddress: '', senderLieuDit: '' },
-    recipientData: { recipientName: '', recipientPhone: '', recipientEmail: '', recipientAddress: '', recipientLieuDit: '', recipientGenre: '', recipientAge: '' },
-    packageData: { designation: '', description: '', weight: '', isFragile: false, isPerishable: false, isInsured: false, declaredValue: '', logistics: 'standard' },
+    senderData: { 
+      senderName: '', senderPhone: '', senderAddress: '', senderLieuDit: '',
+      senderEmail: '', senderCountry: '', senderRegion: '', senderCity: ''
+    },
+    recipientData: { 
+      recipientName: '', recipientPhone: '', recipientEmail: '', recipientAddress: '', recipientLieuDit: '',
+      recipientCountry: '', recipientRegion: '', recipientCity: ''
+    },
+    packageData: { 
+      photo: null, designation: '', description: '', weight: '', length: '', width: '', height: '',
+      isFragile: false, isPerishable: false, isLiquid: false, isInsured: false, declaredValue: '', 
+      logistics: '', pickup: false, delivery: false 
+    },
     routeData: { departurePointId: null, arrivalPointId: null, departurePointName: '', arrivalPointName: '', distanceKm: 0 },
     signatureData: { signatureUrl: null },
     pricing: { basePrice: 0, travelPrice: 0, operatorFee: 0, totalPrice: 0 },
