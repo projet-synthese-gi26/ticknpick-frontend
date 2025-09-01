@@ -199,21 +199,28 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reset region and city when country changes
+  // --- CORRECTION START ---
+  // Effet pour réinitialiser la région et la ville si le pays change et que la région n'est plus valide.
   useEffect(() => {
-    if (formData.recipientCountry && 
-        (!countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions])) {
-      setFormData(prev => ({ ...prev, recipientRegion: '', recipientCity: '' }));
-    }
-  }, [formData.recipientCountry]);
-
-  // Reset city when region changes
-  useEffect(() => {
-    if (formData.recipientCountry && formData.recipientRegion && 
-        (!countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities.includes(formData.recipientCity))) {
-      setFormData(prev => ({ ...prev, recipientCity: '' }));
+    if (formData.recipientCountry) {
+      const countryData = countries[formData.recipientCountry as keyof typeof countries];
+      if (countryData && !countryData.regions.hasOwnProperty(formData.recipientRegion)) {
+        setFormData(prev => ({ ...prev, recipientRegion: '', recipientCity: '' }));
+      }
     }
   }, [formData.recipientCountry, formData.recipientRegion]);
+
+  // Effet pour réinitialiser la ville si la région change et que la ville n'est plus valide.
+  useEffect(() => {
+    if (formData.recipientCountry && formData.recipientRegion) {
+      const countryData = countries[formData.recipientCountry as keyof typeof countries];
+      const regionData = (countryData.regions as any)[formData.recipientRegion];
+      if (regionData && !regionData.cities.includes(formData.recipientCity)) {
+        setFormData(prev => ({ ...prev, recipientCity: '' }));
+      }
+    }
+  }, [formData.recipientCountry, formData.recipientRegion, formData.recipientCity]);
+  // --- CORRECTION END ---
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -263,7 +270,7 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
 
   const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as keyof typeof countries]?.regions || {} : {};
   const availableCities = formData.recipientCountry && formData.recipientRegion ? 
-    countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
+  countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
 
   return (
     <div className="min-h-screen bg-transparent dark:bg-transparent relative overflow-hidden">

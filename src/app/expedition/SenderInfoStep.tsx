@@ -197,20 +197,28 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
   const [showNotification, setShowNotification] = useState(false);
   const router = useRouter();
 
+  // --- CORRECTION START ---
+  // Effet pour réinitialiser la région et la ville si le pays change et que la région n'est plus valide.
   useEffect(() => {
-    const countryData = countries[formData.senderCountry as keyof typeof countries];
-    if (formData.senderCountry && (!countryData || !countryData.regions[formData.senderRegion as keyof typeof countryData.regions])) {
+    if (formData.senderCountry) {
+      const countryData = countries[formData.senderCountry as keyof typeof countries];
+      if (countryData && !countryData.regions.hasOwnProperty(formData.senderRegion)) {
         setFormData(prev => ({ ...prev, senderRegion: '', senderCity: '' }));
+      }
     }
   }, [formData.senderCountry, formData.senderRegion]);
 
+  // Effet pour réinitialiser la ville si la région change et que la ville n'est plus valide.
   useEffect(() => {
-    const countryData = countries[formData.senderCountry as keyof typeof countries];
-    const regionData = countryData?.regions[formData.senderRegion as keyof typeof countryData.regions];
-    if (formData.senderRegion && (!regionData || !regionData.cities.includes(formData.senderCity))) {
+    if (formData.senderCountry && formData.senderRegion) {
+      const countryData = countries[formData.senderCountry as keyof typeof countries];
+      const regionData = (countryData.regions as any)[formData.senderRegion];
+      if (regionData && !regionData.cities.includes(formData.senderCity)) {
         setFormData(prev => ({ ...prev, senderCity: '' }));
+      }
     }
-  }, [formData.senderRegion, formData.senderCity]);
+  }, [formData.senderCountry, formData.senderRegion, formData.senderCity]);
+  // --- CORRECTION END ---
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
