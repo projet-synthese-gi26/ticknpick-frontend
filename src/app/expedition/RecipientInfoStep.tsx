@@ -269,8 +269,19 @@ export default function RecipientInfoStep({ initialData, onContinue, onBack }: R
   };
 
   const availableRegions = formData.recipientCountry ? countries[formData.recipientCountry as keyof typeof countries]?.regions || {} : {};
-  const availableCities = formData.recipientCountry && formData.recipientRegion ? 
-  countries[formData.recipientCountry as keyof typeof countries]?.regions[formData.recipientRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
+  const availableCities = (() => {
+    if (formData.recipientCountry && formData.recipientRegion) {
+      const countryData = countries[formData.recipientCountry as keyof typeof countries];
+      if (countryData) {
+        // Accès sûr à la région
+        const regionData = (countryData.regions as any)[formData.recipientRegion];
+        return regionData?.cities || [];
+      }
+    }
+    return [];
+  })();
+  // --- FIN DE LA CORRECTION ---
+  
 
   return (
     <div className="min-h-screen bg-transparent dark:bg-transparent relative overflow-hidden">

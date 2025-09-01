@@ -275,8 +275,18 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
   };
 
   const availableRegions = formData.senderCountry ? countries[formData.senderCountry as keyof typeof countries]?.regions || {} : {};
-  const availableCities = formData.senderCountry && formData.senderRegion ? countries[formData.senderCountry as keyof typeof countries]?.regions[formData.senderRegion as keyof typeof countries.cameroun.regions]?.cities || [] : [];
-
+  // --- CORRECTION ---
+  const availableCities = (() => {
+    if (formData.senderCountry && formData.senderRegion) {
+        const countryData = countries[formData.senderCountry as keyof typeof countries];
+        if (countryData) {
+            const regionData = (countryData.regions as any)[formData.senderRegion];
+            return regionData?.cities || [];
+        }
+    }
+    return [];
+  })();
+  // --- FIN DE LA CORRECTION ---
   return (
     <>
       <BreakingNewsNotification isVisible={showNotification} onClose={handleCloseNotification} onRegister={handleRegister} onContinueWithout={handleContinueWithout} />
