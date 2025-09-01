@@ -5,8 +5,19 @@ import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 
+// Types pour améliorer la sécurité des types
+interface City {
+  name: string;
+  cities: string[];
+}
+
+interface Country {
+  name: string;
+  regions: Record<string, City>;
+}
+
 // Données des pays et régions
-const countries = {
+const countries: Record<string, Country> = {
   cameroun: {
     name: 'Cameroun',
     regions: {
@@ -152,10 +163,32 @@ export default function RegisterProPage() {
     driving_license_front: null, driving_license_back: null, accident_history: ''
   });
 
+  // Fonctions helper pour éviter les erreurs de type
+  const getCountryData = (countryKey: string): Country | null => {
+    return countries[countryKey] || null;
+  };
+
+  const getRegionData = (countryKey: string, regionKey: string): City | null => {
+    const country = getCountryData(countryKey);
+    return country?.regions[regionKey] || null;
+  };
+
+  const getLocationDisplayString = (): string => {
+    const { country, region, city } = formData;
+    if (!country || !region || !city) return '';
+
+    const countryData = getCountryData(country);
+    const regionData = getRegionData(country, region);
+    
+    if (!countryData || !regionData) return '';
+
+    return `${city}, ${regionData.name}, ${countryData.name}`;
+  };
+
   // Effets pour gérer la réinitialisation des sélecteurs dépendants
   useEffect(() => {
     if (formData.country) {
-      const countryData = countries[formData.country as keyof typeof countries];
+      const countryData = getCountryData(formData.country);
       if (countryData && !countryData.regions.hasOwnProperty(formData.region)) {
         setFormData(prev => ({ ...prev, region: '', city: '' }));
       }
@@ -164,8 +197,7 @@ export default function RegisterProPage() {
 
   useEffect(() => {
     if (formData.country && formData.region) {
-      const countryData = countries[formData.country as keyof typeof countries];
-      const regionData = (countryData?.regions as any)?.[formData.region];
+      const regionData = getRegionData(formData.country, formData.region);
       if (regionData && !regionData.cities.includes(formData.city)) {
         setFormData(prev => ({ ...prev, city: '' }));
       }
@@ -412,8 +444,8 @@ export default function RegisterProPage() {
                 required
               >
                 <option value="">Sélectionnez une région</option>
-                {Object.entries(countries[formData.country as keyof typeof countries]?.regions || {}).map(([key, region]) => (
-                  <option key={key} value={key}>{(region as any).name}</option>
+                {Object.entries(getCountryData(formData.country)?.regions || {}).map(([key, region]) => (
+                  <option key={key} value={key}>{region.name}</option>
                 ))}
               </SelectField>
             )}
@@ -429,7 +461,7 @@ export default function RegisterProPage() {
                 required
               >
                 <option value="">Sélectionnez une ville</option>
-                {((countries[formData.country as keyof typeof countries]?.regions as any)?.[formData.region]?.cities || []).map((city: string) => (
+                {(getRegionData(formData.country, formData.region)?.cities || []).map((city: string) => (
                   <option key={city} value={city}>{city}</option>
                 ))}
               </SelectField>
@@ -529,8 +561,8 @@ export default function RegisterProPage() {
             <p><strong>Nom :</strong> {formData.manager_name}</p>
             <p><strong>Email :</strong> {formData.email}</p>
             <p><strong>Téléphone :</strong> {formData.phone_number}</p>
-            {formData.country && formData.region && formData.city && (
-              <p><strong>Localisation :</strong> {formData.city}, {countries[formData.country as keyof typeof countries]?.regions?.[formData.region as keyof typeof countries[keyof typeof countries]['regions']]?.name}, {countries[formData.country as keyof typeof countries]?.name}</p>
+            {getLocationDisplayString() && (
+              <p><strong>Localisation :</strong> {getLocationDisplayString()}</p>
             )}
             {accountType === 'LIVREUR' && formData.vehicle_type && (
               <p><strong>Véhicule :</strong> {formData.vehicle_type} - {formData.vehicle_brand}</p>
