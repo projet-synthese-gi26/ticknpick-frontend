@@ -2,11 +2,22 @@
 'use client';
 import React from 'react';
 import { supabase } from '@/lib/supabase';
-import ProProfile  from './page';
 import { CreditCard, Lock, Shield, ArrowRight, Building } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-export default function SettingsPage({ profile, onUpdate }: { profile: ProProfile, onUpdate: () => void }) {
+// Define the profile type interface
+interface ProProfile {
+    id: string;
+    account_type: 'FREELANCE' | 'AGENCY';
+    // Add other profile properties as needed
+}
+
+interface SettingsPageProps {
+    profile: ProProfile;
+    onUpdate: () => void;
+}
+
+export default function SettingsPage({ profile, onUpdate }: SettingsPageProps) {
     const router = useRouter();
 
     const handleUpgradeToAgency = async () => {
