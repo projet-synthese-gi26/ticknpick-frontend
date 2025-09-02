@@ -23,18 +23,23 @@ import SettingsPage from './Settings';
 
 // --- Type du profil utilisateur (unifié pour tous) ---
 // --- Type du profil utilisateur (unifié pour tous) ---
+
+// --- Type du profil utilisateur (unifié pour tous) ---
 export interface UserProfile {
   id: string;
   account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
   manager_name: string | null;
   email?: string | null;
   
-  // Propriétés ajoutées pour résoudre l'erreur TypeScript
-  name?: string | null;
-  role?: string | null;
+  // Properties required by child components
+  name: string | null;
+  role: string | null;
   
   [key: string]: any;
 }
+
+
+
 interface NavItem {
   id: string;
   label: string;
