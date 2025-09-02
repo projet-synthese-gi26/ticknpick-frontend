@@ -8129,397 +8129,436 @@ export const INITIAL_MAP_ZOOM_FALLBACK: number = 12;
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\page.tsx
 ================================================================================
 
-// FICHIER : src/app/dashboard/page.tsx
 'use client';
 
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- Icônes
+// --- Icônes (importations existantes et nouvelles)
 import {
-  Home, Package, User, LogOut, Bell, Menu, X, Users, Settings, Image as ImageIcon, Briefcase, CreditCard
+  Home, Package, User, LogOut, Menu, X, Users, Settings, Briefcase, Truck,
+  ArrowRightLeft, DollarSign, Bell, Search, Sun, Moon
 } from 'lucide-react';
 
 // --- Import des composants pour chaque onglet ---
-// Nous allons créer/modifier ces fichiers juste après
-import OverviewDashboard from './Overview'; // Vue d'ensemble avec KPIs et graphiques
-import InventoryPage from './Inventaire'; // Existant, sera juste re-stylé
-import PersonnelPage from './Personnel'; // Existant, sera juste re-stylé
-import ProfilePage from './Profil'; // NOUVEAU composant pour gérer les profils
-import ServiceCardPage from './ServiceCard'; // Existant, sera adapté
-import SettingsPage from './Settings'; // NOUVEAU composant
+import OverviewDashboard from './Overview';
+import ClientPackagesPage from './ClientPackages';
+import DeliveryPage from './Deliveries';
+import InventoryPage from './Inventaire';
+import PersonnelPage from './Personnel';
+import ProfilePage from './Profil';
+import ServiceCardPage from './ServiceCard';
+import SettingsPage from './Settings';
 
-// --- Type du profil utilisateur PRO ---
-export interface ProProfile {
-    id: string; // uuid de Supabase auth.users
-    created_at: string;
-    account_type: 'FREELANCE' | 'AGENCY' | 'freelance' | 'agence' | 'client' | 'livreur';
-
-    // Étape 1: Identification Gérant
-    manager_name: string | null;
-    birth_date: string | null; // les dates sont des chaînes en JSON
-    nationality: string | null;
-    home_address: string | null;
-    phone_number: string | null;
-    identity_photo_url: string | null;
-
-    // Étape 2: Infos Admin & Légales
-    id_card_number: string | null;
-    id_card_url: string | null;
-    tax_id: string | null;
-    legal_status: string | null;
-    company_register: string | null;
-
-    // Étape 3: Infos Professionnelles
-    professional_experience: string | null;
-    spoken_languages: string[] | null; // text[] devient string[]
-
-    // Étape 4: Infos Point Relais
-    relay_point_name: string | null;
-    relay_point_address: string | null;
-    relay_point_gps: string | null;
-    relay_point_type: string | null;
-    opening_hours: string | null;
-    storage_capacity: string | null;
-
-    // Étape 5: Infos Financières et autres (JSONB)
-    payment_info: any | null; // jsonb peut être n'importe quel objet
-    
-    // Champs basiques qui peuvent être présents dans 'profiles'
-    email?: string | null;
-    
-    // Pour permettre un accès dynamique si besoin
-    [key: string]: any;
+// --- Type du profil utilisateur (unifié pour tous) ---
+export interface UserProfile {
+  id: string;
+  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
+  manager_name: string | null;
+  email?: string | null;
+  [key: string]: any;
 }
 
-// --- Éléments de navigation ---
-const baseNavItems = [
-  { id: 'overview', label: 'Vue d\'ensemble', icon: Home },
-  { id: 'inventory', label: 'Suivi de Colis', icon: Package },
-  { id: 'profile', label: 'Profil', icon: User },
-  { id: 'service-card', label: 'Carte de Service', icon: Briefcase },
-  { id: 'settings', label: 'Paramètres', icon: Settings },
-];
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  badge?: number;
+}
 
-const agencyNavItem = { id: 'staff', label: 'Personnel', icon: Users };
+// --- Composant Sidebar Moderne ---
+const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen, userProfile }: any) => {
+  const router = useRouter();
 
-// --- Composants UI (Sidebar, Header) ---
-const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen }: any) => {
-    // Le contenu interne de la Sidebar (SidebarContent)
-    const SidebarContent = () => {
-        const router = useRouter();
-        const handleLogout = async () => {
-            await supabase.auth.signOut();
-            localStorage.removeItem('pickndrop_currentUser');
-            router.push('/');
-        };
-        
-        return (
-            <div className="flex flex-col h-full">
-                <div className="px-6 py-6 border-b border-gray-200 flex justify-between items-center">
-                    <div className="flex items-center">
-                        <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-3 rounded-xl mr-3">
-                            <Package className="h-8 w-8 text-white"/>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">PicknDrop</h1>
-                            <p className="text-gray-500 text-sm">PRO Dashboard</p>
-                        </div>
-                    </div>
-                    {isSidebarOpen && <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-800"><X className="h-6 w-6" /></button>}
-                </div>
-                
-                <nav className="mt-6 flex-1 px-4">
-                    <ul className="space-y-2">
-                        {navigationItems.map((item: any) => (
-                          <li key={item.id}>
-                            <button
-                              onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                                activeTab === item.id
-                                  ? 'bg-orange-600 text-white shadow-md'
-                                  : 'text-gray-600 hover:bg-orange-50 hover:text-orange-700'
-                              }`}
-                            >
-                              <item.icon className="h-5 w-5" />
-                              <span>{item.label}</span>
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                </nav>
-                
-                <div className="px-4 py-6 border-t border-gray-200">
-                    <button onClick={handleLogout} className="w-full flex items-center space-x-3 px-4 py-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-200">
-                        <LogOut className="h-5 w-5" />
-                        <span>Déconnexion</span>
-                    </button>
-                </div>
-            </div>
-        );
-    };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
+  };
 
-    return (
-      <>
-        {/* Sidebar pour grands écrans */}
-        <div className="hidden lg:flex w-72 bg-white border-r border-gray-200 flex-col fixed h-full shadow-sm">
-            <SidebarContent />
-        </div>
-        {/* Drawer pour mobile */}
-        <AnimatePresence>
+  const getAccountTypeColor = (type: string) => {
+    switch(type.toLowerCase()) {
+      case 'client': return 'bg-gradient-to-r from-blue-500 to-cyan-500';
+      case 'livreur': return 'bg-gradient-to-r from-green-500 to-emerald-500';
+      case 'agence': return 'bg-gradient-to-r from-purple-500 to-violet-500';
+      case 'freelance': return 'bg-gradient-to-r from-orange-500 to-amber-500';
+      default: return 'bg-gradient-to-r from-orange-500 to-amber-500';
+    }
+  };
+
+  return (
+    <>
+      {/* Overlay pour mobile */}
+      <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="lg:hidden fixed inset-0 z-40"
-          >
-            <div className="absolute inset-0 bg-black/50" onClick={() => setIsSidebarOpen(false)}></div>
-            <motion.div 
-              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="relative z-50 w-72 h-full bg-white shadow-xl">
-              <SidebarContent />
-            </motion.div>
-          </motion.div>
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsSidebarOpen(false)}
+          />
         )}
-        </AnimatePresence>
-      </>
-    );
+      </AnimatePresence>
+
+      {/* Sidebar - Fixed sur toute la hauteur */}
+      <motion.aside 
+        initial={{ x: '-100%' }} 
+        animate={{ 
+          x: isSidebarOpen || (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 0 : '-100%' 
+        }} 
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        className="fixed top-0 left-0 z-50 w-72 h-screen bg-white/95 backdrop-blur-xl border-r border-orange-100 shadow-xl lg:shadow-2xl flex flex-col"
+      >
+        {/* Header Sidebar - Plus compact */}
+        <div className="px-5 py-6 border-b border-orange-100/50 relative overflow-hidden flex-shrink-0">
+          {/* Background Pattern */}
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 opacity-50" />
+          <div className="absolute -top-8 -right-8 w-24 h-24 bg-orange-200/30 rounded-full blur-2xl" />
+          
+          <div className="relative flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <div className={`${getAccountTypeColor(userProfile?.account_type || 'freelance')} p-3 rounded-xl shadow-md transform rotate-2 hover:rotate-0 transition-all duration-300`}>
+                <Package className="h-6 w-6 text-white drop-shadow-sm"/>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                  Dashboard
+                </h1>
+                <div className="flex items-center mt-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${getAccountTypeColor(userProfile?.account_type || 'freelance')} mr-2`} />
+                  <p className="text-orange-600 text-xs font-medium capitalize tracking-wide">
+                    {userProfile?.account_type.toLowerCase()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsSidebarOpen(false)} 
+              className="lg:hidden p-2 hover:bg-orange-100 rounded-lg transition-all duration-200 text-orange-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        
+        {/* Navigation - Scrollable */}
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent">
+          {navigationItems.map((item: NavItem, index: number) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <button
+                onClick={() => { 
+                  setActiveTab(item.id); 
+                  setIsSidebarOpen(false); 
+                }}
+                className={`w-full group flex items-center justify-between px-3 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  activeTab === item.id
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
+                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 hover:text-orange-700'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-lg transition-all duration-200 ${
+                    activeTab === item.id 
+                      ? 'bg-white/20' 
+                      : 'bg-orange-100/50 group-hover:bg-orange-200/50'
+                  }`}>
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium text-sm">{item.label}</span>
+                </div>
+                {item.badge && (
+                  <div className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {item.badge}
+                  </div>
+                )}
+              </button>
+            </motion.div>
+          ))}
+        </nav>
+        
+        {/* Footer Sidebar - Plus compact */}
+        <div className="px-4 py-4 border-t border-orange-100/50 bg-gradient-to-r from-orange-50/50 to-amber-50/50 flex-shrink-0">
+          <div className="space-y-2">
+            <button 
+              onClick={() => router.push('/home')} 
+              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 group"
+            >
+              <Home className="h-4 w-4 group-hover:text-orange-600 transition-colors" />
+              <span className="font-medium text-sm">Retour accueil</span>
+            </button>
+            <button 
+              onClick={handleLogout} 
+              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200 group"
+            >
+              <LogOut className="h-4 w-4 group-hover:text-red-600 transition-colors" />
+              <span className="font-medium text-sm">Déconnexion</span>
+            </button>
+          </div>
+          
+          {/* User Info - Plus compact */}
+          <div className="mt-3 p-3 bg-white/60 backdrop-blur-sm rounded-xl border border-orange-100/50">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <User className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-900 truncate">
+                  {userProfile?.manager_name || 'Utilisateur'}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {userProfile?.email || 'email@example.com'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.aside>
+    </>
+  );
 };
 
-const Header = ({ user, setIsSidebarOpen }: any) => (
-  <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 p-4 md:p-6 sticky top-0 z-30">
-    <div className="flex justify-between items-center">
-        <div className="flex items-center">
-            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-gray-600 mr-4">
-                <Menu className="h-6 w-6" />
+// --- Header Moderne - Fixed ---
+const Header = ({ user, setIsSidebarOpen }: any) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  return (
+    <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/90 backdrop-blur-xl shadow-sm border-b border-gray-100 z-30 h-16">
+      <div className="px-4 md:px-6 h-full">
+        <div className="flex justify-between items-center h-full">
+          {/* Left Section */}
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => setIsSidebarOpen(true)} 
+              className="lg:hidden p-2 hover:bg-orange-100 rounded-lg transition-all duration-200 text-orange-600"
+            >
+              <Menu className="h-5 w-5" />
             </button>
+            
             <div>
-                <h2 className="text-xl md:text-3xl font-bold text-gray-900">
-                    Bonjour, {user?.manager_name || 'PRO'} ! 👋
-                </h2>
-                <p className="text-gray-500 text-sm md:text-base mt-1 hidden sm:block">
-                    {user?.account_type?.toLowerCase() === 'freelance' || user?.account_type === 'FREELANCE' 
-                        ? 'Tableau de bord Freelance' 
-                        : user?.account_type?.toLowerCase() === 'agence' || user?.account_type === 'AGENCY'
-                            ? 'Tableau de bord Agence'
-                            : user?.account_type?.toLowerCase() === 'client'
-                                ? 'Tableau de bord Client'
-                                : user?.account_type?.toLowerCase() === 'livreur'
-                                    ? 'Tableau de bord Livreur'
-                                    : 'Tableau de bord PRO'
-                    }
-                </p>
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
+                Bonjour, <span className="bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                  {user?.manager_name || 'Utilisateur'}
+                </span> ! 👋
+              </h2>
+              <p className="text-gray-500 text-xs hidden sm:block">
+                {new Date().toLocaleDateString('fr-FR', { 
+                  weekday: 'long', 
+                  month: 'short', 
+                  day: 'numeric' 
+                })}
+              </p>
             </div>
-        </div>
-        <div className="flex items-center space-x-2 md:space-x-4">
+          </div>
+
+          {/* Right Section */}
+          <div className="flex items-center space-x-2">
+            {/* Search Bar (hidden on small screens) */}
+            <div className="hidden md:flex relative">
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-3 py-1.5 w-48 lg:w-56 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
+              />
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            </div>
+
+            {/* Notifications */}
+            <button className="relative p-2 hover:bg-orange-50 rounded-lg transition-all duration-200 group">
+              <Bell className="h-4 w-4 text-gray-600 group-hover:text-orange-600" />
+              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse" />
+            </button>
+
+            {/* Profile Avatar */}
             <div className="relative">
-                <Bell className="h-6 w-6 text-gray-500 hover:text-gray-700 cursor-pointer transition-colors"/>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center animate-pulse">3</span>
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-500 rounded-lg flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer group">
+                <User className="h-4 w-4 text-white group-hover:scale-110 transition-transform duration-200"/>
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border border-white rounded-full" />
             </div>
-            <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-2 rounded-full shadow-md">
-                <User className="h-6 w-6 text-white"/>
-            </div>
+          </div>
         </div>
+      </div>
+    </header>
+  );
+};
+
+// --- Loading Component ---
+const LoadingScreen = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+    <div className="text-center">
+      <div className="relative mb-6">
+        <div className="w-16 h-16 border-3 border-orange-200 rounded-full animate-spin" />
+        <div className="absolute inset-0 w-16 h-16 border-3 border-t-orange-600 rounded-full animate-spin" />
+        <div className="absolute inset-2 w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center">
+          <Package className="h-6 w-6 text-white animate-pulse" />
+        </div>
+      </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-2">Chargement de votre espace</h3>
+      <p className="text-gray-600 text-sm">Préparation de votre dashboard personnalisé...</p>
+      <div className="mt-4 flex justify-center space-x-1">
+        {[...Array(3)].map((_, i) => (
+          <div
+            key={i}
+            className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
+            style={{ animationDelay: `${i * 0.2}s` }}
+          />
+        ))}
+      </div>
     </div>
-  </header>
+  </div>
 );
 
 // --- COMPOSANT PRINCIPAL ---
-export default function ProDashboard() {
+export default function DashboardSwitcher() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<ProProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [navigationItems, setNavigationItems] = useState(baseNavItems);
 
-  // --- FIX : Fetch des données utilisateur avec la même logique que login/home ---
+  // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
     const fetchUserProfile = async () => {
-      try {
-        setIsLoading(true);
-        console.log('🔍 [Dashboard] Vérification de la session...');
-        
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          console.log('❌ [Dashboard] Pas de session, redirection vers login');
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/');
+        return;
+      }
+
+      let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile) {
+        let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
+        if (!profilePro) {
+          console.error("Aucun profil trouvé.");
+          await supabase.auth.signOut();
           router.push('/');
           return;
         }
-
-        console.log('✅ [Dashboard] Session trouvée, ID utilisateur:', session.user.id);
-
-        // --- FIX : Même logique que dans login et home ---
-        console.log('👤 [Dashboard] Récupération du profil depuis profiles...');
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*') // Récupérer tous les champs
-          .eq('id', session.user.id)
-          .single();
-
-        console.log('📋 [Dashboard] Résultat profiles:', { profile, error: profileError });
-
-        let finalProfile = profile;
-        let fromTable = 'profiles';
-        
-        // Si pas trouvé dans 'profiles', essayer 'profiles_pro'
-        if (profileError && profileError.code === 'PGRST116') {
-          console.log('🔄 [Dashboard] Profil non trouvé dans profiles, tentative profiles_pro...');
-          const { data: profilePro, error: profileProError } = await supabase
-            .from('profiles_pro')
-            .select('*') // Récupérer tous les champs
-            .eq('id', session.user.id)
-            .single();
-          
-          console.log('📋 [Dashboard] Résultat profiles_pro:', { profilePro, error: profileProError });
-          
-          if (profileProError || !profilePro) {
-            console.error("❌ [Dashboard] Aucun profil trouvé dans les deux tables");
-            throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous reconnecter.");
-          }
-          
-          finalProfile = profilePro;
-          fromTable = 'profiles_pro';
-          console.log('✅ [Dashboard] Profil trouvé dans profiles_pro');
-        } else if (profileError) {
-          console.error("❌ [Dashboard] Erreur lors de la récupération du profil:", profileError);
-          throw new Error(`Erreur profil: ${profileError.message}`);
-        }
-
-        if (!finalProfile) {
-          throw new Error("Profil introuvable.");
-        }
-
-        console.log('✅ [Dashboard] Profil final chargé depuis', fromTable, ':', finalProfile.manager_name);
-        console.log('🎭 [Dashboard] Type de compte:', finalProfile.account_type);
-
-        setUserProfile(finalProfile as ProProfile);
-
-        // Définir la navigation en fonction du type de compte
-        const accountType = finalProfile.account_type?.toLowerCase();
-        if (accountType === 'agency' || accountType === 'agence') {
-          const agencyNav = [...baseNavItems];
-          // Insérer 'Personnel' à la 3ème position (index 2)
-          agencyNav.splice(2, 0, agencyNavItem);
-          setNavigationItems(agencyNav);
-          console.log('📋 [Dashboard] Navigation agence configurée');
-        } else {
-          setNavigationItems(baseNavItems);
-          console.log('📋 [Dashboard] Navigation standard configurée');
-        }
-
-      } catch (error: any) {
-        console.error('💥 [Dashboard] Erreur complète lors du chargement:', error);
-        // En cas d'erreur, déconnecter et rediriger
-        await supabase.auth.signOut();
-        localStorage.removeItem('pickndrop_currentUser');
-        router.push('/');
-      } finally {
-        setIsLoading(false);
+        profile = profilePro;
       }
+      setUserProfile(profile as UserProfile);
+      setIsLoading(false);
     };
-
     fetchUserProfile();
   }, [router]);
-  
-  // --- Mettre à jour le profil (passé en props aux enfants) ---
-  const updateUserProfile = async () => {
-    if (!userProfile) return;
-    
-    try {
-      console.log('🔄 [Dashboard] Mise à jour du profil...');
-      
-      // Essayer d'abord profiles, puis profiles_pro
-      let updatedProfile = null;
-      
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userProfile.id)
-        .single();
-      
-      if (profileError && profileError.code === 'PGRST116') {
-        // Essayer profiles_pro
-        const { data: profileProData, error: profileProError } = await supabase
-          .from('profiles_pro')
-          .select('*')
-          .eq('id', userProfile.id)
-          .single();
-        
-        if (profileProData && !profileProError) {
-          updatedProfile = profileProData;
-        }
-      } else if (profileData && !profileError) {
-        updatedProfile = profileData;
-      }
-      
-      if (updatedProfile) {
-        setUserProfile(updatedProfile as ProProfile);
-        console.log('✅ [Dashboard] Profil mis à jour');
-      }
-    } catch (error) {
-      console.error('❌ [Dashboard] Erreur lors de la mise à jour du profil:', error);
-    }
-  };
 
+  // --- Définition dynamique des onglets de navigation ---
+  const navigationItems = useMemo((): NavItem[] => {
+    const accountType = userProfile?.account_type?.toLowerCase();
+    
+    switch (accountType) {
+      case 'client':
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'packages', label: 'Mes Colis', icon: Package, badge: 3 },
+          { id: 'profile', label: 'Mon Profil', icon: User },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+      case 'livreur':
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'deliveries', label: 'Mes Livraisons', icon: Truck, badge: 7 },
+          { id: 'profile', label: 'Mon Profil', icon: User },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+      case 'agence':
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'inventory', label: 'Inventaire Agence', icon: Package },
+          { id: 'staff', label: 'Personnel', icon: Users },
+          { id: 'profile', label: 'Profil Agence', icon: Briefcase },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+      case 'freelance':
+      default: // Freelance et fallback
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'inventory', label: 'Inventaire', icon: Package },
+          { id: 'profile', label: 'Profil Pro', icon: Briefcase },
+          { id: 'service-card', label: 'Carte de Service', icon: User },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+    }
+  }, [userProfile]);
+
+  // S'assurer que l'onglet actif est valide
+  useEffect(() => {
+    if (navigationItems.length > 0 && !navigationItems.find(item => item.id === activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [navigationItems, activeTab]);
+
+  // --- Rendu du contenu de l'onglet actif ---
   const renderContent = () => {
     if (!userProfile) return null;
+    const accountType = userProfile.account_type.toLowerCase();
     
     switch(activeTab) {
-        case 'overview': return <OverviewDashboard />;
-        case 'inventory': return <InventoryPage />;
-        case 'profile': return <ProfilePage profile={userProfile} onUpdate={updateUserProfile} />;
-        case 'service-card': return <ServiceCardPage profile={userProfile} />;
-        case 'settings': return <SettingsPage profile={userProfile} onUpdate={updateUserProfile} />;
-        case 'staff': 
-          const accountType = userProfile.account_type?.toLowerCase();
-          return (accountType === 'agency' || accountType === 'agence') ? <PersonnelPage /> : null;
-        default: return null;
+      case 'overview': return <OverviewDashboard profile={userProfile} />;
+      case 'packages': return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
+      case 'deliveries': return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
+      case 'inventory': return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
+      case 'staff': return accountType === 'agence' ? <PersonnelPage /> : null;
+      case 'service-card': return accountType === 'freelance' ? <ServiceCardPage profile={userProfile} /> : null;
+      case 'profile': return <ProfilePage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
+      case 'settings': return <SettingsPage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
+      default: return <OverviewDashboard profile={userProfile} />;
     }
   };
 
-  if (isLoading) {
-    return (
-     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-       <div className="flex items-center">
-         <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
-         <p className="ml-4 text-lg font-semibold text-gray-700">Chargement de votre espace...</p>
-       </div>
-     </div>
-   );
-  }
-
-  if (!userProfile) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-          <div className="text-center">
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Erreur de chargement</h2>
-              <p className="text-gray-600 mb-4">Impossible de charger votre profil de dashboard.</p>
-              <button 
-                  onClick={() => router.push('/')}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-              >
-                  Retour à la connexion
-              </button>
-          </div>
-      </div>
-    );
+  if (isLoading || !userProfile) {
+    return <LoadingScreen />;
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen flex text-gray-800">
+    <div className="bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/30 min-h-screen">
+      {/* Background Pattern */}
+      <div className="fixed inset-0 opacity-[0.02] pointer-events-none">
+        <div 
+          className="absolute inset-0" 
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f97316' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+          }} 
+        />
+      </div>
+
+      {/* Sidebar fixe */}
       <Sidebar 
         navigationItems={navigationItems}
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         isSidebarOpen={isSidebarOpen} 
-        setIsSidebarOpen={setIsSidebarOpen} 
+        setIsSidebarOpen={setIsSidebarOpen}
+        userProfile={userProfile}
       />
-      <div className="flex-1 flex flex-col lg:ml-72">
+      
+      {/* Main Content Area */}
+      <div className="lg:ml-72 min-h-screen flex flex-col">
+        {/* Header fixe */}
         <Header user={userProfile} setIsSidebarOpen={setIsSidebarOpen} />
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          {renderContent()}
+        
+        {/* Main Content avec padding pour le header fixe */}
+        <main className="flex-1 pt-16">
+          <div className="p-4 md:p-6 lg:p-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="max-w-7xl mx-auto"
+            >
+              {renderContent()}
+            </motion.div>
+          </div>
         </main>
       </div>
     </div>
@@ -10158,76 +10197,33 @@ import { supabase } from '@/lib/supabase';
 import { ProProfile } from './page';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
-import { 
-  Edit, 
-  Save, 
-  Upload, 
-  MapPin, 
-  User, 
-  Building, 
-  Phone, 
-  Mail, 
-  Globe, 
-  Loader2,
-  Camera,
-  Plus,
-  Eye,
-  EyeOff,
-  Calendar,
-  CreditCard,
-  Settings,
-  AlertCircle
-} from 'lucide-react';
-import { useMap } from 'react-leaflet'; 
+import { Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, AlertCircle, Car, Users, Star, Truck, Package, Shield } from 'lucide-react';
+import { useMap } from 'react-leaflet';
 
-// Import dynamique de Leaflet pour éviter les erreurs SSR
-const MapContainer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.MapContainer),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl">
-        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-        <p className="ml-2 text-orange-600">Chargement de la carte...</p>
-      </div>
-    ),
-  }
-);
-
+const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false, loading: () => (<div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl"><Loader2 className="w-8 h-8 text-orange-500 animate-spin" /><p className="ml-2 text-orange-600">Chargement de la carte...</p></div>) });
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
 
-// Composant ProfileMap avec correction d'erreur
 const ProfileMap = ({ position }: { position: [number, number] }) => {
   const [mapInstance, setMapInstance] = useState<any>(null);
-  
   const MapUpdater = () => {
     try {
       const map = useMap();
-      
       useEffect(() => {
         if (map && position && typeof map.setView === 'function') {
           map.setView(position, 15);
           setMapInstance(map);
         }
       }, [map, position]);
-      
       return null;
     } catch (error) {
       console.warn('Erreur avec le hook useMap:', error);
       return null;
     }
   };
-
-  return (
-    <>
-      <MapUpdater />
-      {position && <Marker position={position} />}
-    </>
-  );
+  return (<><MapUpdater />{position && <Marker position={position} />}</>);
 };
 
-// Interface pour les points relais
 interface RelayPoint {
   id: string;
   name: string;
@@ -10237,13 +10233,15 @@ interface RelayPoint {
   created_at: string;
 }
 
-export default function ProfilePage({ 
-  profile, 
-  onUpdate 
-}: { 
-  profile: ProProfile; 
-  onUpdate: () => void; 
-}) {
+interface DeliveryInfo {
+  vehicle_type: string;
+  license_plate: string;
+  vehicle_model: string;
+  affiliated_agency_id?: string;
+  affiliated_agency_name?: string;
+}
+
+export default function ProfilePage({ profile, onUpdate }: { profile: ProProfile; onUpdate: () => void; }) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState(profile);
   const [isLoading, setIsLoading] = useState(false);
@@ -10252,49 +10250,26 @@ export default function ProfilePage({
   const [showAddRelay, setShowAddRelay] = useState(false);
   const [newRelayData, setNewRelayData] = useState({ name: '', address: '' });
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo>({ vehicle_type: '', license_plate: '', vehicle_model: '' });
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Animation des champs au focus
-  const [focusedField, setFocusedField] = useState<string | null>(null);
-
-  // Géolocalisation
   useEffect(() => {
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
-        },
-        (err) => {
-          console.warn("Impossible d'obtenir la localisation:", err.message);
-          // Position par défaut (Maroua, Cameroun)
-          setCurrentLocation([10.5911, 14.3155]);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 600000
-        }
-      );
+      navigator.geolocation.getCurrentPosition((pos) => { setCurrentLocation([pos.coords.latitude, pos.coords.longitude]); }, (err) => { console.warn("Impossible d'obtenir la localisation:", err.message); setCurrentLocation([10.5911, 14.3155]); }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 600000 });
     } else {
       setCurrentLocation([10.5911, 14.3155]);
     }
   }, []);
 
-  // Charger les points relais pour les agences
   useEffect(() => {
-    if (profile.account_type === 'AGENCY') {
-      fetchRelayPoints();
-    }
+    if (profile.account_type === 'AGENCY') fetchRelayPoints();
+    if (profile.account_type === 'DELIVERY') fetchDeliveryInfo();
   }, [profile.account_type]);
 
   const fetchRelayPoints = async () => {
     try {
-      const { data, error } = await supabase
-        .from('relay_points')
-        .select('*')
-        .eq('agency_id', profile.id)
-        .order('created_at', { ascending: false });
-
+      const { data, error } = await supabase.from('relay_points').select('*').eq('agency_id', profile.id).order('created_at', { ascending: false });
       if (error) throw error;
       setRelayPoints(data || []);
     } catch (error) {
@@ -10302,206 +10277,116 @@ export default function ProfilePage({
     }
   };
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const fetchDeliveryInfo = async () => {
+    try {
+      const { data, error } = await supabase.from('delivery_info').select('*, agencies(name)').eq('user_id', profile.id).single();
+      if (error && error.code !== 'PGRST116') throw error;
+      if (data) {
+        setDeliveryInfo({ vehicle_type: data.vehicle_type || '', license_plate: data.license_plate || '', vehicle_model: data.vehicle_model || '', affiliated_agency_id: data.affiliated_agency_id, affiliated_agency_name: data.agencies?.name });
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des infos livreur:', error);
+    }
+  };
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
 
+  const handleDeliveryInfoChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setDeliveryInfo(prev => ({ ...prev, [name]: value }));
+  }, []);
+
   const handlePhotoUpload = async (file: File) => {
-  if (!file) return;
-  
-  // Validation du fichier
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-  if (!allowedTypes.includes(file.type)) {
-    alert('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.');
-    return;
-  }
-
-  // Vérification de la taille (max 5MB)
-  const maxSize = 5 * 1024 * 1024; // 5MB
-  if (file.size > maxSize) {
-    alert('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.');
-    return;
-  }
-  
-  setUploadingPhoto(true);
-  
-  try {
-    // Générer un nom de fichier unique
-    const fileExt = file.name.split('.').pop()?.toLowerCase();
-    const timestamp = Date.now();
-    const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
-    
-    // Supprimer l'ancienne photo si elle existe
-    if (formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
-      try {
-        const urlParts = formData.identity_photo_url.split('/');
-        const existingFileName = urlParts[urlParts.length - 1];
-        if (existingFileName) {
-          await supabase.storage
-            .from('profile-photos')
-            .remove([`${profile.id}/${existingFileName}`]);
-        }
-      } catch (deleteError) {
-        console.warn('Erreur lors de la suppression de l\'ancienne photo:', deleteError);
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) { alert('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.'); return; }
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) { alert('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.'); return; }
+    setUploadingPhoto(true);
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      const timestamp = Date.now();
+      const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
+      if (formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
+        try {
+          const urlParts = formData.identity_photo_url.split('/');
+          const existingFileName = urlParts[urlParts.length - 1];
+          if (existingFileName) await supabase.storage.from('profile-photos').remove([`${profile.id}/${existingFileName}`]);
+        } catch (deleteError) { console.warn('Erreur lors de la suppression de l\'ancienne photo:', deleteError); }
       }
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('profile-photos').upload(fileName, file, { upsert: true, cacheControl: '3600' });
+      if (uploadError) throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
+      const { data: { publicUrl } } = supabase.storage.from('profile-photos').getPublicUrl(fileName);
+      if (!publicUrl) throw new Error('Impossible d\'obtenir l\'URL de la photo');
+      setFormData(prev => ({ ...prev, identity_photo_url: publicUrl }));
+      showToast('Photo téléchargée avec succès !', 'success');
+    } catch (error: any) {
+      console.error('Erreur lors du téléchargement:', error);
+      showToast(`Erreur: ${error.message || 'Erreur lors du téléchargement'}`, 'error');
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-    
-    // Télécharger le nouveau fichier
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('profile-photos')
-      .upload(fileName, file, { 
-        upsert: true,
-        cacheControl: '3600'
-      });
-
-    if (uploadError) {
-      throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
-    }
-
-    // Obtenir l'URL publique
-    const { data: { publicUrl } } = supabase.storage
-      .from('profile-photos')
-      .getPublicUrl(fileName);
-
-    if (!publicUrl) {
-      throw new Error('Impossible d\'obtenir l\'URL de la photo');
-    }
-
-    // Mettre à jour les données du formulaire
-    setFormData(prev => ({ 
-      ...prev, 
-      identity_photo_url: publicUrl 
-    }));
-
-    // Afficher un message de succès
-    const successMessage = document.createElement('div');
-    successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-    successMessage.innerHTML = `
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-        Photo téléchargée avec succès !
-      </div>
-    `;
-    document.body.appendChild(successMessage);
-    
-    setTimeout(() => {
-      if (successMessage.parentNode) {
-        successMessage.remove();
-      }
-    }, 3000);
-
-  } catch (error: any) {
-    console.error('Erreur lors du téléchargement:', error);
-    
-    // Afficher un message d'erreur
-    const errorMessage = document.createElement('div');
-    errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-    errorMessage.innerHTML = `
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-        </svg>
-        Erreur: ${error.message || 'Erreur lors du téléchargement'}
-      </div>
-    `;
-    document.body.appendChild(errorMessage);
-    
-    setTimeout(() => {
-      if (errorMessage.parentNode) {
-        errorMessage.remove();
-      }
-    }, 5000);
-    
-  } finally {
-    setUploadingPhoto(false);
-    // Réinitialiser l'input file
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }
-};
-
-// Ajoutez cette fonction pour gérer le changement de fichier
-const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (file) {
-    handlePhotoUpload(file);
-  }
-};
-
-// Ajoutez ce composant pour la gestion d'erreur des images
-const ProfileImagePreview = ({ src, alt, className }: {
-  src: string;
-  alt: string;
-  className: string;
-}) => {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
-
-  const handleImageError = () => {
-    setImageError(true);
-    setImageLoading(false);
   };
 
-  const handleImageLoad = () => {
-    setImageLoading(false);
-    setImageError(false);
+  const showToast = (message: string, type: 'success' | 'error') => {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
+    toast.innerHTML = `<div class="flex items-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>'}</svg>${message}</div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, type === 'success' ? 3000 : 5000);
   };
 
-  return (
-    <div className="relative w-full h-full">
-      {imageLoading && (
-        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-        </div>
-      )}
-      <img 
-        src={imageError ? '/avatars/default.png' : src}
-        alt={alt}
-        className={`${className} ${imageLoading ? 'invisible' : 'visible'}`}
-        onError={handleImageError}
-        onLoad={handleImageLoad}
-      />
-    </div>
-  );
-};
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) handlePhotoUpload(file);
+  };
+
+  const ProfileImagePreview = ({ src, alt, className }: { src: string; alt: string; className: string; }) => {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoading, setImageLoading] = useState(true);
+    return (
+      <div className="relative w-full h-full">
+        {imageLoading && (<div className="absolute inset-0 bg-gray-100 flex items-center justify-center"><Loader2 className="w-8 h-8 text-orange-500 animate-spin" /></div>)}
+        <img src={imageError ? '/avatars/default.png' : src} alt={alt} className={`${className} ${imageLoading ? 'invisible' : 'visible'}`} onError={() => { setImageError(true); setImageLoading(false); }} onLoad={() => { setImageLoading(false); setImageError(false); }} />
+      </div>
+    );
+  };
 
   const handleSaveChanges = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles_pro')
-        .update({
-          manager_name: formData.manager_name,
-          home_address: formData.home_address,
-          phone_number: formData.phone_number,
-          nationality: formData.nationality,
-          relay_point_name: formData.relay_point_name,
-          relay_point_address: formData.relay_point_address,
-          identity_photo_url: formData.identity_photo_url,
-          current_latitude: currentLocation?.[0],
-          current_longitude: currentLocation?.[1],
-        })
-        .eq('id', profile.id);
-
+      const updateData = {
+        manager_name: formData.manager_name,
+        home_address: formData.home_address,
+        phone_number: formData.phone_number,
+        nationality: formData.nationality,
+        identity_photo_url: formData.identity_photo_url,
+        current_latitude: currentLocation?.[0],
+        current_longitude: currentLocation?.[1],
+      };
+      if (profile.account_type !== 'CLIENT') {
+        updateData.relay_point_name = formData.relay_point_name;
+        updateData.relay_point_address = formData.relay_point_address;
+      }
+      const { error } = await supabase.from('profiles_pro').update(updateData).eq('id', profile.id);
       if (error) throw error;
-      
+      if (profile.account_type === 'DELIVERY') {
+        const { error: deliveryError } = await supabase.from('delivery_info').upsert({
+          user_id: profile.id,
+          vehicle_type: deliveryInfo.vehicle_type,
+          license_plate: deliveryInfo.license_plate,
+          vehicle_model: deliveryInfo.vehicle_model,
+          affiliated_agency_id: deliveryInfo.affiliated_agency_id
+        });
+        if (deliveryError) throw deliveryError;
+      }
       setIsEditing(false);
       onUpdate();
-      
-      // Animation de succès
-      const successToast = document.createElement('div');
-      successToast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-bounce';
-      successToast.textContent = 'Profil mis à jour avec succès !';
-      document.body.appendChild(successToast);
-      
-      setTimeout(() => {
-        successToast.remove();
-      }, 3000);
-      
+      showToast('Profil mis à jour avec succès !', 'success');
     } catch (error: any) {
       alert("Erreur lors de la sauvegarde : " + error.message);
     } finally {
@@ -10510,30 +10395,15 @@ const ProfileImagePreview = ({ src, alt, className }: {
   };
 
   const toggleEdit = () => {
-    if (isEditing) {
-      handleSaveChanges();
-    } else {
-      setIsEditing(true);
-    }
+    if (isEditing) handleSaveChanges();
+    else setIsEditing(true);
   };
 
   const addRelayPoint = async () => {
     if (!newRelayData.name || !newRelayData.address) return;
-    
     try {
-      const { data, error } = await supabase
-        .from('relay_points')
-        .insert({
-          agency_id: profile.id,
-          name: newRelayData.name,
-          address: newRelayData.address,
-          status: 'active'
-        })
-        .select()
-        .single();
-
+      const { data, error } = await supabase.from('relay_points').insert({ agency_id: profile.id, name: newRelayData.name, address: newRelayData.address, status: 'active' }).select().single();
       if (error) throw error;
-      
       setRelayPoints(prev => [data, ...prev]);
       setNewRelayData({ name: '', address: '' });
       setShowAddRelay(false);
@@ -10543,21 +10413,10 @@ const ProfileImagePreview = ({ src, alt, className }: {
   };
 
   const toggleRelayPointStatus = async (relayId: string, currentStatus: string) => {
-    const reason = currentStatus === 'active' ? 
-      prompt('Raison de la désactivation:') : 
-      prompt('Raison de la réactivation:');
-    
+    const reason = currentStatus === 'active' ? prompt('Raison de la désactivation:') : prompt('Raison de la réactivation:');
     if (reason === null) return;
-    
     try {
-      const { error } = await supabase
-        .from('relay_points')
-        .update({
-          status: currentStatus === 'active' ? 'inactive' : 'active',
-          deactivation_reason: reason
-        })
-        .eq('id', relayId);
-
+      const { error } = await supabase.from('relay_points').update({ status: currentStatus === 'active' ? 'inactive' : 'active', deactivation_reason: reason }).eq('id', relayId);
       if (error) throw error;
       fetchRelayPoints();
     } catch (error) {
@@ -10565,233 +10424,225 @@ const ProfileImagePreview = ({ src, alt, className }: {
     }
   };
 
+  const upgradeAccount = async (newType: string) => {
+    if (confirm(`Êtes-vous sûr de vouloir passer à un compte ${newType === 'FREELANCE' ? 'Freelance PRO' : newType === 'DELIVERY' ? 'Livreur' : 'Agence'} ?`)) {
+      try {
+        const { error } = await supabase.from('profiles_pro').update({ account_type: newType }).eq('id', profile.id);
+        if (error) throw error;
+        showToast('Compte mis à niveau avec succès !', 'success');
+        onUpdate();
+      } catch (error: any) {
+        alert('Erreur lors de la mise à niveau : ' + error.message);
+      }
+    }
+  };
+
+  const getAccountTitle = () => {
+    switch (profile.account_type) {
+      case 'CLIENT': return 'Client';
+      case 'DELIVERY': return 'Livreur';
+      case 'FREELANCE': return 'Freelance PRO';
+      case 'AGENCY': return 'Agence';
+      default: return 'Profil';
+    }
+  };
+
+  const AnimatedInputField = ({ label, name, value, onChange, readOnly, icon: Icon, focused, onFocus, onBlur, fullWidth = false, type = 'text', isSelect = false, options = [] }: any) => (
+    <div className={fullWidth ? 'md:col-span-2' : ''}>
+      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+        {Icon && <Icon className="w-4 h-4 text-orange-500" />}
+        {label}
+      </label>
+      <div className="relative group">
+        {isSelect ? (
+          <select name={name} value={value || ''} onChange={onChange} onFocus={onFocus} onBlur={onBlur} disabled={readOnly} className={`w-full pl-4 pr-4 py-3 border-2 rounded-xl transition-all duration-300 font-medium ${readOnly ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white border-orange-200 text-gray-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 hover:border-orange-300'} ${focused ? 'transform scale-105 shadow-lg' : 'shadow-sm'} group-hover:shadow-md`}>
+            <option value="">Sélectionner...</option>
+            {options.map((opt: any) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        ) : (
+          <input type={type} name={name} value={value || ''} onChange={onChange} onFocus={onFocus} onBlur={onBlur} readOnly={readOnly} className={`w-full pl-4 pr-4 py-3 border-2 rounded-xl transition-all duration-300 font-medium ${readOnly ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed' : 'bg-white border-orange-200 text-gray-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 hover:border-orange-300'} ${focused ? 'transform scale-105 shadow-lg' : 'shadow-sm'} group-hover:shadow-md`} placeholder={readOnly ? '' : `Saisissez votre ${label.toLowerCase()}`} />
+        )}
+        {!readOnly && (<div className="absolute inset-y-0 right-3 flex items-center pointer-events-none"><Edit className="w-4 h-4 text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" /></div>)}
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8 relative">
-        {/* Header avec bouton d'édition flottant */}
         <div className="relative">
           <div className="absolute top-0 right-0 z-20">
-            <button 
-              onClick={toggleEdit}
-              disabled={isLoading}
-              className={`group flex items-center gap-2 font-bold py-3 px-6 rounded-full text-white shadow-xl transform transition-all duration-500 hover:scale-110 hover:rotate-3 active:scale-95
-              ${isEditing 
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600 animate-pulse shadow-green-500/25' 
-                : 'bg-gradient-to-r from-orange-500 to-amber-600 animate-bounce shadow-orange-500/25'
-              } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {isLoading ? (
-                <><Loader2 className="w-5 h-5 animate-spin"/> Sauvegarde...</>
-              ) : isEditing ? (
-                <><Save className="w-5 h-5 group-hover:rotate-12 transition-transform"/> Sauvegarder</>
-              ) : (
-                <><Edit className="w-5 h-5 group-hover:rotate-12 transition-transform"/> Modifier</>
-              )}
+            <button onClick={toggleEdit} disabled={isLoading} className={`group flex items-center gap-2 font-bold py-3 px-6 rounded-full text-white shadow-xl transform transition-all duration-500 hover:scale-110 hover:rotate-3 active:scale-95 ${isEditing ? 'bg-gradient-to-r from-green-500 to-emerald-600 animate-pulse shadow-green-500/25' : 'bg-gradient-to-r from-orange-500 to-amber-600 animate-bounce shadow-orange-500/25'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+              {isLoading ? (<><Loader2 className="w-5 h-5 animate-spin"/> Sauvegarde...</>) : isEditing ? (<><Save className="w-5 h-5 group-hover:rotate-12 transition-transform"/> Sauvegarder</>) : (<><Edit className="w-5 h-5 group-hover:rotate-12 transition-transform"/> Modifier</>)}
             </button>
           </div>
-
-          {/* Titre principal avec animation */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent mb-2 animate-fadeIn">
-              Mon Profil {profile.account_type === 'AGENCY' ? 'Agence' : 'Freelance'}
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent mb-2">
+              Mon Profil {getAccountTitle()}
             </h1>
-            <p className="text-gray-600 text-lg">
-              Gérez vos informations personnelles et professionnelles
-            </p>
+            <p className="text-gray-600 text-lg">Gérez vos informations personnelles et professionnelles</p>
           </div>
         </div>
 
-        {/* Section principale du profil */}
         <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
           <div className="flex flex-col lg:flex-row items-start gap-8">
-            {/* Photo de profil */}
             <div className="text-center flex-shrink-0">
               <div className="relative group">
                 <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
-                  <ProfileImagePreview
-                    src={formData.identity_photo_url || '/avatars/default.png'}
-                    alt="Photo de profil"
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  {uploadingPhoto && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <div className="text-center">
-                        <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
-                        <p className="text-white text-sm font-medium">Téléchargement...</p>
-                      </div>
-                    </div>
-                  )}
+                  <ProfileImagePreview src={formData.identity_photo_url || '/avatars/default.png'} alt="Photo de profil" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  {uploadingPhoto && (<div className="absolute inset-0 bg-black/50 flex items-center justify-center"><div className="text-center"><Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" /><p className="text-white text-sm font-medium">Téléchargement...</p></div></div>)}
                 </div>
-                
                 {isEditing && (
                   <>
-                    <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingPhoto}
-                      className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Changer la photo de profil"
-                    >
-                      {uploadingPhoto ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Camera className="w-5 h-5" />
-                      )}
+                    <button onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto} className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed" title="Changer la photo de profil">
+                      {uploadingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
                     </button>
-                    
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
-                      onChange={handleFileInputChange}
-                      disabled={uploadingPhoto}
-                    />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={handleFileInputChange} disabled={uploadingPhoto} />
                   </>
                 )}
-                
-                {/* Tooltip avec les formats supportés */}
-                {isEditing && !uploadingPhoto && (
-                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                    <div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">
-                      Formats: JPG, PNG, WebP (max 5MB)
-                    </div>
-                  </div>
-                )}
+                {isEditing && !uploadingPhoto && (<div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"><div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">Formats: JPG, PNG, WebP (max 5MB)</div></div>)}
               </div>
-              
               <div className="mt-6">
-                <h2 className="text-3xl font-bold text-gray-800 mb-2">
-                  {formData.manager_name || 'Nom non renseigné'}
-                </h2>
+                <h2 className="text-3xl font-bold text-gray-800 mb-2">{formData.manager_name || 'Nom non renseigné'}</h2>
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-full text-sm shadow-lg">
                   <Building className="w-4 h-4" />
-                  {profile.account_type === 'AGENCY' ? 'Agence' : 'Freelance'}
+                  {getAccountTitle()}
                 </div>
               </div>
             </div>
-            
-            {/* Informations personnelles */}
             <div className="flex-1">
               <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <User className="w-6 h-6 text-orange-500" />
                 Informations Personnelles
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <AnimatedInputField 
-                  label="Nom Complet" 
-                  name="manager_name" 
-                  value={formData.manager_name} 
-                  onChange={handleChange} 
-                  readOnly={!isEditing} 
-                  icon={User}
-                  focused={focusedField === 'manager_name'}
-                  onFocus={() => setFocusedField('manager_name')}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <AnimatedInputField 
-                  label="Téléphone" 
-                  name="phone_number" 
-                  value={formData.phone_number} 
-                  onChange={handleChange} 
-                  readOnly={!isEditing} 
-                  icon={Phone}
-                  focused={focusedField === 'phone_number'}
-                  onFocus={() => setFocusedField('phone_number')}
-                  onBlur={() => setFocusedField(null)}
-                />
-                <AnimatedInputField 
-                  label="Adresse Domicile" 
-                  name="home_address" 
-                  value={formData.home_address} 
-                  onChange={handleChange} 
-                  readOnly={!isEditing} 
-                  icon={MapPin}
-                  focused={focusedField === 'home_address'}
-                  onFocus={() => setFocusedField('home_address')}
-                  onBlur={() => setFocusedField(null)}
-                  fullWidth
-                />
-                <AnimatedInputField 
-                  label="Nationalité" 
-                  name="nationality" 
-                  value={formData.nationality} 
-                  onChange={handleChange} 
-                  readOnly={!isEditing} 
-                  icon={Globe}
-                  focused={focusedField === 'nationality'}
-                  onFocus={() => setFocusedField('nationality')}
-                  onBlur={() => setFocusedField(null)}
-                />
+                <AnimatedInputField label="Nom Complet" name="manager_name" value={formData.manager_name} onChange={handleChange} readOnly={!isEditing} icon={User} focused={focusedField === 'manager_name'} onFocus={() => setFocusedField('manager_name')} onBlur={() => setFocusedField(null)} />
+                <AnimatedInputField label="Téléphone" name="phone_number" value={formData.phone_number} onChange={handleChange} readOnly={!isEditing} icon={Phone} focused={focusedField === 'phone_number'} onFocus={() => setFocusedField('phone_number')} onBlur={() => setFocusedField(null)} />
+                <AnimatedInputField label="Adresse Domicile" name="home_address" value={formData.home_address} onChange={handleChange} readOnly={!isEditing} icon={MapPin} focused={focusedField === 'home_address'} onFocus={() => setFocusedField('home_address')} onBlur={() => setFocusedField(null)} fullWidth />
+                <AnimatedInputField label="Nationalité" name="nationality" value={formData.nationality} onChange={handleChange} readOnly={!isEditing} icon={Globe} focused={focusedField === 'nationality'} onFocus={() => setFocusedField('nationality')} onBlur={() => setFocusedField(null)} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Section Point Relais Principal */}
-        <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
-          <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <Building className="w-6 h-6 text-orange-500" />
-            {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
-          </h3>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            <div className="space-y-6">
-              <AnimatedInputField 
-                label="Nom du Point Relais" 
-                name="relay_point_name" 
-                value={formData.relay_point_name} 
-                onChange={handleChange} 
-                readOnly={!isEditing} 
-                icon={Building}
-                focused={focusedField === 'relay_point_name'}
-                onFocus={() => setFocusedField('relay_point_name')}
-                onBlur={() => setFocusedField(null)}
-              />
-              <AnimatedInputField 
-                label="Adresse du Point Relais" 
-                name="relay_point_address" 
-                value={formData.relay_point_address} 
-                onChange={handleChange} 
-                readOnly={!isEditing} 
-                icon={MapPin}
-                focused={focusedField === 'relay_point_address'}
-                onFocus={() => setFocusedField('relay_point_address')}
-                onBlur={() => setFocusedField(null)}
-              />
-              
-              {currentLocation && (
-                <div className="flex items-center gap-2 text-sm text-gray-600 bg-orange-50 p-3 rounded-lg">
-                  <MapPin className="w-4 h-4 text-orange-500" />
-                  <span>Localisation actuelle: {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Carte interactive */}
-            <div className="h-80 rounded-2xl overflow-hidden shadow-lg border-2 border-orange-100 hover:border-orange-300 transition-all duration-300">
-              {currentLocation ? (
-                <MapContainer 
-                  center={currentLocation} 
-                  zoom={13} 
-                  style={{ height: '100%', width: '100%' }}
-                  className="z-0"
-                >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <ProfileMap position={currentLocation} />
-                </MapContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50">
-                  <div className="text-center">
-                    <MapPin className="w-12 h-12 text-orange-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Localisation en cours...</p>
-                  </div>
-                </div>
-              )}
+        {profile.account_type !== 'CLIENT' && (
+          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <Building className="w-6 h-6 text-orange-500" />
+              {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
+            </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+              <div className="space-y-6">
+                <AnimatedInputField label="Nom du Point Relais" name="relay_point_name" value={formData.relay_point_name} onChange={handleChange} readOnly={!isEditing} icon={Building} focused={focusedField === 'relay_point_name'} onFocus={() => setFocusedField('relay_point_name')} onBlur={() => setFocusedField(null)} />
+                <AnimatedInputField label="Adresse du Point Relais" name="relay_point_address" value={formData.relay_point_address} onChange={handleChange} readOnly={!isEditing} icon={MapPin} focused={focusedField === 'relay_point_address'} onFocus={() => setFocusedField('relay_point_address')} onBlur={() => setFocusedField(null)} />
+                {currentLocation && (<div className="flex items-center gap-2 text-sm text-gray-600 bg-orange-50 p-3 rounded-lg"><MapPin className="w-4 h-4 text-orange-500" /><span>Localisation actuelle: {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}</span></div>)}
+              </div>
+              <div className="h-80 rounded-2xl overflow-hidden shadow-lg border-2 border-orange-100 hover:border-orange-300 transition-all duration-300">
+                {currentLocation ? (
+                  <MapContainer center={currentLocation} zoom={13} style={{ height: '100%', width: '100%' }} className="z-0">
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <ProfileMap position={currentLocation} />
+                  </MapContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50"><div className="text-center"><MapPin className="w-12 h-12 text-orange-400 mx-auto mb-2" /><p className="text-gray-500">Localisation en cours...</p></div></div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Section Points Relais (Agence uniquement) */}
+        {profile.account_type === 'DELIVERY' && (
+          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <Car className="w-6 h-6 text-orange-500" />
+                Informations Véhicule & Affiliation
+              </h3>
+              <button onClick={() => upgradeAccount('AGENCY')} className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg">
+                <Star className="w-5 h-5" />
+                Devenir Agence
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <AnimatedInputField label="Type de Véhicule" name="vehicle_type" value={deliveryInfo.vehicle_type} onChange={handleDeliveryInfoChange} readOnly={!isEditing} icon={Truck} isSelect options={[{ value: 'moto', label: 'Moto' }, { value: 'voiture', label: 'Voiture' }, { value: 'camionnette', label: 'Camionnette' }, { value: 'camion', label: 'Camion' }]} />
+              <AnimatedInputField label="Plaque d'Immatriculation" name="license_plate" value={deliveryInfo.license_plate} onChange={handleDeliveryInfoChange} readOnly={!isEditing} icon={CreditCard} />
+              <AnimatedInputField label="Modèle du Véhicule" name="vehicle_model" value={deliveryInfo.vehicle_model} onChange={handleDeliveryInfoChange} readOnly={!isEditing} icon={Car} />
+              {deliveryInfo.affiliated_agency_name && (<div className="bg-blue-50 p-4 rounded-xl border border-blue-200"><h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Building className="w-4 h-4" />Agence d'Affiliation</h4><p className="text-blue-700">{deliveryInfo.affiliated_agency_name}</p></div>)}
+            </div>
+          </div>
+        )}
+
+        {profile.account_type === 'CLIENT' && (
+          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <Star className="w-6 h-6 text-orange-500" />
+              Évolution de Compte
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-200 hover:border-blue-400 transition-all duration-300">
+                <div className="flex items-center gap-3 mb-4">
+                  <Package className="w-8 h-8 text-blue-500" />
+                  <h4 className="text-xl font-bold text-blue-800">Freelance PRO</h4>
+                </div>
+                <ul className="space-y-2 mb-6 text-blue-700">
+                  <li className="flex items-center gap-2"><Shield className="w-4 h-4" />Gestion indépendante</li>
+                  <li className="flex items-center gap-2"><Star className="w-4 h-4" />Commission avantageuse</li>
+                  <li className="flex items-center gap-2"><Users className="w-4 h-4" />Support prioritaire</li>
+                </ul>
+                <button onClick={() => upgradeAccount('FREELANCE')} className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold py-3 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg">
+                  Devenir Freelance PRO
+                </button>
+              </div>
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-200 hover:border-green-400 transition-all duration-300">
+                <div className="flex items-center gap-3 mb-4">
+                  <Truck className="w-8 h-8 text-green-500" />
+                  <h4 className="text-xl font-bold text-green-800">Livreur</h4>
+                </div>
+                <ul className="space-y-2 mb-6 text-green-700">
+                  <li className="flex items-center gap-2"><Car className="w-4 h-4" />Flexible & mobile</li>
+                  <li className="flex items-center gap-2"><MapPin className="w-4 h-4" />Zones étendues</li>
+                  <li className="flex items-center gap-2"><Package className="w-4 h-4" />Revenus quotidiens</li>
+                </ul>
+                <button onClick={() => upgradeAccount('DELIVERY')} className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold py-3 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg">
+                  Devenir Livreur
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {profile.account_type === 'FREELANCE' && (
+          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <Package className="w-6 h-6 text-orange-500" />
+                Activité Freelance
+              </h3>
+              <button onClick={() => upgradeAccount('AGENCY')} className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg">
+                <Building className="w-5 h-5" />
+                Devenir Agence
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-center">
+                <Package className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+                <h4 className="font-bold text-blue-800 mb-2">Commissions</h4>
+                <p className="text-blue-700 text-2xl font-bold">8%</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-center">
+                <Star className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                <h4 className="font-bold text-green-800 mb-2">Évaluations</h4>
+                <p className="text-green-700 text-2xl font-bold">4.8/5</p>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 text-center">
+                <Users className="w-12 h-12 text-purple-500 mx-auto mb-3" />
+                <h4 className="font-bold text-purple-800 mb-2">Clients</h4>
+                <p className="text-purple-700 text-2xl font-bold">24</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {profile.account_type === 'AGENCY' && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
@@ -10799,53 +10650,24 @@ const ProfileImagePreview = ({ src, alt, className }: {
                 <Building className="w-6 h-6 text-orange-500" />
                 Points Relais de l'Agence ({relayPoints.length})
               </h3>
-              <button
-                onClick={() => setShowAddRelay(!showAddRelay)}
-                className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
-              >
+              <button onClick={() => setShowAddRelay(!showAddRelay)} className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg">
                 <Plus className="w-5 h-5" />
                 Ajouter un Point Relais
               </button>
             </div>
-
-            {/* Formulaire d'ajout */}
             {showAddRelay && (
-              <div className="mb-6 p-6 bg-orange-50 rounded-2xl border border-orange-200 animate-slideDown">
+              <div className="mb-6 p-6 bg-orange-50 rounded-2xl border border-orange-200">
                 <h4 className="font-semibold text-gray-800 mb-4">Nouveau Point Relais</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <input
-                    type="text"
-                    placeholder="Nom du point relais"
-                    value={newRelayData.name}
-                    onChange={(e) => setNewRelayData(prev => ({ ...prev, name: e.target.value }))}
-                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Adresse"
-                    value={newRelayData.address}
-                    onChange={(e) => setNewRelayData(prev => ({ ...prev, address: e.target.value }))}
-                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all"
-                  />
+                  <input type="text" placeholder="Nom du point relais" value={newRelayData.name} onChange={(e) => setNewRelayData(prev => ({ ...prev, name: e.target.value }))} className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" />
+                  <input type="text" placeholder="Adresse" value={newRelayData.address} onChange={(e) => setNewRelayData(prev => ({ ...prev, address: e.target.value }))} className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" />
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={addRelayPoint}
-                    className="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    Ajouter
-                  </button>
-                  <button
-                    onClick={() => setShowAddRelay(false)}
-                    className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
-                  >
-                    Annuler
-                  </button>
+                  <button onClick={addRelayPoint} className="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">Ajouter</button>
+                  <button onClick={() => setShowAddRelay(false)} className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors">Annuler</button>
                 </div>
               </div>
             )}
-
-            {/* Liste des points relais */}
             <div className="space-y-4">
               {relayPoints.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
@@ -10864,18 +10686,11 @@ const ProfileImagePreview = ({ src, alt, className }: {
                           {relay.address}
                         </p>
                         <div className="flex items-center gap-4 mt-3">
-                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold
-                            ${relay.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                            }`}
-                          >
+                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${relay.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {relay.status === 'active' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                             {relay.status === 'active' ? 'Actif' : 'Désactivé'}
                           </span>
-                          <span className="text-xs text-gray-500">
-                            Créé le {new Date(relay.created_at).toLocaleDateString('fr-FR')}
-                          </span>
+                          <span className="text-xs text-gray-500">Créé le {new Date(relay.created_at).toLocaleDateString('fr-FR')}</span>
                         </div>
                         {relay.deactivation_reason && (
                           <div className="mt-2 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
@@ -10886,14 +10701,7 @@ const ProfileImagePreview = ({ src, alt, className }: {
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => toggleRelayPointStatus(relay.id, relay.status)}
-                        className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 hover:scale-105
-                          ${relay.status === 'active'
-                            ? 'bg-red-500 text-white hover:bg-red-600'
-                            : 'bg-green-500 text-white hover:bg-green-600'
-                          }`}
-                      >
+                      <button onClick={() => toggleRelayPointStatus(relay.id, relay.status)} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 hover:scale-105 ${relay.status === 'active' ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-500 text-white hover:bg-green-600'}`}>
                         {relay.status === 'active' ? 'Désactiver' : 'Réactiver'}
                       </button>
                     </div>
@@ -10904,94 +10712,11 @@ const ProfileImagePreview = ({ src, alt, className }: {
           </div>
         )}
 
-        <style jsx global>{`
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          
-          @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          
-          .animate-fadeIn {
-            animation: fadeIn 0.8s ease-out;
-          }
-          
-          .animate-slideDown {
-            animation: slideDown 0.5s ease-out;
-          }
-          
-          .leaflet-container {
-            height: 100%;
-            width: 100%;
-            border-radius: 1rem;
-          }
-          
-          .leaflet-control-zoom {
-            border: none !important;
-          }
-          
-          .leaflet-control-zoom a {
-            background: rgba(249, 115, 22, 0.9) !important;
-            color: white !important;
-            border: none !important;
-          }
-          
-          .leaflet-control-zoom a:hover {
-            background: rgba(249, 115, 22, 1) !important;
-          }
-        `}</style>
+        <div className="leaflet-container { height: 100%; width: 100%; border-radius: 1rem; } .leaflet-control-zoom { border: none !important; } .leaflet-control-zoom a { background: rgba(249, 115, 22, 0.9) !important; color: white !important; border: none !important; } .leaflet-control-zoom a:hover { background: rgba(249, 115, 22, 1) !important; }" />
       </div>
     </div>
   );
 }
-
-// Composant InputField animé
-const AnimatedInputField = ({ 
-  label, 
-  name, 
-  value, 
-  onChange, 
-  readOnly, 
-  icon: Icon, 
-  focused,
-  onFocus,
-  onBlur,
-  fullWidth = false
-}: any) => (
-  <div className={fullWidth ? 'md:col-span-2' : ''}>
-    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-      {Icon && <Icon className="w-4 h-4 text-orange-500" />}
-      {label}
-    </label>
-    <div className="relative group">
-      <input 
-        type="text" 
-        name={name} 
-        value={value || ''} 
-        onChange={onChange} 
-        onFocus={onFocus}
-        onBlur={onBlur}
-        readOnly={readOnly}
-        className={`w-full pl-4 pr-4 py-3 border-2 rounded-xl transition-all duration-300 font-medium
-          ${readOnly 
-            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed' 
-            : 'bg-white border-orange-200 text-gray-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 hover:border-orange-300'
-          }
-          ${focused ? 'transform scale-105 shadow-lg' : 'shadow-sm'}
-          group-hover:shadow-md`}
-        placeholder={readOnly ? '' : `Saisissez votre ${label.toLowerCase()}`}
-      />
-      {!readOnly && (
-        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-          <Edit className="w-4 h-4 text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </div>
-      )}
-    </div>
-  </div>
-);
 
 
 ================================================================================
@@ -11088,271 +10813,956 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\Overview.tsx
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import {
-  Clock,
-  Archive,
-  CheckCircle,
-  BarChart3, User,
-  TrendingUp,
-  Package,
-  ArrowRight,
-  ClipboardList
-} from 'lucide-react';
-import { Line, Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
-  Title, Tooltip, Legend, ArcElement, Filler
-} from 'chart.js';
-
-// Enregistrement des composants Chart.js
-ChartJS.register(
-  CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler
-);
-
-// --- Interfaces & Types ---
-interface KpiCardProps {
-    title: string;
-    value: string;
-    icon: React.ReactNode;
-    color: string; // ex: 'orange', 'amber', etc.
-    details: string;
-}
+import { UserProfile } from './page'; // Importer le type
+import { DollarSign, Package, TrendingUp, Users, Truck } from 'lucide-react';
 
 interface KpiData {
-    enAttente: number;
-    recus: number;
-    retires: number;
-    revenuJour: number;
+    value: string;
+    label: string;
+    details: string;
+    icon: React.ElementType;
+    color: string;
 }
 
-interface ChartData {
-    labels: string[];
-    datasets: any[];
-}
-
-
-// --- SOUS-COMPOSANTS UI ---
-const KpiCard = ({ title, value, icon, color, details }: KpiCardProps) => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+const KpiCard = ({ kpi }: { kpi: KpiData }) => (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex items-center justify-between">
-            <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-500 mb-1">{title}</p>
-                <p className="text-3xl font-bold text-gray-900">{value}</p>
-                <p className="text-xs text-gray-400 mt-2">{details}</p>
+            <div>
+                <p className="text-sm font-semibold text-gray-500">{kpi.label}</p>
+                <p className="text-3xl font-bold text-gray-900">{kpi.value}</p>
+                <p className="text-xs text-gray-400 mt-2">{kpi.details}</p>
             </div>
-            <div className={`bg-gradient-to-br from-${color}-400 to-${color}-500 p-4 rounded-2xl text-white ml-2 shadow-lg`}>
-                {icon}
+            <div className={`bg-gradient-to-br from-${kpi.color}-400 to-${kpi.color}-500 p-4 rounded-2xl text-white shadow-lg`}>
+                <kpi.icon className="h-6 w-6" />
             </div>
         </div>
     </div>
 );
 
-const ChartContainer = ({ title, children }: { title: string, children: React.ReactNode }) => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-full">
-        <h3 className="font-bold text-xl mb-6 text-gray-900">{title}</h3>
-        <div className="h-72"> {/* Hauteur fixe pour le conteneur du graphique */}
-             {children}
-        </div>
-    </div>
-);
 
-// --- COMPOSANT PRINCIPAL ---
-export default function OverviewDashboard() {
-    const [kpiData, setKpiData] = useState<KpiData | null>(null);
-    const [weeklyChartData, setWeeklyChartData] = useState<ChartData | null>(null);
-    const [statusChartData, setStatusChartData] = useState<ChartData | null>(null);
+export default function OverviewDashboard({ profile }: { profile: UserProfile }) {
+    const [kpis, setKpis] = useState<KpiData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    
+
     useEffect(() => {
-        const fetchDashboardData = async () => {
+        const fetchKpis = async () => {
             setIsLoading(true);
-            setError(null);
+            const accountType = profile.account_type.toLowerCase();
 
-            try {
-                // Récupérer tous les colis pour les calculs
-                const { data: shipments, error: shipmentsError } = await supabase
-                    .from('Shipment')
-                    .select('status, shippingCost, created_at, updated_at');
+            let fetchedKpis: KpiData[] = [];
+            
+            // --- Logique Client ---
+            if (accountType === 'client') {
+                const { count, error } = await supabase.from('shipments').select('*', { count: 'exact' }).eq('created_by_user', profile.id);
+                const { data: shipments, error: costError } = await supabase.from('shipments').select('shipping_cost, created_at').eq('created_by_user', profile.id);
 
-                if (shipmentsError) throw shipmentsError;
+                const totalSpent = shipments?.reduce((acc, s) => acc + s.shipping_cost, 0) || 0;
 
-                // --- 1. Calcul des KPIs ---
+                fetchedKpis = [
+                    { value: (count ?? 0).toString(), label: "Colis Envoyés", details: "Nombre total de colis expédiés", icon: Package, color: 'orange' },
+                    { value: `${totalSpent.toLocaleString()} FCFA`, label: "Dépenses Totales", details: "Coût total de vos envois", icon: DollarSign, color: 'green' }
+                ];
+            } 
+            // --- Logique Livreur (données statiques pour l'exemple) ---
+            else if (accountType === 'livreur') {
+                fetchedKpis = [
+                    { value: "5", label: "Livraisons du jour", details: "Colis livrés aujourd'hui", icon: Truck, color: 'blue' },
+                    { value: "12", label: "Colis à récupérer", details: "Dans les points relais", icon: Package, color: 'amber' }
+                ];
+            } 
+            // --- Logique Freelance / Agence (business stats) ---
+            else {
+                const { count, error } = await supabase.from('shipments').select('*', { count: 'exact' });
+                const { data: shipments, error: revenueError } = await supabase.from('shipments').select('shipping_cost, created_at');
+
+                const totalRevenue = shipments?.reduce((acc, s) => acc + s.shipping_cost, 0) || 0;
                 const today = new Date().toISOString().slice(0, 10);
-                const kpis: KpiData = { enAttente: 0, recus: 0, retires: 0, revenuJour: 0 };
+                const dailyRevenue = shipments?.filter(s => s.created_at.startsWith(today)).reduce((acc, s) => acc + s.shipping_cost, 0) || 0;
 
-                shipments.forEach(shipment => {
-                    // Les statuts sont mappés pour une meilleure lisibilité
-                    if (shipment.status === 'EN_ATTENTE_DE_DEPOT') kpis.enAttente++;
-                    if (['AU_DEPART', 'EN_TRANSIT', 'ARRIVE_AU_RELAIS'].includes(shipment.status)) kpis.recus++;
-                    if (shipment.status === 'RECU') {
-                        kpis.retires++;
-                        // Si le colis a été mis à jour (retiré) aujourd'hui
-                        if (shipment.updated_at.startsWith(today)) {
-                            kpis.revenuJour += shipment.shippingCost;
-                        }
-                    }
-                });
-                setKpiData(kpis);
-
-                // --- 2. Préparation des données du graphique hebdomadaire ---
-                const weeklyVolume = Array(7).fill(0).map(() => ({ recus: 0, retires: 0 }));
-                const labels = Array(7).fill(0).map((_, i) => {
-                    const d = new Date(); d.setDate(d.getDate() - i);
-                    return d.toLocaleDateString('fr-FR', { weekday: 'short' });
-                }).reverse();
-
-                shipments.forEach(shipment => {
-                    const eventDate = new Date(shipment.updated_at);
-                    const now = new Date();
-                    const diffDays = Math.floor((now.getTime() - eventDate.getTime()) / (1000 * 3600 * 24));
-                    
-                    if (diffDays < 7) {
-                        const dayIndex = 6 - diffDays;
-                        if (dayIndex >= 0) {
-                            if (shipment.status !== 'EN_ATTENTE_DE_DEPOT') weeklyVolume[dayIndex].recus++;
-                            if (shipment.status === 'RECU') weeklyVolume[dayIndex].retires++;
-                        }
-                    }
-                });
-                
-                setWeeklyChartData({
-                    labels,
-                    datasets: [{
-                        label: 'Colis Reçus/Transités',
-                        data: weeklyVolume.map(d => d.recus),
-                        fill: true,
-                        backgroundColor: 'rgba(251, 146, 60, 0.1)', // orange-400
-                        borderColor: '#fb923c',
-                        tension: 0.4,
-                    }, {
-                        label: 'Colis Retirés',
-                        data: weeklyVolume.map(d => d.retires),
-                        fill: true,
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)', // amber-500
-                        borderColor: '#f59e0b',
-                        tension: 0.4,
-                    }]
-                });
-
-                 // --- 3. Préparation des données du graphique de répartition ---
-                const totalNonRetires = kpis.enAttente + kpis.recus;
-                setStatusChartData({
-                    labels: ['En attente de Dépôt', 'Reçu / En Transit', 'Retirés'],
-                    datasets: [{
-                        data: [kpis.enAttente, kpis.recus, kpis.retires],
-                        backgroundColor: ['#f97316', '#3b82f6', '#16a34a' ], // Orange, Bleu (pour le contraste), Vert
-                        borderColor: '#fff',
-                        borderWidth: 4,
-                        hoverOffset: 10
-                    }]
-                });
-
-
-            } catch (err: any) {
-                console.error("Erreur Dashboard:", err);
-                setError("Impossible de charger les données du tableau de bord.");
-            } finally {
-                setIsLoading(false);
+                fetchedKpis = [
+                    { value: (count ?? 0).toString(), label: "Colis Total", details: "Traité par le réseau", icon: Package, color: 'orange' },
+                    { value: `${dailyRevenue.toLocaleString()} FCFA`, label: "Revenu du Jour", details: "Basé sur les nouveaux envois", icon: DollarSign, color: 'green' },
+                    { value: `${totalRevenue.toLocaleString()} FCFA`, label: "Revenu Total", details: "Depuis le début", icon: TrendingUp, color: 'blue' },
+                ];
             }
+
+            setKpis(fetchedKpis);
+            setIsLoading(false);
         };
 
-        fetchDashboardData();
-    }, []);
-
+        fetchKpis();
+    }, [profile]);
+    
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <div className="w-12 h-12 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
-            </div>
-        );
+        return <p>Chargement des statistiques...</p>
     }
 
-    if (error) {
-        return <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>;
-    }
-
-  return (
-    <div className="space-y-8">
-        {/* Cartes KPI */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <KpiCard 
-                title="En Attente de Dépôt" 
-                value={kpiData?.enAttente.toString() || '0'} 
-                icon={<Clock className="h-6 w-6" />}
-                color="orange"
-                details="Colis pré-enregistrés"
-            />
-            <KpiCard 
-                title="En Stock / Transit" 
-                value={kpiData?.recus.toString() || '0'} 
-                icon={<Archive className="h-6 w-6" />}
-                color="blue" // Utiliser une couleur contrastante
-                details="Présents dans le réseau"
-            />
-             <KpiCard 
-                title="Colis Retirés" 
-                value={kpiData?.retires.toString() || '0'} 
-                icon={<CheckCircle className="h-6 w-6" />}
-                color="green"
-                details="Finalisés ce mois-ci"
-            />
-            <KpiCard 
-                title="Revenus du Jour" 
-                value={`${(kpiData?.revenuJour || 0).toLocaleString()} FCFA`}
-                icon={<BarChart3 className="h-6 w-6" />}
-                color="amber"
-                details="Basé sur les retraits"
-            />
-        </div>
-        
-        {/* Graphiques */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-                 <ChartContainer title="Activité Hebdomadaire">
-                     {weeklyChartData && <Line data={weeklyChartData} options={{ maintainAspectRatio: false, responsive: true }} />}
-                </ChartContainer>
+    return (
+        <div className="space-y-8">
+            <h2 className="text-2xl font-bold text-gray-800">Vue d'ensemble</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {kpis.map(kpi => <KpiCard key={kpi.label} kpi={kpi} />)}
             </div>
-            <div>
-                 <ChartContainer title="Répartition des Colis">
-                    {statusChartData && <Doughnut data={statusChartData} options={{ maintainAspectRatio: false, responsive: true, cutout: '70%' }} />}
-                </ChartContainer>
-            </div>
+            {/* Vous pouvez ajouter des graphiques ici en fonction du rôle */}
         </div>
-
-        {/* Section Accès Rapides */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             <ActionCard title="Enregistrer un nouveau colis" icon={Package} href="/emit-package" />
-             <ActionCard title="Gérer l'inventaire" icon={ClipboardList} href="#" isInventory={true} />
-             <ActionCard title="Voir le profil du relais" icon={User} href="#" isProfile={true} />
-        </div>
-    </div>
-  );
+    );
 }
 
-const ActionCard = ({ title, icon: Icon, href, isInventory = false, isProfile = false }: any) => {
-    // Dans le futur, ces boutons pourraient appeler setActiveTab('inventory') par exemple
-    const handleClick = () => {
-        if(href === '#') {
-             alert(`Navigation vers '${title}' à implémenter.`);
-        } else {
-             // Redirection via Next Router si nécessaire
-        }
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\ClientPackages.tsx
+================================================================================
+
+// FICHIER : src/app/dashboard/ClientPackages.tsx
+'use client';
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
+import { UserProfile } from './page';
+import { Package, Search, PlusCircle, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+
+// Simplification du type pour cette vue
+interface ClientPackage {
+  id: string; // trackingNumber
+  status: string;
+  designation: string;
+  recipientName: string;
+  arrivalPoint: string;
+  created_at: string;
+}
+
+const getStatusConfig = (status: string) => {
+    switch (status) {
+        case 'EN_ATTENTE_DE_DEPOT': return { label: 'En attente', icon: Clock, color: 'text-orange-600' };
+        case 'AU_DEPART': return { label: 'Au départ', icon: Package, color: 'text-blue-600' };
+        case 'EN_TRANSIT': return { label: 'En transit', icon: Package, color: 'text-sky-600' };
+        case 'ARRIVE_AU_RELAIS': return { label: 'Arrivé', icon: CheckCircle, color: 'text-teal-600' };
+        case 'RECU': return { label: 'Retiré', icon: CheckCircle, color: 'text-green-600' };
+        default: return { label: status, icon: AlertTriangle, color: 'text-gray-500' };
     }
+};
+
+export default function ClientPackagesPage({ profile }: { profile: UserProfile }) {
+    const [packages, setPackages] = useState<ClientPackage[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [search, setSearch] = useState('');
+
+    useEffect(() => {
+        const fetchPackages = async () => {
+            setIsLoading(true);
+            const { data, error } = await supabase
+                .from('shipments')
+                .select(`
+                    id:tracking_number,
+                    status,
+                    designation:description,
+                    recipientName:recipient_name,
+                    arrivalPoint:arrival_point_id(name),
+                    created_at
+                `)
+                .eq('created_by_user', profile.id)
+                .order('created_at', { ascending: false });
+
+            if (data) {
+                // Le typage `any` est utilisé ici pour simplifier car la jointure retourne un objet
+                const formattedData = data.map((p: any) => ({
+                    ...p,
+                    arrivalPoint: p.arrivalPoint?.name || 'N/A'
+                }));
+                setPackages(formattedData);
+            }
+            setIsLoading(false);
+        };
+        fetchPackages();
+    }, [profile.id]);
     
-    return(
-        <a href={href} className="group block">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center hover:bg-orange-50 hover:border-orange-200 transition-all duration-300">
-                <div className="flex items-center gap-4">
-                    <div className="bg-orange-100 p-3 rounded-lg">
-                        <Icon className="w-6 h-6 text-orange-600"/>
-                    </div>
-                    <p className="font-bold text-gray-800">{title}</p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 group-hover:translate-x-1 transition-transform" />
+    const filteredPackages = useMemo(() => 
+        packages.filter(p => p.designation.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase()))
+    , [packages, search]);
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                 <h2 className="text-2xl font-bold text-gray-800">Mes Colis Envoyés</h2>
+                 <Link href="/expedition">
+                    <button className="flex items-center gap-2 bg-orange-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-orange-700 transition-all shadow-md">
+                        <PlusCircle size={18} />
+                        Envoyer un nouveau colis
+                    </button>
+                 </Link>
             </div>
-        </a>
+             <div className="relative">
+                <Search className="h-5 w-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                <input type="text" placeholder="Rechercher par code ou désignation..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-12 pr-4 py-3 w-full border border-gray-200 rounded-lg" />
+             </div>
+             <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
+                 <table className="w-full">
+                     <thead className="bg-gray-50">
+                         <tr>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-600">CODE</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-600">DÉSIGNATION</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-600">DESTINATAIRE</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-600">STATUT</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-600">DATE</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-600"></th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-100">
+                         {filteredPackages.map(p => {
+                             const status = getStatusConfig(p.status);
+                             return (
+                                 <tr key={p.id} className="hover:bg-orange-50">
+                                     <td className="px-6 py-4 font-mono font-medium text-gray-800">{p.id}</td>
+                                     <td className="px-6 py-4 text-gray-700">{p.designation}</td>
+                                     <td className="px-6 py-4">
+                                        <div>
+                                            <p className="font-semibold text-gray-800">{p.recipientName}</p>
+                                            <p className="text-xs text-gray-500">{p.arrivalPoint}</p>
+                                        </div>
+                                     </td>
+                                     <td className="px-6 py-4">
+                                         <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-semibold ${status.color.replace('text-', 'bg-').replace('600', '100')} ${status.color}`}>
+                                             <status.icon size={14}/> {status.label}
+                                         </div>
+                                     </td>
+                                     <td className="px-6 py-4 text-sm text-gray-600">{new Date(p.created_at).toLocaleDateString('fr-FR')}</td>
+                                     <td className="px-6 py-4">
+                                         <Link href={`/track-package?id=${p.id}`}>
+                                            <button className="text-orange-600 font-semibold hover:underline text-sm">
+                                                Suivre
+                                            </button>
+                                         </Link>
+                                     </td>
+                                 </tr>
+                             );
+                         })}
+                     </tbody>
+                 </table>
+                 {isLoading && <p className="p-4 text-center">Chargement...</p>}
+                 {!isLoading && filteredPackages.length === 0 && <p className="p-4 text-center text-gray-500">Aucun colis trouvé.</p>}
+             </div>
+        </div>
+    );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\Deliveries.tsx
+================================================================================
+
+'use client';
+import React, { useState, useEffect } from 'react';
+import { 
+  Truck, 
+  Package, 
+  MapPin, 
+  Clock, 
+  CheckCircle, 
+  AlertCircle, 
+  Plus, 
+  Navigation, 
+  Play,
+  Eye,
+  Search,
+  RefreshCw,
+  User,
+  Calendar,
+  Weight,
+  Target,
+  Route
+} from 'lucide-react';
+
+// Types
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+interface Shipment {
+  id: string;
+  tracking_code: string;
+  sender_name: string;
+  sender_phone?: string;
+  recipient_name: string;
+  recipient_phone?: string;
+  pickup_address: string;
+  delivery_address: string;
+  status: 'pending' | 'in_transit' | 'delivered' | 'cancelled';
+  created_at: string;
+  weight?: number;
+  price?: number;
+  description?: string;
+  delivery_person_id?: string;
+}
+
+interface Delivery {
+  id: string;
+  delivery_person_id: string;
+  shipment_id: string;
+  status: 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'cancelled';
+  started_at?: string;
+  completed_at?: string;
+  current_location?: {
+    lat: number;
+    lng: number;
+  };
+  notes?: string;
+  shipment?: Shipment;
+}
+
+// Simuler la connection Supabase
+const supabaseClient = {
+  from: (table: string) => ({
+    select: (columns = '*') => ({
+      eq: (column: string, value: any) => ({
+        data: mockData[table] || [],
+        error: null
+      }),
+      data: mockData[table] || [],
+      error: null
+    }),
+    insert: (data: any) => ({
+      select: () => ({
+        data: [{ ...data, id: Date.now().toString() }],
+        error: null
+      })
+    }),
+    update: (data: any) => ({
+      eq: (column: string, value: any) => ({
+        data: [data],
+        error: null
+      })
+    })
+  })
+};
+
+// Données simulées pour la démonstration
+const mockData: { [key: string]: any[] } = {
+  shipments: [
+    {
+      id: '1',
+      tracking_code: 'PKD-2025-001',
+      sender_name: 'Boutique Mode Africaine',
+      sender_phone: '+237 123 456 789',
+      recipient_name: 'Marie Nkomo',
+      recipient_phone: '+237 987 654 321',
+      pickup_address: 'Marché Central, Yaoundé',
+      delivery_address: 'Quartier Bastos, Yaoundé',
+      status: 'pending',
+      created_at: '2025-01-02T08:00:00Z',
+      weight: 1.2,
+      price: 2500,
+      description: 'Vêtements traditionnels',
+      delivery_person_id: null
+    },
+    {
+      id: '2',
+      tracking_code: 'PKD-2025-002',
+      sender_name: 'Pharmacie du Centre',
+      recipient_name: 'Dr. Mballa',
+      pickup_address: 'Rue de la Poste, Yaoundé',
+      delivery_address: 'Hôpital Central, Yaoundé',
+      status: 'pending',
+      created_at: '2025-01-02T09:30:00Z',
+      weight: 0.5,
+      price: 1500,
+      description: 'Médicaments',
+      delivery_person_id: null
+    },
+    {
+      id: '3',
+      tracking_code: 'PKD-2025-003',
+      sender_name: 'Electronics Store',
+      recipient_name: 'Jean Paul',
+      pickup_address: 'Avenue Kennedy, Yaoundé',
+      delivery_address: 'Essos, Yaoundé',
+      status: 'pending',
+      created_at: '2025-01-02T10:15:00Z',
+      weight: 2.8,
+      price: 3000,
+      description: 'Smartphone',
+      delivery_person_id: null
+    }
+  ],
+  deliveries: [
+    {
+      id: '1',
+      delivery_person_id: 'user-123',
+      shipment_id: '4',
+      status: 'in_transit',
+      started_at: '2025-01-02T07:00:00Z',
+      current_location: { lat: 3.848, lng: 11.502 },
+      notes: 'En route vers la destination'
+    }
+  ]
+};
+
+export default function DeliveryPage({ profile = { id: 'user-123', name: 'John Doe', email: 'john@example.com', role: 'driver' } }: { profile?: UserProfile }) {
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [availableShipments, setAvailableShipments] = useState<Shipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'active' | 'available' | 'completed'>('active');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [trackingDelivery, setTrackingDelivery] = useState<string | null>(null);
+
+  // Simulation de la récupération des données
+  const fetchData = async () => {
+    setLoading(true);
+    
+    try {
+      // Récupérer les livraisons de l'utilisateur
+      const { data: deliveriesData } = supabaseClient
+        .from('deliveries')
+        .select('*')
+        .eq('delivery_person_id', profile.id);
+      
+      // Récupérer les colis disponibles
+      const { data: shipmentsData } = supabaseClient
+        .from('shipments')
+        .select('*');
+      
+      const availableShipments = shipmentsData.filter(
+        (shipment: Shipment) => 
+          shipment.status === 'pending' && 
+          !shipment.delivery_person_id
+      );
+
+      // Enrichir les deliveries avec les shipments
+      const enrichedDeliveries = deliveriesData.map((delivery: Delivery) => {
+        const shipment = shipmentsData.find((s: Shipment) => s.id === delivery.shipment_id);
+        return { ...delivery, shipment };
+      });
+
+      setDeliveries(enrichedDeliveries);
+      setAvailableShipments(availableShipments);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshData = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [profile.id]);
+
+  const handleAcceptDelivery = async (shipmentId: string) => {
+    try {
+      // Créer une nouvelle livraison
+      const newDelivery = {
+        delivery_person_id: profile.id,
+        shipment_id: shipmentId,
+        status: 'assigned',
+        created_at: new Date().toISOString()
+      };
+
+      const { data } = supabaseClient
+        .from('deliveries')
+        .insert(newDelivery)
+        .select();
+
+      // Mettre à jour le shipment
+      supabaseClient
+        .from('shipments')
+        .update({ delivery_person_id: profile.id, status: 'in_transit' })
+        .eq('id', shipmentId);
+
+      await refreshData();
+    } catch (error) {
+      console.error('Erreur lors de l\'acceptation de la livraison:', error);
+    }
+  };
+
+  const handleStartDelivery = async (deliveryId: string) => {
+    try {
+      if (navigator.geolocation) {
+        setTrackingDelivery(deliveryId);
+        
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const updateData = {
+              status: 'picked_up',
+              started_at: new Date().toISOString(),
+              current_location: {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              }
+            };
+
+            supabaseClient
+              .from('deliveries')
+              .update(updateData)
+              .eq('id', deliveryId);
+
+            await refreshData();
+          },
+          (error) => {
+            console.error('Erreur de géolocalisation:', error);
+            setTrackingDelivery(null);
+          }
+        );
+      }
+    } catch (error) {
+      console.error('Erreur lors du démarrage de la livraison:', error);
+    }
+  };
+
+  const getStatusConfig = (status: string) => {
+    const configs = {
+      assigned: { color: 'bg-orange-100 text-orange-800 border-orange-200', text: 'Assignée', icon: Clock },
+      picked_up: { color: 'bg-orange-200 text-orange-900 border-orange-300', text: 'Récupérée', icon: Package },
+      in_transit: { color: 'bg-orange-300 text-orange-900 border-orange-400', text: 'En cours', icon: Truck },
+      delivered: { color: 'bg-green-100 text-green-800 border-green-200', text: 'Livrée', icon: CheckCircle },
+      cancelled: { color: 'bg-red-100 text-red-800 border-red-200', text: 'Annulée', icon: AlertCircle },
+      pending: { color: 'bg-blue-100 text-blue-800 border-blue-200', text: 'Disponible', icon: Package }
+    };
+    
+    return configs[status as keyof typeof configs] || configs.pending;
+  };
+
+  const StatusBadge = ({ status }: { status: string }) => {
+    const config = getStatusConfig(status);
+    const IconComponent = config.icon;
+    
+    return (
+      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${config.color}`}>
+        <IconComponent className="w-4 h-4 mr-1" />
+        {config.text}
+      </span>
+    );
+  };
+
+  const filteredDeliveries = deliveries.filter(delivery => 
+    delivery.shipment && (
+      delivery.shipment.tracking_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      delivery.shipment.recipient_name.toLowerCase().includes(searchTerm.toLowerCase())
     )
+  );
+
+  const filteredAvailableShipments = availableShipments.filter(shipment =>
+    shipment.tracking_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    shipment.recipient_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-orange-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-orange-200 border-t-orange-500 mx-auto mb-4"></div>
+          <p className="text-orange-600 font-medium">Chargement du dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = {
+    active: deliveries.filter(d => d.status !== 'delivered' && d.status !== 'cancelled').length,
+    delivered: deliveries.filter(d => d.status === 'delivered').length,
+    available: availableShipments.length,
+    inTransit: deliveries.filter(d => d.status === 'in_transit' || d.status === 'picked_up').length
+  };
+
+  return (
+    <div className="min-h-screen bg-orange-50">
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
+        
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm p-8 border border-orange-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard Livraisons</h1>
+              <p className="text-gray-600 text-lg">Bonjour {profile.name}, gérez vos livraisons en temps réel</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={refreshData}
+                disabled={refreshing}
+                className="bg-orange-100 hover:bg-orange-200 text-orange-700 p-3 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-6 h-6 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-4 rounded-xl">
+                <Truck className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-1">Livraisons actives</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.active}</p>
+              </div>
+              <div className="bg-orange-100 p-3 rounded-xl">
+                <Package className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-1">Livrées aujourd'hui</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.delivered}</p>
+              </div>
+              <div className="bg-green-100 p-3 rounded-xl">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-1">Disponibles</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.available}</p>
+              </div>
+              <div className="bg-blue-100 p-3 rounded-xl">
+                <Target className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-1">En transit</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.inTransit}</p>
+              </div>
+              <div className="bg-purple-100 p-3 rounded-xl">
+                <Route className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Search and Tabs */}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-orange-100">
+          <div className="flex flex-col lg:flex-row gap-6 items-center justify-between">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Rechercher par code de suivi ou destinataire..."
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-gray-50"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex bg-orange-50 rounded-xl p-1 border border-orange-200">
+              <button
+                onClick={() => setActiveTab('active')}
+                className={`px-6 py-3 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'active' 
+                    ? 'bg-orange-500 text-white shadow-sm' 
+                    : 'text-orange-700 hover:text-orange-800 hover:bg-orange-100'
+                }`}
+              >
+                Mes livraisons ({stats.active})
+              </button>
+              <button
+                onClick={() => setActiveTab('available')}
+                className={`px-6 py-3 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'available' 
+                    ? 'bg-orange-500 text-white shadow-sm' 
+                    : 'text-orange-700 hover:text-orange-800 hover:bg-orange-100'
+                }`}
+              >
+                Disponibles ({stats.available})
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        {activeTab === 'active' && (
+          <div className="space-y-6">
+            {filteredDeliveries.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-orange-100">
+                <div className="bg-orange-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Truck className="w-10 h-10 text-orange-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucune livraison active</h3>
+                <p className="text-gray-500 mb-6">Commencez par accepter des colis à livrer depuis l'onglet "Disponibles"</p>
+                <button
+                  onClick={() => setActiveTab('available')}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-medium transition-colors"
+                >
+                  Voir les colis disponibles
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredDeliveries.map((delivery) => (
+                  <div key={delivery.id} className="bg-white rounded-xl shadow-sm border border-orange-100 hover:shadow-md transition-all">
+                    <div className="p-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center space-x-4">
+                          <div className="bg-orange-100 p-3 rounded-xl">
+                            <Package className="w-6 h-6 text-orange-600" />
+                          </div>
+                          <div>
+                            <h4 className="text-xl font-bold text-gray-900">{delivery.shipment?.tracking_code}</h4>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500 mt-1">
+                              <span className="flex items-center">
+                                <Calendar className="w-4 h-4 mr-1" />
+                                {new Date(delivery.shipment?.created_at || '').toLocaleDateString('fr-FR')}
+                              </span>
+                              {delivery.shipment?.weight && (
+                                <span className="flex items-center">
+                                  <Weight className="w-4 h-4 mr-1" />
+                                  {delivery.shipment.weight} kg
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <StatusBadge status={delivery.status} />
+                      </div>
+                      
+                      <div className="grid md:grid-cols-2 gap-6 mb-6">
+                        <div className="space-y-3">
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-orange-100 p-2 rounded-lg mt-1">
+                              <MapPin className="w-4 h-4 text-orange-600" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Récupération</p>
+                              <p className="text-lg font-semibold text-gray-900 mt-1">{delivery.shipment?.sender_name}</p>
+                              <p className="text-gray-600">{delivery.shipment?.pickup_address}</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-green-100 p-2 rounded-lg mt-1">
+                              <MapPin className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Livraison</p>
+                              <p className="text-lg font-semibold text-gray-900 mt-1">{delivery.shipment?.recipient_name}</p>
+                              <p className="text-gray-600">{delivery.shipment?.delivery_address}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between pt-6 border-t border-gray-100">
+                        <div className="flex items-center space-x-6 text-sm text-gray-500">
+                          {delivery.shipment?.description && (
+                            <span>Contenu: {delivery.shipment.description}</span>
+                          )}
+                          {delivery.started_at && (
+                            <span>Démarrée: {new Date(delivery.started_at).toLocaleTimeString('fr-FR')}</span>
+                          )}
+                        </div>
+                        
+                        <div className="flex space-x-3">
+                          {delivery.status === 'assigned' && (
+                            <button
+                              onClick={() => handleStartDelivery(delivery.id)}
+                              disabled={trackingDelivery === delivery.id}
+                              className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors disabled:opacity-50"
+                            >
+                              <Play className="w-4 h-4" />
+                              <span>{trackingDelivery === delivery.id ? 'Démarrage...' : 'Démarrer'}</span>
+                            </button>
+                          )}
+                          
+                          {(delivery.status === 'picked_up' || delivery.status === 'in_transit') && (
+                            <button className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors">
+                              <Navigation className="w-4 h-4" />
+                              <span>Suivi GPS</span>
+                            </button>
+                          )}
+                          
+                          <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors">
+                            <Eye className="w-4 h-4" />
+                            <span>Détails</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'available' && (
+          <div className="space-y-6">
+            {filteredAvailableShipments.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-orange-100">
+                <div className="bg-blue-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Package className="w-10 h-10 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucun colis disponible</h3>
+                <p className="text-gray-500">Aucun colis n'est actuellement disponible pour la livraison</p>
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {filteredAvailableShipments.map((shipment) => (
+                  <div key={shipment.id} className="bg-white rounded-xl shadow-sm border border-orange-100 hover:shadow-md transition-all">
+                    <div className="p-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center space-x-4">
+                          <div className="bg-blue-100 p-3 rounded-xl">
+                            <Package className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="text-xl font-bold text-gray-900">{shipment.tracking_code}</h4>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500 mt-1">
+                              <span className="flex items-center">
+                                <Calendar className="w-4 h-4 mr-1" />
+                                Créé le {new Date(shipment.created_at).toLocaleDateString('fr-FR')}
+                              </span>
+                              {shipment.weight && (
+                                <span className="flex items-center">
+                                  <Weight className="w-4 h-4 mr-1" />
+                                  {shipment.weight} kg
+                                </span>
+                              )}
+                              {shipment.price && (
+                                <span className="font-medium text-orange-600">
+                                  {shipment.price.toLocaleString()} FCFA
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <StatusBadge status="pending" />
+                      </div>
+                      
+                      <div className="grid md:grid-cols-2 gap-6 mb-6">
+                        <div className="space-y-3">
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-orange-100 p-2 rounded-lg mt-1">
+                              <MapPin className="w-4 h-4 text-orange-600" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">À récupérer chez</p>
+                              <p className="text-lg font-semibold text-gray-900 mt-1">{shipment.sender_name}</p>
+                              <p className="text-gray-600">{shipment.pickup_address}</p>
+                              {shipment.sender_phone && (
+                                <p className="text-sm text-gray-500 flex items-center mt-1">
+                                  <User className="w-3 h-3 mr-1" />
+                                  {shipment.sender_phone}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-green-100 p-2 rounded-lg mt-1">
+                              <MapPin className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">À livrer à</p>
+                              <p className="text-lg font-semibold text-gray-900 mt-1">{shipment.recipient_name}</p>
+                              <p className="text-gray-600">{shipment.delivery_address}</p>
+                              {shipment.recipient_phone && (
+                                <p className="text-sm text-gray-500 flex items-center mt-1">
+                                  <User className="w-3 h-3 mr-1" />
+                                  {shipment.recipient_phone}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {shipment.description && (
+                        <div className="mb-6">
+                          <p className="text-sm text-gray-500 mb-2">Description du colis</p>
+                          <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{shipment.description}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-end pt-6 border-t border-gray-100">
+                        <button
+                          onClick={() => handleAcceptDelivery(shipment.id)}
+                          className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-medium flex items-center space-x-2 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                          <span>Effectuer cette livraison</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'completed' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-orange-100">
+              <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="w-10 h-10 text-green-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Historique des livraisons</h3>
+              <p className="text-gray-500">Cette section affichera l'historique de vos livraisons terminées</p>
+            </div>
+          </div>
+        )}
+
+        {/* Tracking Modal */}
+        {trackingDelivery && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6">
+              <div className="text-center">
+                <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Navigation className="w-8 h-8 text-orange-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Démarrage du suivi GPS</h3>
+                <p className="text-gray-600 mb-6">Initialisation de la géolocalisation en cours...</p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setTrackingDelivery(null)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-medium transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={() => setTrackingDelivery(null)}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 px-4 rounded-xl font-medium transition-colors"
+                  >
+                    Continuer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Floating Action Button for Quick Actions */}
+        <div className="fixed bottom-6 right-6">
+          <button className="bg-orange-500 hover:bg-orange-600 text-white w-14 h-14 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center">
+            <Plus className="w-6 h-6" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 
@@ -19292,8 +19702,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\react-loadable-ma
   "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)": {
     "id": "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)",
     "files": [
-      "static/chunks/node_modules_b088d178._.js",
-      "static/chunks/node_modules_react-leaflet_lib_index_5984935c.js"
+      "static/chunks/node_modules_35228058._.js",
+      "static/chunks/node_modules_react-leaflet_lib_index_d85b1f9a.js"
     ]
   }
 }
@@ -19313,11 +19723,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\app-build-manifes
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_65b8a7dd._.js",
-      "static/chunks/src_22ca5e2e._.js",
+      "static/chunks/node_modules_6a1296f0._.js",
+      "static/chunks/src_aa38ae9d._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
       "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
-      "static/chunks/node_modules_b8f5cda1._.js",
+      "static/chunks/node_modules_c110bb90._.js",
       "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
       "static/chunks/src_app_dashboard_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
@@ -19973,6 +20383,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 ================================================================================
 
@@ -19996,6 +20413,20 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
+================================================================================
+
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/home/page": "app/home/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js"
+}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 ================================================================================
 
@@ -20004,27 +20435,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
   "appUsingSizeAdjust": false,
   "pages": {},
   "pagesUsingSizeAdjust": false
-}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
-================================================================================
-
-{}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
-================================================================================
-
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/expedition/page": "app/expedition/page.js",
-  "/home/page": "app/home/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js",
-  "/register/page": "app/register/page.js"
 }
 
 
@@ -20224,6 +20634,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --color-yellow-300: #ffe02a;
     --color-yellow-400: #fac800;
     --color-yellow-500: #edb200;
+    --color-yellow-600: #cd8900;
     --color-yellow-700: #a36100;
     --color-yellow-800: #874b00;
     --color-yellow-900: #733e0a;
@@ -20266,6 +20677,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --color-sky-300: #77d4ff;
     --color-sky-400: #00bcfe;
     --color-sky-500: #00a5ef;
+    --color-sky-600: #0084cc;
     --color-sky-700: #0069a4;
     --color-sky-900: #024a70;
     --color-blue-50: #eff6ff;
@@ -20281,6 +20693,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --color-indigo-50: #eef2ff;
     --color-indigo-500: #625fff;
     --color-indigo-600: #4f39f6;
+    --color-violet-500: #8d54ff;
     --color-violet-600: #7f22fe;
     --color-purple-50: #faf5ff;
     --color-purple-100: #f3e8ff;
@@ -20424,6 +20837,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-yellow-300: color(display-p3 .982669 .880884 .32102);
       --color-yellow-400: color(display-p3 .959941 .790171 .0585198);
       --color-yellow-500: color(display-p3 .903651 .703062 .0745389);
+      --color-yellow-600: color(display-p3 .776342 .542492 .041709);
       --color-yellow-700: color(display-p3 .613146 .386658 .0579687);
       --color-yellow-800: color(display-p3 .503181 .30478 .075537);
       --color-yellow-900: color(display-p3 .422485 .252729 .095052);
@@ -20466,6 +20880,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-sky-300: color(display-p3 .546356 .822561 .990576);
       --color-sky-400: color(display-p3 .305975 .725011 .980173);
       --color-sky-500: color(display-p3 .219113 .639027 .931479);
+      --color-sky-600: color(display-p3 .162505 .509376 .796082);
       --color-sky-700: color(display-p3 .130314 .404568 .640847);
       --color-sky-900: color(display-p3 .115471 .285486 .428673);
       --color-blue-50: color(display-p3 .941826 .963151 .995385);
@@ -20481,6 +20896,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-indigo-50: color(display-p3 .936215 .948621 .995621);
       --color-indigo-500: color(display-p3 .380374 .372235 .971707);
       --color-indigo-600: color(display-p3 .297656 .227891 .929242);
+      --color-violet-500: color(display-p3 .523372 .329605 .990884);
       --color-violet-600: color(display-p3 .459951 .162666 .957985);
       --color-purple-50: color(display-p3 .977045 .961759 .996715);
       --color-purple-100: color(display-p3 .945034 .910569 .992972);
@@ -20556,6 +20972,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-yellow-300: lab(89.7033% -.480324 84.4917);
       --color-yellow-400: lab(83.2664% 8.65132 106.895);
       --color-yellow-500: lab(76.3898% 14.5258 98.4589);
+      --color-yellow-600: lab(62.7799% 22.4198 86.1544);
       --color-yellow-700: lab(47.8202% 25.2426 66.5015);
       --color-yellow-800: lab(38.7484% 23.5833 51.4916);
       --color-yellow-900: lab(32.3865% 21.1274 38.5958);
@@ -20598,6 +21015,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-sky-300: lab(80.3307% -20.2945 -31.385);
       --color-sky-400: lab(70.687% -23.6078 -45.9483);
       --color-sky-500: lab(63.3038% -18.433 -51.0407);
+      --color-sky-600: lab(51.7754% -11.4713 -49.8349);
       --color-sky-700: lab(41.6013% -9.10804 -42.5648);
       --color-sky-900: lab(29.1959% -8.34689 -28.2453);
       --color-blue-50: lab(96.492% -1.14647 -5.11479);
@@ -20613,6 +21031,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-indigo-50: lab(95.4818% .411302 -6.78529);
       --color-indigo-500: lab(48.295% 38.3129 -81.9673);
       --color-indigo-600: lab(38.4009% 52.6132 -92.3857);
+      --color-violet-500: lab(49.9355% 55.1777 -81.8963);
       --color-violet-600: lab(41.088% 68.9966 -91.995);
       --color-purple-50: lab(97.1626% 2.99937 -4.13398);
       --color-purple-100: lab(93.3333% 6.9744 -9.83434);
@@ -21058,6 +21477,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     inset-block: calc(var(--spacing) * 0);
   }
 
+  .-top-0\.5 {
+    top: calc(var(--spacing) * -.5);
+  }
+
   .-top-1 {
     top: calc(var(--spacing) * -1);
   }
@@ -21072,6 +21495,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-top-3 {
     top: calc(var(--spacing) * -3);
+  }
+
+  .-top-8 {
+    top: calc(var(--spacing) * -8);
+  }
+
+  .-top-10 {
+    top: calc(var(--spacing) * -10);
   }
 
   .-top-24 {
@@ -21158,6 +21589,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     top: 100%;
   }
 
+  .-right-0\.5 {
+    right: calc(var(--spacing) * -.5);
+  }
+
   .-right-1 {
     right: calc(var(--spacing) * -1);
   }
@@ -21172,6 +21607,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-right-3 {
     right: calc(var(--spacing) * -3);
+  }
+
+  .-right-8 {
+    right: calc(var(--spacing) * -8);
+  }
+
+  .-right-10 {
+    right: calc(var(--spacing) * -10);
   }
 
   .-right-24 {
@@ -21210,6 +21653,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     right: calc(var(--spacing) * 5);
   }
 
+  .right-6 {
+    right: calc(var(--spacing) * 6);
+  }
+
   .right-8 {
     right: calc(var(--spacing) * 8);
   }
@@ -21224,6 +21671,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .right-40 {
     right: calc(var(--spacing) * 40);
+  }
+
+  .-bottom-0\.5 {
+    bottom: calc(var(--spacing) * -.5);
   }
 
   .-bottom-1 {
@@ -21260,6 +21711,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .bottom-5 {
     bottom: calc(var(--spacing) * 5);
+  }
+
+  .bottom-6 {
+    bottom: calc(var(--spacing) * 6);
   }
 
   .bottom-8 {
@@ -21312,6 +21767,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .left-2 {
     left: calc(var(--spacing) * 2);
+  }
+
+  .left-2\.5 {
+    left: calc(var(--spacing) * 2.5);
   }
 
   .left-3 {
@@ -21810,6 +22269,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     width: calc(var(--spacing) * 0);
   }
 
+  .w-0\.5 {
+    width: calc(var(--spacing) * .5);
+  }
+
   .w-1 {
     width: calc(var(--spacing) * 1);
   }
@@ -21982,6 +22445,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     min-width: calc(var(--spacing) * 0);
   }
 
+  .min-w-\[18px\] {
+    min-width: 18px;
+  }
+
+  .min-w-\[20px\] {
+    min-width: 20px;
+  }
+
   .min-w-\[140px\] {
     min-width: 140px;
   }
@@ -22086,6 +22557,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   .scale-x-0 {
     --tw-scale-x: 0%;
     scale: var(--tw-scale-x) var(--tw-scale-y);
+  }
+
+  .scale-\[1\.02\] {
+    scale: 1.02;
+  }
+
+  .rotate-2 {
+    rotate: 2deg;
+  }
+
+  .rotate-3 {
+    rotate: 3deg;
   }
 
   .rotate-180 {
@@ -22568,6 +23051,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-top-right-radius: var(--radius-xl);
   }
 
+  .rounded-r-lg {
+    border-top-right-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+
   .rounded-b-2xl {
     border-bottom-right-radius: var(--radius-2xl);
     border-bottom-left-radius: var(--radius-2xl);
@@ -22623,6 +23111,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-left-width: 1px;
   }
 
+  .border-l-2 {
+    border-left-style: var(--tw-border-style);
+    border-left-width: 2px;
+  }
+
   .border-l-4 {
     border-left-style: var(--tw-border-style);
     border-left-width: 4px;
@@ -22641,12 +23134,30 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-amber-200);
   }
 
+  .border-amber-200\/80 {
+    border-color: rgba(254, 230, 133, .8);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-amber-200\/80 {
+      border-color: color-mix(in oklab, var(--color-amber-200) 80%, transparent);
+    }
+  }
+
+  .border-amber-400 {
+    border-color: var(--color-amber-400);
+  }
+
   .border-blue-100 {
     border-color: var(--color-blue-100);
   }
 
   .border-blue-200 {
     border-color: var(--color-blue-200);
+  }
+
+  .border-blue-400 {
+    border-color: var(--color-blue-400);
   }
 
   .border-blue-500 {
@@ -22745,12 +23256,32 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-orange-200);
   }
 
+  .border-orange-200\/80 {
+    border-color: rgba(255, 215, 168, .8);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-orange-200\/80 {
+      border-color: color-mix(in oklab, var(--color-orange-200) 80%, transparent);
+    }
+  }
+
   .border-orange-300 {
     border-color: var(--color-orange-300);
   }
 
   .border-orange-400 {
     border-color: var(--color-orange-400);
+  }
+
+  .border-orange-400\/80 {
+    border-color: rgba(255, 139, 26, .8);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-orange-400\/80 {
+      border-color: color-mix(in oklab, var(--color-orange-400) 80%, transparent);
+    }
   }
 
   .border-orange-500 {
@@ -22765,8 +23296,26 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-purple-200);
   }
 
+  .border-purple-400 {
+    border-color: var(--color-purple-400);
+  }
+
+  .border-purple-500 {
+    border-color: var(--color-purple-500);
+  }
+
   .border-red-200 {
     border-color: var(--color-red-200);
+  }
+
+  .border-red-200\/80 {
+    border-color: rgba(255, 202, 202, .8);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-red-200\/80 {
+      border-color: color-mix(in oklab, var(--color-red-200) 80%, transparent);
+    }
   }
 
   .border-red-300 {
@@ -22843,6 +23392,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-yellow-200);
   }
 
+  .border-yellow-200\/80 {
+    border-color: rgba(255, 240, 133, .8);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-yellow-200\/80 {
+      border-color: color-mix(in oklab, var(--color-yellow-200) 80%, transparent);
+    }
+  }
+
   .border-yellow-500 {
     border-color: var(--color-yellow-500);
   }
@@ -22887,6 +23446,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .bg-amber-400 {
     background-color: var(--color-amber-400);
+  }
+
+  .bg-amber-500 {
+    background-color: var(--color-amber-500);
   }
 
   .bg-black {
@@ -23141,6 +23704,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     background-color: var(--color-orange-100);
   }
 
+  .bg-orange-100\/50 {
+    background-color: rgba(255, 237, 213, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-orange-100\/50 {
+      background-color: color-mix(in oklab, var(--color-orange-100) 50%, transparent);
+    }
+  }
+
   .bg-orange-200 {
     background-color: var(--color-orange-200);
   }
@@ -23153,6 +23726,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     .bg-orange-200\/30 {
       background-color: color-mix(in oklab, var(--color-orange-200) 30%, transparent);
     }
+  }
+
+  .bg-orange-300 {
+    background-color: var(--color-orange-300);
   }
 
   .bg-orange-400 {
@@ -23269,6 +23846,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     background-color: var(--color-slate-200);
   }
 
+  .bg-slate-300 {
+    background-color: var(--color-slate-300);
+  }
+
   .bg-slate-800 {
     background-color: var(--color-slate-800);
   }
@@ -23373,6 +23954,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     background-color: var(--color-yellow-100);
   }
 
+  .bg-yellow-400 {
+    background-color: var(--color-yellow-400);
+  }
+
   .bg-gradient-to-br {
     --tw-gradient-position: to bottom right in oklab;
     background-image: linear-gradient(var(--tw-gradient-stops));
@@ -23390,6 +23975,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .bg-\[radial-gradient\(circle_at_30\%_20\%\,rgba\(255\,255\,255\,0\.2\)\,transparent_50\%\)\] {
     background-image: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, .2), rgba(0, 0, 0, 0) 50%);
+  }
+
+  .from-amber-50 {
+    --tw-gradient-from: var(--color-amber-50);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
   .from-amber-400 {
@@ -23596,6 +24186,20 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .from-orange-50\/50 {
+    --tw-gradient-from: rgba(255, 247, 237, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .from-orange-50\/50 {
+      --tw-gradient-from: color-mix(in oklab, var(--color-orange-50) 50%, transparent);
+    }
+  }
+
+  .from-orange-50\/50 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .from-orange-100 {
     --tw-gradient-from: var(--color-orange-100);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -23603,6 +24207,34 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .from-orange-200 {
     --tw-gradient-from: var(--color-orange-200);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-orange-200\/20 {
+    --tw-gradient-from: rgba(255, 215, 168, .2);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .from-orange-200\/20 {
+      --tw-gradient-from: color-mix(in oklab, var(--color-orange-200) 20%, transparent);
+    }
+  }
+
+  .from-orange-200\/20 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-orange-200\/30 {
+    --tw-gradient-from: rgba(255, 215, 168, .3);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .from-orange-200\/30 {
+      --tw-gradient-from: color-mix(in oklab, var(--color-orange-200) 30%, transparent);
+    }
+  }
+
+  .from-orange-200\/30 {
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -23618,6 +24250,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .from-orange-600 {
     --tw-gradient-from: var(--color-orange-600);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-orange-900 {
+    --tw-gradient-from: var(--color-orange-900);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -23647,6 +24284,25 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .from-purple-500 {
     --tw-gradient-from: var(--color-purple-500);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-red-50 {
+    --tw-gradient-from: var(--color-red-50);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-red-200\/20 {
+    --tw-gradient-from: rgba(255, 202, 202, .2);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .from-red-200\/20 {
+      --tw-gradient-from: color-mix(in oklab, var(--color-red-200) 20%, transparent);
+    }
+  }
+
+  .from-red-200\/20 {
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -23719,8 +24375,32 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .from-yellow-50 {
+    --tw-gradient-from: var(--color-yellow-50);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-yellow-200\/20 {
+    --tw-gradient-from: rgba(255, 240, 133, .2);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .from-yellow-200\/20 {
+      --tw-gradient-from: color-mix(in oklab, var(--color-yellow-200) 20%, transparent);
+    }
+  }
+
+  .from-yellow-200\/20 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .from-yellow-400 {
     --tw-gradient-from: var(--color-yellow-400);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .from-yellow-500 {
+    --tw-gradient-from: var(--color-yellow-500);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -23781,6 +24461,27 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops);
   }
 
+  .via-orange-50\/30 {
+    --tw-gradient-via: rgba(255, 247, 237, .3);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .via-orange-50\/30 {
+      --tw-gradient-via: color-mix(in oklab, var(--color-orange-50) 30%, transparent);
+    }
+  }
+
+  .via-orange-50\/30 {
+    --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-via-stops);
+  }
+
+  .via-orange-400 {
+    --tw-gradient-via: var(--color-orange-400);
+    --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-via-stops);
+  }
+
   .via-orange-500 {
     --tw-gradient-via: var(--color-orange-500);
     --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
@@ -23789,6 +24490,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .via-orange-600 {
     --tw-gradient-via: var(--color-orange-600);
+    --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-via-stops);
+  }
+
+  .via-orange-800 {
+    --tw-gradient-via: var(--color-orange-800);
     --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
     --tw-gradient-stops: var(--tw-gradient-via-stops);
   }
@@ -23831,8 +24538,64 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-amber-50\/30 {
+    --tw-gradient-to: rgba(255, 251, 235, .3);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-amber-50\/30 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-amber-50) 30%, transparent);
+    }
+  }
+
+  .to-amber-50\/30 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-amber-50\/50 {
+    --tw-gradient-to: rgba(255, 251, 235, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-amber-50\/50 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-amber-50) 50%, transparent);
+    }
+  }
+
+  .to-amber-50\/50 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-amber-100\/50 {
+    --tw-gradient-to: rgba(254, 243, 198, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-amber-100\/50 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-amber-100) 50%, transparent);
+    }
+  }
+
+  .to-amber-100\/50 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .to-amber-200 {
     --tw-gradient-to: var(--color-amber-200);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-amber-300\/20 {
+    --tw-gradient-to: rgba(255, 210, 54, .2);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-amber-300\/20 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-amber-300) 20%, transparent);
+    }
+  }
+
+  .to-amber-300\/20 {
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -24023,6 +24786,34 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-orange-100\/50 {
+    --tw-gradient-to: rgba(255, 237, 213, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-orange-100\/50 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-orange-100) 50%, transparent);
+    }
+  }
+
+  .to-orange-100\/50 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-orange-300\/15 {
+    --tw-gradient-to: rgba(255, 185, 109, .15);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-orange-300\/15 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-orange-300) 15%, transparent);
+    }
+  }
+
+  .to-orange-300\/15 {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .to-orange-500 {
     --tw-gradient-to: var(--color-orange-500);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -24040,6 +24831,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .to-orange-800 {
     --tw-gradient-to: var(--color-orange-800);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-orange-900 {
+    --tw-gradient-to: var(--color-orange-900);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -24136,6 +24932,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-violet-500 {
+    --tw-gradient-to: var(--color-violet-500);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .to-violet-600 {
     --tw-gradient-to: var(--color-violet-600);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -24143,6 +24944,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .to-yellow-50 {
     --tw-gradient-to: var(--color-yellow-50);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-yellow-600 {
+    --tw-gradient-to: var(--color-yellow-600);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -24213,6 +25019,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .p-12 {
     padding: calc(var(--spacing) * 12);
+  }
+
+  .px-1\.5 {
+    padding-inline: calc(var(--spacing) * 1.5);
   }
 
   .px-2 {
@@ -24335,6 +25145,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     padding-top: calc(var(--spacing) * 8);
   }
 
+  .pt-16 {
+    padding-top: calc(var(--spacing) * 16);
+  }
+
   .pt-20 {
     padding-top: calc(var(--spacing) * 20);
   }
@@ -24377,6 +25191,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .pl-4 {
     padding-left: calc(var(--spacing) * 4);
+  }
+
+  .pl-8 {
+    padding-left: calc(var(--spacing) * 8);
   }
 
   .pl-9 {
@@ -24533,6 +25351,20 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .text-amber-300 {
     color: var(--color-amber-300);
+  }
+
+  .text-amber-300\/30 {
+    color: rgba(255, 210, 54, .3);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-amber-300\/30 {
+      color: color-mix(in oklab, var(--color-amber-300) 30%, transparent);
+    }
+  }
+
+  .text-amber-500 {
+    color: var(--color-amber-500);
   }
 
   .text-amber-600 {
@@ -24709,6 +25541,26 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     color: var(--color-orange-200);
   }
 
+  .text-orange-300\/25 {
+    color: rgba(255, 185, 109, .25);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-orange-300\/25 {
+      color: color-mix(in oklab, var(--color-orange-300) 25%, transparent);
+    }
+  }
+
+  .text-orange-300\/30 {
+    color: rgba(255, 185, 109, .3);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-orange-300\/30 {
+      color: color-mix(in oklab, var(--color-orange-300) 30%, transparent);
+    }
+  }
+
   .text-orange-400 {
     color: var(--color-orange-400);
   }
@@ -24727,6 +25579,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .text-orange-800 {
     color: var(--color-orange-800);
+  }
+
+  .text-orange-900 {
+    color: var(--color-orange-900);
   }
 
   .text-purple-500 {
@@ -24771,6 +25627,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .text-sky-500 {
     color: var(--color-sky-500);
+  }
+
+  .text-sky-600 {
+    color: var(--color-sky-600);
   }
 
   .text-sky-700 {
@@ -24837,6 +25697,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .text-yellow-300 {
     color: var(--color-yellow-300);
+  }
+
+  .text-yellow-500 {
+    color: var(--color-yellow-500);
   }
 
   .text-yellow-700 {
@@ -24924,6 +25788,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .opacity-100 {
     opacity: 1;
+  }
+
+  .opacity-\[0\.02\] {
+    opacity: .02;
   }
 
   .shadow {
@@ -25094,6 +25962,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     }
   }
 
+  .shadow-orange-400\/50 {
+    --tw-shadow-color: rgba(255, 139, 26, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-orange-400\/50 {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-orange-400) 50%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
   .shadow-orange-500 {
     --tw-shadow-color: #fe6e00;
   }
@@ -25226,6 +26104,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .transition-opacity {
     transition-property: opacity;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+
+  .transition-shadow {
+    transition-property: box-shadow;
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
     transition-duration: var(--tw-duration, var(--default-transition-duration));
   }
@@ -25397,6 +26281,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .group-hover\:bg-orange-200\/50:is(:where(.group):hover *) {
+      background-color: rgba(255, 215, 168, .5);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .group-hover\:bg-orange-200\/50:is(:where(.group):hover *) {
+        background-color: color-mix(in oklab, var(--color-orange-200) 50%, transparent);
+      }
+    }
+  }
+
+  @media (hover: hover) {
     .group-hover\:text-cyan-700:is(:where(.group):hover *) {
       color: var(--color-cyan-700);
     }
@@ -25435,6 +26331,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .group-hover\:text-orange-700:is(:where(.group):hover *) {
       color: var(--color-orange-700);
+    }
+  }
+
+  @media (hover: hover) {
+    .group-hover\:text-red-600:is(:where(.group):hover *) {
+      color: var(--color-red-600);
     }
   }
 
@@ -25541,6 +26443,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:rotate-0:hover {
+      rotate: none;
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:rotate-3:hover {
       rotate: 3deg;
     }
@@ -25573,6 +26481,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:border-gray-400:hover {
       border-color: var(--color-gray-400);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:border-green-400:hover {
+      border-color: var(--color-green-400);
     }
   }
 
@@ -25727,6 +26641,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:bg-orange-100:hover {
+      background-color: var(--color-orange-100);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-orange-200:hover {
       background-color: var(--color-orange-200);
     }
@@ -25823,6 +26743,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:bg-gradient-to-r:hover {
+      --tw-gradient-position: to right in oklab;
+      background-image: linear-gradient(var(--tw-gradient-stops));
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:from-amber-600:hover {
       --tw-gradient-from: var(--color-amber-600);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -25851,8 +26778,22 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:from-orange-50:hover {
+      --tw-gradient-from: var(--color-orange-50);
+      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:from-orange-600:hover {
       --tw-gradient-from: var(--color-orange-600);
+      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:to-amber-50:hover {
+      --tw-gradient-to: var(--color-amber-50);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
     }
   }
@@ -25959,6 +26900,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:text-orange-800:hover {
+      color: var(--color-orange-800);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:text-red-600:hover {
       color: var(--color-red-600);
     }
@@ -25994,6 +26941,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:shadow-md:hover {
       --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgba(0, 0, 0, .1)), 0 2px 4px -2px var(--tw-shadow-color, rgba(0, 0, 0, .1));
+      box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:shadow-sm:hover {
+      --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgba(0, 0, 0, .1)), 0 1px 2px -1px var(--tw-shadow-color, rgba(0, 0, 0, .1));
       box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
     }
   }
@@ -26254,6 +27208,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 40rem) {
+    .sm\:mt-0 {
+      margin-top: calc(var(--spacing) * 0);
+    }
+  }
+
+  @media (min-width: 40rem) {
     .sm\:mt-3 {
       margin-top: calc(var(--spacing) * 3);
     }
@@ -26460,6 +27420,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 40rem) {
     .sm\:items-start {
       align-items: flex-start;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:justify-between {
+      justify-content: space-between;
     }
   }
 
@@ -26798,6 +27764,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 48rem) {
+    .md\:px-6 {
+      padding-inline: calc(var(--spacing) * 6);
+    }
+  }
+
+  @media (min-width: 48rem) {
+    .md\:px-8 {
+      padding-inline: calc(var(--spacing) * 8);
+    }
+  }
+
+  @media (min-width: 48rem) {
     .md\:py-20 {
       padding-block: calc(var(--spacing) * 20);
     }
@@ -26884,6 +27862,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 64rem) {
+    .lg\:left-72 {
+      left: calc(var(--spacing) * 72);
+    }
+  }
+
+  @media (min-width: 64rem) {
     .lg\:left-auto {
       left: auto;
     }
@@ -26932,6 +27916,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 64rem) {
+    .lg\:ml-80 {
+      margin-left: calc(var(--spacing) * 80);
+    }
+  }
+
+  @media (min-width: 64rem) {
     .lg\:ml-\[calc\(35\%\+3rem\)\] {
       margin-left: calc(35% + 3rem);
     }
@@ -26952,6 +27942,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 64rem) {
     .lg\:hidden {
       display: none;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .lg\:w-56 {
+      width: calc(var(--spacing) * 56);
     }
   }
 
@@ -27063,6 +28059,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     .lg\:text-base {
       font-size: var(--text-base);
       line-height: var(--tw-leading, var(--text-base--line-height));
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .lg\:shadow-2xl {
+      --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, rgba(0, 0, 0, .25));
+      box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
     }
   }
 
@@ -30165,7 +31168,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
     ],
-    "/expedition/page": [
+    "/dashboard/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
       "static/chunks/src_app_globals_b805903d.css",
@@ -30173,17 +31176,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/_c8166adc._.js",
-      "static/chunks/src_86534bfe._.js",
+      "static/chunks/node_modules_6a1296f0._.js",
+      "static/chunks/src_aa38ae9d._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
-      "static/chunks/node_modules_react-icons_md_index_mjs_78df2b41._.js",
-      "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
-      "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
-      "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_82e050a8._.js",
-      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
-      "static/chunks/src_app_expedition_page_tsx_2e88f23e._.js",
+      "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
+      "static/chunks/node_modules_c110bb90._.js",
+      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
+      "static/chunks/src_app_dashboard_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
       "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
@@ -30257,28 +31256,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
-    ],
-    "/register/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/src_ac86f657._.js",
-      "static/chunks/node_modules_2abc916f._.js",
-      "static/chunks/src_app_register_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
     ]
   }
 }
@@ -30301,9 +31278,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "bcdc382c5c6c00eb350a8d051df71687",
-    "previewModeSigningKey": "0c443bab163e698401ebca3748c647447242b1464ac5a07ba0999b0fcd6f9977",
-    "previewModeEncryptionKey": "bcd447a059209f3d651424205c52d7607bab13ad3691ca234cf0e3dee61ec225"
+    "previewModeId": "f0b52cf866f6ce7bce374a7b46ce39f1",
+    "previewModeSigningKey": "8e0908438b9335bc3b0032e39b10790fbc4ada812489b94911e61143de58ffce",
+    "previewModeEncryptionKey": "2197190e629264ecfc411dae75f81ce6d67348d6f4b3cdfc675e0aeb0882ad97"
   }
 }
 
