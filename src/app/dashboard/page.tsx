@@ -21,7 +21,6 @@ import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
 
-
 // --- Type du profil utilisateur (unifié pour tous) ---
 export interface UserProfile {
   id: string;
@@ -36,6 +35,14 @@ export interface UserProfile {
   [key: string]: any;
 }
 
+// Type spécifique pour le profil pro (ajouté pour corriger l'erreur)
+export interface ProProfile extends UserProfile {
+  // Propriétés spécifiques au profil professionnel
+  business_name?: string;
+  business_type?: string;
+  // Autres propriétés spécifiques si nécessaire
+}
+
 // Helper function to normalize profile data
 const normalizeProfile = (profile: any): UserProfile => {
   return {
@@ -45,7 +52,6 @@ const normalizeProfile = (profile: any): UserProfile => {
   };
 };
 
-
 interface NavItem {
   id: string;
   label: string;
@@ -53,8 +59,30 @@ interface NavItem {
   badge?: number;
 }
 
+// --- Interfaces pour les props des composants ---
+interface SidebarProps {
+  navigationItems: NavItem[];
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  userProfile: UserProfile;
+}
+
+interface HeaderProps {
+  user: UserProfile;
+  setIsSidebarOpen: (open: boolean) => void;
+}
+
 // --- Composant Sidebar Moderne ---
-const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen, userProfile }: any) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  navigationItems, 
+  activeTab, 
+  setActiveTab, 
+  isSidebarOpen, 
+  setIsSidebarOpen, 
+  userProfile 
+}) => {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -210,8 +238,8 @@ const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setI
 };
 
 // --- Header Moderne - Fixed ---
-const Header = ({ user, setIsSidebarOpen }: any) => {
-  const [searchQuery, setSearchQuery] = useState('');
+const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   return (
     <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/90 backdrop-blur-xl shadow-sm border-b border-gray-100 z-30 h-16">
@@ -277,12 +305,12 @@ const Header = ({ user, setIsSidebarOpen }: any) => {
 };
 
 // --- Loading Component ---
-const LoadingScreen = () => (
+const LoadingScreen: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
     <div className="text-center">
       <div className="relative mb-6">
-        <div className="w-16 h-16 border-3 border-orange-200 rounded-full animate-spin" />
-        <div className="absolute inset-0 w-16 h-16 border-3 border-t-orange-600 rounded-full animate-spin" />
+        <div className="w-16 h-16 border-4 border-orange-200 rounded-full animate-spin" />
+        <div className="absolute inset-0 w-16 h-16 border-4 border-t-orange-600 rounded-full animate-spin" />
         <div className="absolute inset-2 w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center">
           <Package className="h-6 w-6 text-white animate-pulse" />
         </div>
@@ -303,43 +331,55 @@ const LoadingScreen = () => (
 );
 
 // --- COMPOSANT PRINCIPAL ---
-export default function DashboardSwitcher() {
+const DashboardSwitcher: React.FC = () => {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
     const fetchUserProfile = async () => {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
-      }
-
-      let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      if (!profile) {
-        let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
-        if (!profilePro) {
-          console.error("Aucun profil trouvé.");
-          await supabase.auth.signOut();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
           router.push('/');
           return;
         }
-        profile = profilePro;
+
+        let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        if (!profile) {
+          let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
+          if (!profilePro) {
+            console.error("Aucun profil trouvé.");
+            await supabase.auth.signOut();
+            router.push('/');
+            return;
+          }
+          profile = profilePro;
+        }
+        
+        // Normaliser le profil pour s'assurer que toutes les propriétés requises sont présentes
+        const normalizedProfile = normalizeProfile(profile);
+        setUserProfile(normalizedProfile);
+      } catch (error) {
+        console.error('Erreur lors de la récupération du profil:', error);
+        router.push('/');
+      } finally {
+        setIsLoading(false);
       }
-      setUserProfile(profile as UserProfile);
-      setIsLoading(false);
     };
+    
     fetchUserProfile();
   }, [router]);
 
   // --- Définition dynamique des onglets de navigation ---
   const navigationItems = useMemo((): NavItem[] => {
-    const accountType = userProfile?.account_type?.toLowerCase();
+    if (!userProfile) return [];
+    
+    const accountType = userProfile.account_type?.toLowerCase();
     
     switch (accountType) {
       case 'client':
@@ -383,21 +423,55 @@ export default function DashboardSwitcher() {
     }
   }, [navigationItems, activeTab]);
 
+  // --- Fonction de mise à jour du profil ---
+  const handleProfileUpdate = async () => {
+    // Logic to re-fetch profile data
+    if (userProfile) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+          if (!profile) {
+            let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
+            if (profilePro) {
+              profile = profilePro;
+            }
+          }
+          if (profile) {
+            const normalizedProfile = normalizeProfile(profile);
+            setUserProfile(normalizedProfile);
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors de la mise à jour du profil:', error);
+      }
+    }
+  };
+
   // --- Rendu du contenu de l'onglet actif ---
-  const renderContent = () => {
+  const renderContent = (): ReactNode => {
     if (!userProfile) return null;
     const accountType = userProfile.account_type.toLowerCase();
     
     switch(activeTab) {
-      case 'overview': return <OverviewDashboard profile={userProfile} />;
-      case 'packages': return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
-      case 'deliveries': return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
-      case 'inventory': return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
-      case 'staff': return accountType === 'agence' ? <PersonnelPage /> : null;
-      case 'service-card': return accountType === 'freelance' ? <ServiceCardPage profile={userProfile} /> : null;
-      case 'profile': return <ProfilePage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
-      case 'settings': return <SettingsPage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
-      default: return <OverviewDashboard profile={userProfile} />;
+      case 'overview': 
+        return <OverviewDashboard profile={userProfile} />;
+      case 'packages': 
+        return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
+      case 'deliveries': 
+        return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
+      case 'inventory': 
+        return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
+      case 'staff': 
+        return accountType === 'agence' ? <PersonnelPage /> : null;
+      case 'service-card': 
+        return accountType === 'freelance' ? <ServiceCardPage profile={userProfile as ProProfile} /> : null;
+      case 'profile': 
+        return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      case 'settings': 
+        return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      default: 
+        return <OverviewDashboard profile={userProfile} />;
     }
   };
 
@@ -448,4 +522,6 @@ export default function DashboardSwitcher() {
       </div>
     </div>
   );
-}
+};
+
+export default DashboardSwitcher;

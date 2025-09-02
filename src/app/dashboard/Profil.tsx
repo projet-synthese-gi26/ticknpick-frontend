@@ -23,6 +23,27 @@ interface ProProfile {
   updated_at: string;
 }
 
+// Define the ProProfile interface directly in this file
+interface ProProfile {
+  id: string;
+  manager_name: string | null;
+  home_address: string | null;
+  phone_number: string | null;
+  nationality: string | null;
+  identity_photo_url: string | null;
+  relay_point_name: string | null;
+  relay_point_address: string | null;
+  account_type: 'CLIENT' | 'DELIVERY' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
+  current_latitude: number | null;
+  current_longitude: number | null;
+  created_at: string;
+  updated_at: string;
+  email?: string | null;
+  name: string;
+  role: string;
+  [key: string]: any;
+}
+
 // Dynamic imports with proper loading states
 const MapContainer = dynamic(
   () => import('react-leaflet').then((mod) => mod.MapContainer), 
