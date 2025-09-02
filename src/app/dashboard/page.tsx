@@ -21,8 +21,6 @@ import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
 
-// --- Type du profil utilisateur (unifié pour tous) ---
-// --- Type du profil utilisateur (unifié pour tous) ---
 
 // --- Type du profil utilisateur (unifié pour tous) ---
 export interface UserProfile {
@@ -31,13 +29,21 @@ export interface UserProfile {
   manager_name: string | null;
   email?: string | null;
   
-  // Properties required by child components
-  name: string | null;
-  role: string | null;
+  // Properties required by child components (non-nullable)
+  name: string;
+  role: string;
   
   [key: string]: any;
 }
 
+// Helper function to normalize profile data
+const normalizeProfile = (profile: any): UserProfile => {
+  return {
+    ...profile,
+    name: profile.name || profile.manager_name || 'Utilisateur',
+    role: profile.role || profile.account_type || 'user',
+  };
+};
 
 
 interface NavItem {

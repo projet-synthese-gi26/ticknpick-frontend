@@ -20,13 +20,9 @@ import {
   Route
 } from 'lucide-react';
 
+import { UserProfile } from './page';
+
 // Types
-interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
 
 interface Shipment {
   id: string;
@@ -147,8 +143,7 @@ const mockData: { [key: string]: any[] } = {
   ]
 };
 
-export default function DeliveryPage({ profile = { id: 'user-123', name: 'John Doe', email: 'john@example.com', role: 'driver' } }: { profile?: UserProfile }) {
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+export default function DeliveryPage({ profile }: { profile: UserProfile }) {const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [availableShipments, setAvailableShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'available' | 'completed'>('active');
