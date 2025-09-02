@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Camera, User, Package, Tag, PlusCircle, Trash2, Car, Palette, Fingerprint, Ruler, Edit, Save, X, Eye, Users, ShieldCheck, Clock, Sprout, Sparkles, Star, Award } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ProProfile } from './page';
+import ProProfile  from './page';
 import { AnimatePresence, motion } from 'framer-motion';
 
 

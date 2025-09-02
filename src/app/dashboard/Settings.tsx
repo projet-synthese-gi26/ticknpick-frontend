@@ -2,7 +2,7 @@
 'use client';
 import React from 'react';
 import { supabase } from '@/lib/supabase';
-import { ProProfile } from './page';
+import ProProfile  from './page';
 import { CreditCard, Lock, Shield, ArrowRight, Building } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
