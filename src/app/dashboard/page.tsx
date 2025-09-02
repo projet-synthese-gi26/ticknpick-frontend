@@ -20,27 +20,27 @@ import PersonnelPage from './Personnel';
 import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
+// --- CORRIGÉ DANS: src/app/dashboard/page.tsx ---
 
-// --- Type du profil utilisateur (unifié pour tous) ---
+// Pour plus de clarté, unifions les cas (majuscules)
+type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+
+// Le profil de base, qui peut être n'importe quel type
 export interface UserProfile {
   id: string;
-  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
+  account_type: AccountType; // Utilise notre type unifié
   manager_name: string | null;
   email?: string | null;
-  
-  // Properties required by child components (non-nullable)
-  name: string;
-  role: string;
-  
+  name: string; // Ajouté pour la cohérence
+  role: string; // Ajouté pour la cohérence
   [key: string]: any;
 }
 
-// Type spécifique pour le profil pro (ajouté pour corriger l'erreur)
+// Le profil PRO, qui est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  // Propriétés spécifiques au profil professionnel
+  account_type: 'FREELANCE' | 'AGENCY'; // On spécifie ici que c'est forcément l'un de ces deux
   business_name?: string;
   business_type?: string;
-  // Autres propriétés spécifiques si nécessaire
 }
 
 // Helper function to normalize profile data

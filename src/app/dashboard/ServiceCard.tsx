@@ -4,18 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Camera, User, Package, Tag, PlusCircle, Trash2, Car, Palette, Fingerprint, Ruler, Edit, Save, X, Eye, Users, ShieldCheck, Clock, Sprout, Sparkles, Star, Award } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AnimatePresence, motion } from 'framer-motion';
+import type { ProProfile } from './page'; 
 
-// INTERFACES
-interface ProProfile {
-  id: string;
-  nom?: string;
-  adresse_gps?: string;
-  adresse_informelle?: string;
-  description?: string;
-  photo?: string;
-  account_type: 'AGENCY' | 'FREELANCE';
-  service_card_details?: ServiceCardDetails;
-}
 
 interface StaffMember {
   id: string;

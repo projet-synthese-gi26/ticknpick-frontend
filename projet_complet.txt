@@ -8153,23 +8153,35 @@ import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
 
 // --- Type du profil utilisateur (unifié pour tous) ---
-// --- Type du profil utilisateur (unifié pour tous) ---
-
-// --- Type du profil utilisateur (unifié pour tous) ---
 export interface UserProfile {
   id: string;
   account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
   manager_name: string | null;
   email?: string | null;
   
-  // Properties required by child components
-  name: string | null;
-  role: string | null;
+  // Properties required by child components (non-nullable)
+  name: string;
+  role: string;
   
   [key: string]: any;
 }
 
+// Type spécifique pour le profil pro (ajouté pour corriger l'erreur)
+export interface ProProfile extends UserProfile {
+  // Propriétés spécifiques au profil professionnel
+  business_name?: string;
+  business_type?: string;
+  // Autres propriétés spécifiques si nécessaire
+}
 
+// Helper function to normalize profile data
+const normalizeProfile = (profile: any): UserProfile => {
+  return {
+    ...profile,
+    name: profile.name || profile.manager_name || 'Utilisateur',
+    role: profile.role || profile.account_type || 'user',
+  };
+};
 
 interface NavItem {
   id: string;
@@ -8178,8 +8190,30 @@ interface NavItem {
   badge?: number;
 }
 
+// --- Interfaces pour les props des composants ---
+interface SidebarProps {
+  navigationItems: NavItem[];
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  userProfile: UserProfile;
+}
+
+interface HeaderProps {
+  user: UserProfile;
+  setIsSidebarOpen: (open: boolean) => void;
+}
+
 // --- Composant Sidebar Moderne ---
-const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen, userProfile }: any) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  navigationItems, 
+  activeTab, 
+  setActiveTab, 
+  isSidebarOpen, 
+  setIsSidebarOpen, 
+  userProfile 
+}) => {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -8335,8 +8369,8 @@ const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setI
 };
 
 // --- Header Moderne - Fixed ---
-const Header = ({ user, setIsSidebarOpen }: any) => {
-  const [searchQuery, setSearchQuery] = useState('');
+const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   return (
     <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/90 backdrop-blur-xl shadow-sm border-b border-gray-100 z-30 h-16">
@@ -8402,12 +8436,12 @@ const Header = ({ user, setIsSidebarOpen }: any) => {
 };
 
 // --- Loading Component ---
-const LoadingScreen = () => (
+const LoadingScreen: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
     <div className="text-center">
       <div className="relative mb-6">
-        <div className="w-16 h-16 border-3 border-orange-200 rounded-full animate-spin" />
-        <div className="absolute inset-0 w-16 h-16 border-3 border-t-orange-600 rounded-full animate-spin" />
+        <div className="w-16 h-16 border-4 border-orange-200 rounded-full animate-spin" />
+        <div className="absolute inset-0 w-16 h-16 border-4 border-t-orange-600 rounded-full animate-spin" />
         <div className="absolute inset-2 w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center">
           <Package className="h-6 w-6 text-white animate-pulse" />
         </div>
@@ -8428,43 +8462,55 @@ const LoadingScreen = () => (
 );
 
 // --- COMPOSANT PRINCIPAL ---
-export default function DashboardSwitcher() {
+const DashboardSwitcher: React.FC = () => {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
     const fetchUserProfile = async () => {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
-      }
-
-      let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      if (!profile) {
-        let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
-        if (!profilePro) {
-          console.error("Aucun profil trouvé.");
-          await supabase.auth.signOut();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
           router.push('/');
           return;
         }
-        profile = profilePro;
+
+        let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        if (!profile) {
+          let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
+          if (!profilePro) {
+            console.error("Aucun profil trouvé.");
+            await supabase.auth.signOut();
+            router.push('/');
+            return;
+          }
+          profile = profilePro;
+        }
+        
+        // Normaliser le profil pour s'assurer que toutes les propriétés requises sont présentes
+        const normalizedProfile = normalizeProfile(profile);
+        setUserProfile(normalizedProfile);
+      } catch (error) {
+        console.error('Erreur lors de la récupération du profil:', error);
+        router.push('/');
+      } finally {
+        setIsLoading(false);
       }
-      setUserProfile(profile as UserProfile);
-      setIsLoading(false);
     };
+    
     fetchUserProfile();
   }, [router]);
 
   // --- Définition dynamique des onglets de navigation ---
   const navigationItems = useMemo((): NavItem[] => {
-    const accountType = userProfile?.account_type?.toLowerCase();
+    if (!userProfile) return [];
+    
+    const accountType = userProfile.account_type?.toLowerCase();
     
     switch (accountType) {
       case 'client':
@@ -8508,21 +8554,55 @@ export default function DashboardSwitcher() {
     }
   }, [navigationItems, activeTab]);
 
+  // --- Fonction de mise à jour du profil ---
+  const handleProfileUpdate = async () => {
+    // Logic to re-fetch profile data
+    if (userProfile) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+          if (!profile) {
+            let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
+            if (profilePro) {
+              profile = profilePro;
+            }
+          }
+          if (profile) {
+            const normalizedProfile = normalizeProfile(profile);
+            setUserProfile(normalizedProfile);
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors de la mise à jour du profil:', error);
+      }
+    }
+  };
+
   // --- Rendu du contenu de l'onglet actif ---
-  const renderContent = () => {
+  const renderContent = (): ReactNode => {
     if (!userProfile) return null;
     const accountType = userProfile.account_type.toLowerCase();
     
     switch(activeTab) {
-      case 'overview': return <OverviewDashboard profile={userProfile} />;
-      case 'packages': return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
-      case 'deliveries': return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
-      case 'inventory': return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
-      case 'staff': return accountType === 'agence' ? <PersonnelPage /> : null;
-      case 'service-card': return accountType === 'freelance' ? <ServiceCardPage profile={userProfile} /> : null;
-      case 'profile': return <ProfilePage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
-      case 'settings': return <SettingsPage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
-      default: return <OverviewDashboard profile={userProfile} />;
+      case 'overview': 
+        return <OverviewDashboard profile={userProfile} />;
+      case 'packages': 
+        return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
+      case 'deliveries': 
+        return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
+      case 'inventory': 
+        return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
+      case 'staff': 
+        return accountType === 'agence' ? <PersonnelPage /> : null;
+      case 'service-card': 
+        return accountType === 'freelance' ? <ServiceCardPage profile={userProfile as ProProfile} /> : null;
+      case 'profile': 
+        return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      case 'settings': 
+        return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      default: 
+        return <OverviewDashboard profile={userProfile} />;
     }
   };
 
@@ -8573,7 +8653,9 @@ export default function DashboardSwitcher() {
       </div>
     </div>
   );
-}
+};
+
+export default DashboardSwitcher;
 
 
 ================================================================================
@@ -10261,7 +10343,7 @@ import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import { Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, AlertCircle, Car, Users, Star, Truck, Package, Shield } from 'lucide-react';
 
-// Define the ProProfile interface directly in this file
+// Define the ProProfile interface once with all possible account types
 interface ProProfile {
   id: string;
   manager_name: string | null;
@@ -10271,11 +10353,15 @@ interface ProProfile {
   identity_photo_url: string | null;
   relay_point_name: string | null;
   relay_point_address: string | null;
-  account_type: 'CLIENT' | 'DELIVERY' | 'FREELANCE' | 'AGENCY';
+  account_type: 'CLIENT' | 'DELIVERY' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
   current_latitude: number | null;
   current_longitude: number | null;
   created_at: string;
   updated_at: string;
+  email?: string | null;
+  name: string;
+  role: string;
+  [key: string]: any;
 }
 
 // Dynamic imports with proper loading states
@@ -10395,8 +10481,9 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   }, []);
 
   useEffect(() => {
-    if (profile.account_type === 'AGENCY') fetchRelayPoints();
-    if (profile.account_type === 'DELIVERY') fetchDeliveryInfo();
+    const accountType = profile.account_type.toUpperCase();
+    if (accountType === 'AGENCY' || accountType === 'AGENCE') fetchRelayPoints();
+    if (accountType === 'DELIVERY' || accountType === 'LIVREUR') fetchDeliveryInfo();
   }, [profile.account_type]);
 
   const fetchRelayPoints = async () => {
@@ -10568,7 +10655,8 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         current_longitude: currentLocation?.[1],
       };
       
-      if (profile.account_type !== 'CLIENT') {
+      const accountType = profile.account_type.toUpperCase();
+      if (accountType !== 'CLIENT') {
         updateData.relay_point_name = formData.relay_point_name;
         updateData.relay_point_address = formData.relay_point_address;
       }
@@ -10580,7 +10668,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       
       if (error) throw error;
       
-      if (profile.account_type === 'DELIVERY') {
+      if (accountType === 'DELIVERY' || accountType === 'LIVREUR') {
         const { error: deliveryError } = await supabase
           .from('delivery_info')
           .upsert({
@@ -10686,11 +10774,14 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   };
 
   const getAccountTitle = () => {
-    switch (profile.account_type) {
+    const accountType = profile.account_type.toUpperCase();
+    switch (accountType) {
       case 'CLIENT': return 'Client';
-      case 'DELIVERY': return 'Livreur';
+      case 'DELIVERY':
+      case 'LIVREUR': return 'Livreur';
       case 'FREELANCE': return 'Freelance PRO';
-      case 'AGENCY': return 'Agence';
+      case 'AGENCY':
+      case 'AGENCE': return 'Agence';
       default: return 'Profil';
     }
   };
@@ -10776,6 +10867,11 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       </div>
     </div>
   );
+
+  // Helper function to check account type (handles both uppercase and lowercase)
+  const isAccountType = (type: string) => {
+    return profile.account_type.toUpperCase() === type.toUpperCase();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-6">
@@ -10932,11 +11028,11 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         </div>
 
         {/* Relay Point Section */}
-        {profile.account_type !== 'CLIENT' && (
+        {!isAccountType('CLIENT') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <Building className="w-6 h-6 text-orange-500" />
-              {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
+              {isAccountType('AGENCY') ? 'Point Relais Principal' : 'Mon Point Relais'}
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               <div className="space-y-6">
@@ -10989,7 +11085,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Delivery Info Section */}
-        {profile.account_type === 'DELIVERY' && (
+        {isAccountType('DELIVERY') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -11059,7 +11155,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Client Upgrade Section */}
-        {profile.account_type === 'CLIENT' && (
+        {isAccountType('CLIENT') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <Star className="w-6 h-6 text-orange-500" />
@@ -11123,7 +11219,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Freelance Stats Section */}
-        {profile.account_type === 'FREELANCE' && (
+        {isAccountType('FREELANCE') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -11159,7 +11255,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Agency Relay Points Section */}
-        {profile.account_type === 'AGENCY' && (
+        {isAccountType('AGENCY') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -11661,13 +11757,9 @@ import {
   Route
 } from 'lucide-react';
 
+import { UserProfile } from './page';
+
 // Types
-interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
 
 interface Shipment {
   id: string;
@@ -11788,8 +11880,7 @@ const mockData: { [key: string]: any[] } = {
   ]
 };
 
-export default function DeliveryPage({ profile = { id: 'user-123', name: 'John Doe', email: 'john@example.com', role: 'driver' } }: { profile?: UserProfile }) {
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+export default function DeliveryPage({ profile }: { profile: UserProfile }) {const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [availableShipments, setAvailableShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'available' | 'completed'>('active');
