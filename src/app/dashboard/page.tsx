@@ -465,13 +465,15 @@ const DashboardSwitcher: React.FC = () => {
       case 'staff': 
         return accountType === 'agence' ? <PersonnelPage /> : null;
       case 'service-card': 
-        return accountType === 'freelance' ? <ServiceCardPage profile={userProfile as ProProfile} /> : null;
-      case 'profile': 
-        return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
-      case 'settings': 
-        return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
-      default: 
-        return <OverviewDashboard profile={userProfile} />;
+        //  <<< MODIFICATION LOGIQUE IMPORTANTE >>>
+        // On s'assure que le profil est compatible avant de rendre le composant.
+        if (accountType === 'FREELANCE' || accountType === 'AGENCY') {
+          return <ServiceCardPage profile={userProfile as ProProfile} />;
+        }
+        return null;
+      case 'profile': return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      case 'settings': return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      default: return <OverviewDashboard profile={userProfile} />;
     }
   };
 

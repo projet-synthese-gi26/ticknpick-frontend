@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import { Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, AlertCircle, Car, Users, Star, Truck, Package, Shield } from 'lucide-react';
-
+import type { UserProfile } from './page';
 // Define the ProProfile interface once with all possible account types
 interface ProProfile {
   id: string;
@@ -100,7 +100,7 @@ interface DeliveryInfo {
 }
 
 interface ProfilePageProps {
-  profile: ProProfile;
+  profile: UserProfile;
   onUpdate: () => void;
 }
 

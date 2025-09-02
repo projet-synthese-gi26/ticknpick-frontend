@@ -4,6 +4,7 @@ import React from 'react';
 import { supabase } from '@/lib/supabase';
 import { CreditCard, Lock, Shield, ArrowRight, Building } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import type { UserProfile } from './page';
 
 // Define the profile type interface
 interface ProProfile {
@@ -13,7 +14,7 @@ interface ProProfile {
 }
 
 interface SettingsPageProps {
-    profile: ProProfile;
+   profile: UserProfile; 
     onUpdate: () => void;
 }
 
