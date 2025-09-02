@@ -106,7 +106,7 @@ interface ProfilePageProps {
 
 export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<ProProfile>(profile);
+ const [formData, setFormData] = useState<UserProfile>(profile);
   const [isLoading, setIsLoading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);

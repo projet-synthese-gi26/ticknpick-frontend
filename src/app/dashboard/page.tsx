@@ -337,6 +337,7 @@ const DashboardSwitcher: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  
 
   // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
