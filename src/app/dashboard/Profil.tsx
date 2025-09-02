@@ -6,24 +6,7 @@ import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import { Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, AlertCircle, Car, Users, Star, Truck, Package, Shield } from 'lucide-react';
 
-// Define the ProProfile interface directly in this file
-interface ProProfile {
-  id: string;
-  manager_name: string | null;
-  home_address: string | null;
-  phone_number: string | null;
-  nationality: string | null;
-  identity_photo_url: string | null;
-  relay_point_name: string | null;
-  relay_point_address: string | null;
-  account_type: 'CLIENT' | 'DELIVERY' | 'FREELANCE' | 'AGENCY';
-  current_latitude: number | null;
-  current_longitude: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// Define the ProProfile interface directly in this file
+// Define the ProProfile interface once with all possible account types
 interface ProProfile {
   id: string;
   manager_name: string | null;
@@ -161,8 +144,9 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   }, []);
 
   useEffect(() => {
-    if (profile.account_type === 'AGENCY') fetchRelayPoints();
-    if (profile.account_type === 'DELIVERY') fetchDeliveryInfo();
+    const accountType = profile.account_type.toUpperCase();
+    if (accountType === 'AGENCY' || accountType === 'AGENCE') fetchRelayPoints();
+    if (accountType === 'DELIVERY' || accountType === 'LIVREUR') fetchDeliveryInfo();
   }, [profile.account_type]);
 
   const fetchRelayPoints = async () => {
@@ -334,7 +318,8 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         current_longitude: currentLocation?.[1],
       };
       
-      if (profile.account_type !== 'CLIENT') {
+      const accountType = profile.account_type.toUpperCase();
+      if (accountType !== 'CLIENT') {
         updateData.relay_point_name = formData.relay_point_name;
         updateData.relay_point_address = formData.relay_point_address;
       }
@@ -346,7 +331,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       
       if (error) throw error;
       
-      if (profile.account_type === 'DELIVERY') {
+      if (accountType === 'DELIVERY' || accountType === 'LIVREUR') {
         const { error: deliveryError } = await supabase
           .from('delivery_info')
           .upsert({
@@ -452,11 +437,14 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   };
 
   const getAccountTitle = () => {
-    switch (profile.account_type) {
+    const accountType = profile.account_type.toUpperCase();
+    switch (accountType) {
       case 'CLIENT': return 'Client';
-      case 'DELIVERY': return 'Livreur';
+      case 'DELIVERY':
+      case 'LIVREUR': return 'Livreur';
       case 'FREELANCE': return 'Freelance PRO';
-      case 'AGENCY': return 'Agence';
+      case 'AGENCY':
+      case 'AGENCE': return 'Agence';
       default: return 'Profil';
     }
   };
@@ -542,6 +530,11 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       </div>
     </div>
   );
+
+  // Helper function to check account type (handles both uppercase and lowercase)
+  const isAccountType = (type: string) => {
+    return profile.account_type.toUpperCase() === type.toUpperCase();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-6">
@@ -698,11 +691,11 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         </div>
 
         {/* Relay Point Section */}
-        {profile.account_type !== 'CLIENT' && (
+        {!isAccountType('CLIENT') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <Building className="w-6 h-6 text-orange-500" />
-              {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
+              {isAccountType('AGENCY') ? 'Point Relais Principal' : 'Mon Point Relais'}
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               <div className="space-y-6">
@@ -755,7 +748,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Delivery Info Section */}
-        {profile.account_type === 'DELIVERY' && (
+        {isAccountType('DELIVERY') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -825,7 +818,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Client Upgrade Section */}
-        {profile.account_type === 'CLIENT' && (
+        {isAccountType('CLIENT') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <Star className="w-6 h-6 text-orange-500" />
@@ -889,7 +882,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Freelance Stats Section */}
-        {profile.account_type === 'FREELANCE' && (
+        {isAccountType('FREELANCE') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -925,7 +918,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         )}
 
         {/* Agency Relay Points Section */}
-        {profile.account_type === 'AGENCY' && (
+        {isAccountType('AGENCY') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
