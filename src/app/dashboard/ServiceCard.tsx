@@ -3,11 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Camera, User, Package, Tag, PlusCircle, Trash2, Car, Palette, Fingerprint, Ruler, Edit, Save, X, Eye, Users, ShieldCheck, Clock, Sprout, Sparkles, Star, Award } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import ProProfile  from './page';
 import { AnimatePresence, motion } from 'framer-motion';
 
-
 // INTERFACES
+interface ProProfile {
+  id: string;
+  nom?: string;
+  adresse_gps?: string;
+  adresse_informelle?: string;
+  description?: string;
+  photo?: string;
+  account_type: 'AGENCY' | 'FREELANCE';
+  service_card_details?: ServiceCardDetails;
+}
+
 interface StaffMember {
   id: string;
   name: string;
@@ -48,7 +57,6 @@ interface InputFieldProps {
   readOnly: boolean;
 }
 
-
 interface ColorPaletteProps {
   selectedColor: string;
   onSelect: (color: string) => void;
@@ -67,7 +75,6 @@ const useServiceCardData = (profileId: string) => {
 
     return { vehicules, setVehicules, tarifs, setTarifs, devise, setDevise };
 };
-
 
 const initialStaffMembers = [
   { id: 'emp-001', name: 'Essono Cédric', avatar: '/avatars/essono.png', role: 'Manutentionnaire' },
@@ -93,7 +100,6 @@ const loadFromMemory = (key: string, defaultValue: any) => {
 };
 
 // SOUS-COMPOSANTS
-
 const InputField = ({ label, value, onChange, placeholder, icon: Icon, readOnly }: InputFieldProps) => (
   <div className="group">
     <label className="block text-sm font-bold text-slate-700 mb-2 transition-colors group-focus-within:text-emerald-600">{label}</label>
@@ -112,7 +118,6 @@ const InputField = ({ label, value, onChange, placeholder, icon: Icon, readOnly 
     </div>
   </div>
 );
-
 
 const ColorPalette = ({ selectedColor, onSelect, readOnly = false }: ColorPaletteProps) => {
   const colors = ['#FFFFFF', '#1F2937', '#EF4444', '#F97316', '#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'];
@@ -141,7 +146,6 @@ export default function ServiceCardPage({ profile }: { profile: ProProfile }) {
   const [showPreview, setShowPreview] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [backupData, setBackupData] = useState<ServiceCardDetails | null>(null);
-
 
   const { vehicules, setVehicules, tarifs, setTarifs, devise, setDevise } = useServiceCardData(profile.id);
 
@@ -219,7 +223,6 @@ export default function ServiceCardPage({ profile }: { profile: ProProfile }) {
         setIsEditing(false);
         setBackupData(null);
     };
-
 
   const handleGetLocation = () => {
     if (navigator.geolocation) {
@@ -540,7 +543,7 @@ export default function ServiceCardPage({ profile }: { profile: ProProfile }) {
               </div>
             )}
 
-</div>
+                </div>
             </div>
             
             {/* --- Personnel ou Message Freelance & Promo (côte droite) --- */}
@@ -548,7 +551,22 @@ export default function ServiceCardPage({ profile }: { profile: ProProfile }) {
                 {profile.account_type === 'AGENCY' && (
                     <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border p-8">
                          <h4 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mb-6"><Users className="text-orange-500 h-7 w-7"/>Notre Équipe</h4>
-                         {/* Vous pouvez mapper le personnel ici si nécessaire */}
+                         <div className="grid grid-cols-2 gap-4">
+                           {personnel.map(p => (
+                             <div key={p.id} className="text-center group cursor-pointer">
+                               <div className="relative mx-auto w-16 h-16 mb-3">
+                                 <div className="w-full h-full bg-gradient-to-br from-orange-400 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                                   <User className="h-8 w-8 text-white"/>
+                                 </div>
+                                 <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-400 rounded-full border-2 border-white flex items-center justify-center">
+                                   <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                                 </div>
+                               </div>
+                               <p className="font-bold text-slate-800 text-sm">{p.name.split(' ')[0]}</p>
+                               <p className="text-xs text-slate-500">{p.role}</p>
+                             </div>
+                           ))}
+                         </div>
                     </div>
                 )}
                 {profile.account_type === 'FREELANCE' && (
@@ -560,11 +578,46 @@ export default function ServiceCardPage({ profile }: { profile: ProProfile }) {
                 )}
                  <div className="relative overflow-hidden rounded-3xl shadow-xl bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 p-8 text-white min-h-[250px] flex flex-col">
                      <h3 className="text-2xl font-black flex items-center gap-3 mb-4"><Award className="w-7 h-7"/>Offres Spéciales</h3>
-                     <textarea value={promo} onChange={(e) => setPromo(e.target.value)} readOnly={!isEditing} 
-                        className="flex-grow w-full bg-white/20 p-4 rounded-xl resize-none font-medium placeholder-white/70"/>
+                     <textarea 
+                       value={promo} 
+                       onChange={(e) => setPromo(e.target.value)} 
+                       readOnly={!isEditing} 
+                       className={`flex-grow w-full p-4 rounded-xl resize-none font-medium placeholder-white/70 transition-all ${
+                         isEditing 
+                           ? 'bg-white/20 border-2 border-white/30 focus:border-white/50' 
+                           : 'bg-white/10 border-none cursor-not-allowed'
+                       }`}
+                       placeholder="Décrivez vos offres spéciales..."
+                     />
                  </div>
             </div>
         </div>
+
+        {/* Bouton d'aperçu */}
+        <div className="text-center">
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center gap-3 mx-auto"
+          >
+            <Eye className="h-6 w-6" />
+            {showPreview ? 'Masquer l\'Aperçu' : 'Voir l\'Aperçu Final'}
+          </button>
+        </div>
+
+        {/* Aperçu conditionnel */}
+        <AnimatePresence>
+          {showPreview && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -50 }}
+              transition={{ duration: 0.5 }}
+              className="mt-12"
+            >
+              {renderPreviewCard()}
+            </motion.div>
+          )}
+        </AnimatePresence>
     </div>
   );
 };
