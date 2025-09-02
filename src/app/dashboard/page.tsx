@@ -1,394 +1,433 @@
-// FICHIER : src/app/dashboard/page.tsx
 'use client';
 
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- Icônes
+// --- Icônes (importations existantes et nouvelles)
 import {
-  Home, Package, User, LogOut, Bell, Menu, X, Users, Settings, Image as ImageIcon, Briefcase, CreditCard
+  Home, Package, User, LogOut, Menu, X, Users, Settings, Briefcase, Truck,
+  ArrowRightLeft, DollarSign, Bell, Search, Sun, Moon
 } from 'lucide-react';
 
 // --- Import des composants pour chaque onglet ---
-// Nous allons créer/modifier ces fichiers juste après
-import OverviewDashboard from './Overview'; // Vue d'ensemble avec KPIs et graphiques
-import InventoryPage from './Inventaire'; // Existant, sera juste re-stylé
-import PersonnelPage from './Personnel'; // Existant, sera juste re-stylé
-import ProfilePage from './Profil'; // NOUVEAU composant pour gérer les profils
-import ServiceCardPage from './ServiceCard'; // Existant, sera adapté
-import SettingsPage from './Settings'; // NOUVEAU composant
+import OverviewDashboard from './Overview';
+import ClientPackagesPage from './ClientPackages';
+import DeliveryPage from './Deliveries';
+import InventoryPage from './Inventaire';
+import PersonnelPage from './Personnel';
+import ProfilePage from './Profil';
+import ServiceCardPage from './ServiceCard';
+import SettingsPage from './Settings';
 
-// --- Type du profil utilisateur PRO ---
-export interface ProProfile {
-    id: string; // uuid de Supabase auth.users
-    created_at: string;
-    account_type: 'FREELANCE' | 'AGENCY' | 'freelance' | 'agence' | 'client' | 'livreur';
-
-    // Étape 1: Identification Gérant
-    manager_name: string | null;
-    birth_date: string | null; // les dates sont des chaînes en JSON
-    nationality: string | null;
-    home_address: string | null;
-    phone_number: string | null;
-    identity_photo_url: string | null;
-
-    // Étape 2: Infos Admin & Légales
-    id_card_number: string | null;
-    id_card_url: string | null;
-    tax_id: string | null;
-    legal_status: string | null;
-    company_register: string | null;
-
-    // Étape 3: Infos Professionnelles
-    professional_experience: string | null;
-    spoken_languages: string[] | null; // text[] devient string[]
-
-    // Étape 4: Infos Point Relais
-    relay_point_name: string | null;
-    relay_point_address: string | null;
-    relay_point_gps: string | null;
-    relay_point_type: string | null;
-    opening_hours: string | null;
-    storage_capacity: string | null;
-
-    // Étape 5: Infos Financières et autres (JSONB)
-    payment_info: any | null; // jsonb peut être n'importe quel objet
-    
-    // Champs basiques qui peuvent être présents dans 'profiles'
-    email?: string | null;
-    
-    // Pour permettre un accès dynamique si besoin
-    [key: string]: any;
+// --- Type du profil utilisateur (unifié pour tous) ---
+export interface UserProfile {
+  id: string;
+  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
+  manager_name: string | null;
+  email?: string | null;
+  [key: string]: any;
 }
 
-// --- Éléments de navigation ---
-const baseNavItems = [
-  { id: 'overview', label: 'Vue d\'ensemble', icon: Home },
-  { id: 'inventory', label: 'Suivi de Colis', icon: Package },
-  { id: 'profile', label: 'Profil', icon: User },
-  { id: 'service-card', label: 'Carte de Service', icon: Briefcase },
-  { id: 'settings', label: 'Paramètres', icon: Settings },
-];
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  badge?: number;
+}
 
-const agencyNavItem = { id: 'staff', label: 'Personnel', icon: Users };
+// --- Composant Sidebar Moderne ---
+const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen, userProfile }: any) => {
+  const router = useRouter();
 
-// --- Composants UI (Sidebar, Header) ---
-const Sidebar = ({ navigationItems, activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen }: any) => {
-    // Le contenu interne de la Sidebar (SidebarContent)
-    const SidebarContent = () => {
-        const router = useRouter();
-        const handleLogout = async () => {
-            await supabase.auth.signOut();
-            localStorage.removeItem('pickndrop_currentUser');
-            router.push('/');
-        };
-        
-        return (
-            <div className="flex flex-col h-full">
-                <div className="px-6 py-6 border-b border-gray-200 flex justify-between items-center">
-                    <div className="flex items-center">
-                        <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-3 rounded-xl mr-3">
-                            <Package className="h-8 w-8 text-white"/>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">PicknDrop</h1>
-                            <p className="text-gray-500 text-sm">PRO Dashboard</p>
-                        </div>
-                    </div>
-                    {isSidebarOpen && <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-800"><X className="h-6 w-6" /></button>}
-                </div>
-                
-                <nav className="mt-6 flex-1 px-4">
-                    <ul className="space-y-2">
-                        {navigationItems.map((item: any) => (
-                          <li key={item.id}>
-                            <button
-                              onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                                activeTab === item.id
-                                  ? 'bg-orange-600 text-white shadow-md'
-                                  : 'text-gray-600 hover:bg-orange-50 hover:text-orange-700'
-                              }`}
-                            >
-                              <item.icon className="h-5 w-5" />
-                              <span>{item.label}</span>
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                </nav>
-                
-                <div className="px-4 py-6 border-t border-gray-200">
-                    <button onClick={handleLogout} className="w-full flex items-center space-x-3 px-4 py-3 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-200">
-                        <LogOut className="h-5 w-5" />
-                        <span>Déconnexion</span>
-                    </button>
-                </div>
-            </div>
-        );
-    };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
+  };
 
-    return (
-      <>
-        {/* Sidebar pour grands écrans */}
-        <div className="hidden lg:flex w-72 bg-white border-r border-gray-200 flex-col fixed h-full shadow-sm">
-            <SidebarContent />
-        </div>
-        {/* Drawer pour mobile */}
-        <AnimatePresence>
+  const getAccountTypeColor = (type: string) => {
+    switch(type.toLowerCase()) {
+      case 'client': return 'bg-gradient-to-r from-blue-500 to-cyan-500';
+      case 'livreur': return 'bg-gradient-to-r from-green-500 to-emerald-500';
+      case 'agence': return 'bg-gradient-to-r from-purple-500 to-violet-500';
+      case 'freelance': return 'bg-gradient-to-r from-orange-500 to-amber-500';
+      default: return 'bg-gradient-to-r from-orange-500 to-amber-500';
+    }
+  };
+
+  return (
+    <>
+      {/* Overlay pour mobile */}
+      <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="lg:hidden fixed inset-0 z-40"
-          >
-            <div className="absolute inset-0 bg-black/50" onClick={() => setIsSidebarOpen(false)}></div>
-            <motion.div 
-              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="relative z-50 w-72 h-full bg-white shadow-xl">
-              <SidebarContent />
-            </motion.div>
-          </motion.div>
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsSidebarOpen(false)}
+          />
         )}
-        </AnimatePresence>
-      </>
-    );
+      </AnimatePresence>
+
+      {/* Sidebar - Fixed sur toute la hauteur */}
+      <motion.aside 
+        initial={{ x: '-100%' }} 
+        animate={{ 
+          x: isSidebarOpen || (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 0 : '-100%' 
+        }} 
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        className="fixed top-0 left-0 z-50 w-72 h-screen bg-white/95 backdrop-blur-xl border-r border-orange-100 shadow-xl lg:shadow-2xl flex flex-col"
+      >
+        {/* Header Sidebar - Plus compact */}
+        <div className="px-5 py-6 border-b border-orange-100/50 relative overflow-hidden flex-shrink-0">
+          {/* Background Pattern */}
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 opacity-50" />
+          <div className="absolute -top-8 -right-8 w-24 h-24 bg-orange-200/30 rounded-full blur-2xl" />
+          
+          <div className="relative flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <div className={`${getAccountTypeColor(userProfile?.account_type || 'freelance')} p-3 rounded-xl shadow-md transform rotate-2 hover:rotate-0 transition-all duration-300`}>
+                <Package className="h-6 w-6 text-white drop-shadow-sm"/>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                  Dashboard
+                </h1>
+                <div className="flex items-center mt-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${getAccountTypeColor(userProfile?.account_type || 'freelance')} mr-2`} />
+                  <p className="text-orange-600 text-xs font-medium capitalize tracking-wide">
+                    {userProfile?.account_type.toLowerCase()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsSidebarOpen(false)} 
+              className="lg:hidden p-2 hover:bg-orange-100 rounded-lg transition-all duration-200 text-orange-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        
+        {/* Navigation - Scrollable */}
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent">
+          {navigationItems.map((item: NavItem, index: number) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <button
+                onClick={() => { 
+                  setActiveTab(item.id); 
+                  setIsSidebarOpen(false); 
+                }}
+                className={`w-full group flex items-center justify-between px-3 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  activeTab === item.id
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
+                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 hover:text-orange-700'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-lg transition-all duration-200 ${
+                    activeTab === item.id 
+                      ? 'bg-white/20' 
+                      : 'bg-orange-100/50 group-hover:bg-orange-200/50'
+                  }`}>
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium text-sm">{item.label}</span>
+                </div>
+                {item.badge && (
+                  <div className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {item.badge}
+                  </div>
+                )}
+              </button>
+            </motion.div>
+          ))}
+        </nav>
+        
+        {/* Footer Sidebar - Plus compact */}
+        <div className="px-4 py-4 border-t border-orange-100/50 bg-gradient-to-r from-orange-50/50 to-amber-50/50 flex-shrink-0">
+          <div className="space-y-2">
+            <button 
+              onClick={() => router.push('/home')} 
+              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 group"
+            >
+              <Home className="h-4 w-4 group-hover:text-orange-600 transition-colors" />
+              <span className="font-medium text-sm">Retour accueil</span>
+            </button>
+            <button 
+              onClick={handleLogout} 
+              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200 group"
+            >
+              <LogOut className="h-4 w-4 group-hover:text-red-600 transition-colors" />
+              <span className="font-medium text-sm">Déconnexion</span>
+            </button>
+          </div>
+          
+          {/* User Info - Plus compact */}
+          <div className="mt-3 p-3 bg-white/60 backdrop-blur-sm rounded-xl border border-orange-100/50">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <User className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-900 truncate">
+                  {userProfile?.manager_name || 'Utilisateur'}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {userProfile?.email || 'email@example.com'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.aside>
+    </>
+  );
 };
 
-const Header = ({ user, setIsSidebarOpen }: any) => (
-  <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 p-4 md:p-6 sticky top-0 z-30">
-    <div className="flex justify-between items-center">
-        <div className="flex items-center">
-            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-gray-600 mr-4">
-                <Menu className="h-6 w-6" />
+// --- Header Moderne - Fixed ---
+const Header = ({ user, setIsSidebarOpen }: any) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  return (
+    <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/90 backdrop-blur-xl shadow-sm border-b border-gray-100 z-30 h-16">
+      <div className="px-4 md:px-6 h-full">
+        <div className="flex justify-between items-center h-full">
+          {/* Left Section */}
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => setIsSidebarOpen(true)} 
+              className="lg:hidden p-2 hover:bg-orange-100 rounded-lg transition-all duration-200 text-orange-600"
+            >
+              <Menu className="h-5 w-5" />
             </button>
+            
             <div>
-                <h2 className="text-xl md:text-3xl font-bold text-gray-900">
-                    Bonjour, {user?.manager_name || 'PRO'} ! 👋
-                </h2>
-                <p className="text-gray-500 text-sm md:text-base mt-1 hidden sm:block">
-                    {user?.account_type?.toLowerCase() === 'freelance' || user?.account_type === 'FREELANCE' 
-                        ? 'Tableau de bord Freelance' 
-                        : user?.account_type?.toLowerCase() === 'agence' || user?.account_type === 'AGENCY'
-                            ? 'Tableau de bord Agence'
-                            : user?.account_type?.toLowerCase() === 'client'
-                                ? 'Tableau de bord Client'
-                                : user?.account_type?.toLowerCase() === 'livreur'
-                                    ? 'Tableau de bord Livreur'
-                                    : 'Tableau de bord PRO'
-                    }
-                </p>
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
+                Bonjour, <span className="bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                  {user?.manager_name || 'Utilisateur'}
+                </span> ! 👋
+              </h2>
+              <p className="text-gray-500 text-xs hidden sm:block">
+                {new Date().toLocaleDateString('fr-FR', { 
+                  weekday: 'long', 
+                  month: 'short', 
+                  day: 'numeric' 
+                })}
+              </p>
             </div>
-        </div>
-        <div className="flex items-center space-x-2 md:space-x-4">
+          </div>
+
+          {/* Right Section */}
+          <div className="flex items-center space-x-2">
+            {/* Search Bar (hidden on small screens) */}
+            <div className="hidden md:flex relative">
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-3 py-1.5 w-48 lg:w-56 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
+              />
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            </div>
+
+            {/* Notifications */}
+            <button className="relative p-2 hover:bg-orange-50 rounded-lg transition-all duration-200 group">
+              <Bell className="h-4 w-4 text-gray-600 group-hover:text-orange-600" />
+              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse" />
+            </button>
+
+            {/* Profile Avatar */}
             <div className="relative">
-                <Bell className="h-6 w-6 text-gray-500 hover:text-gray-700 cursor-pointer transition-colors"/>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center animate-pulse">3</span>
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-500 rounded-lg flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer group">
+                <User className="h-4 w-4 text-white group-hover:scale-110 transition-transform duration-200"/>
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border border-white rounded-full" />
             </div>
-            <div className="bg-gradient-to-br from-orange-500 to-amber-500 p-2 rounded-full shadow-md">
-                <User className="h-6 w-6 text-white"/>
-            </div>
+          </div>
         </div>
+      </div>
+    </header>
+  );
+};
+
+// --- Loading Component ---
+const LoadingScreen = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+    <div className="text-center">
+      <div className="relative mb-6">
+        <div className="w-16 h-16 border-3 border-orange-200 rounded-full animate-spin" />
+        <div className="absolute inset-0 w-16 h-16 border-3 border-t-orange-600 rounded-full animate-spin" />
+        <div className="absolute inset-2 w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center">
+          <Package className="h-6 w-6 text-white animate-pulse" />
+        </div>
+      </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-2">Chargement de votre espace</h3>
+      <p className="text-gray-600 text-sm">Préparation de votre dashboard personnalisé...</p>
+      <div className="mt-4 flex justify-center space-x-1">
+        {[...Array(3)].map((_, i) => (
+          <div
+            key={i}
+            className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
+            style={{ animationDelay: `${i * 0.2}s` }}
+          />
+        ))}
+      </div>
     </div>
-  </header>
+  </div>
 );
 
 // --- COMPOSANT PRINCIPAL ---
-export default function ProDashboard() {
+export default function DashboardSwitcher() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<ProProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [navigationItems, setNavigationItems] = useState(baseNavItems);
 
-  // --- FIX : Fetch des données utilisateur avec la même logique que login/home ---
+  // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
     const fetchUserProfile = async () => {
-      try {
-        setIsLoading(true);
-        console.log('🔍 [Dashboard] Vérification de la session...');
-        
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          console.log('❌ [Dashboard] Pas de session, redirection vers login');
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/');
+        return;
+      }
+
+      let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile) {
+        let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
+        if (!profilePro) {
+          console.error("Aucun profil trouvé.");
+          await supabase.auth.signOut();
           router.push('/');
           return;
         }
-
-        console.log('✅ [Dashboard] Session trouvée, ID utilisateur:', session.user.id);
-
-        // --- FIX : Même logique que dans login et home ---
-        console.log('👤 [Dashboard] Récupération du profil depuis profiles...');
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*') // Récupérer tous les champs
-          .eq('id', session.user.id)
-          .single();
-
-        console.log('📋 [Dashboard] Résultat profiles:', { profile, error: profileError });
-
-        let finalProfile = profile;
-        let fromTable = 'profiles';
-        
-        // Si pas trouvé dans 'profiles', essayer 'profiles_pro'
-        if (profileError && profileError.code === 'PGRST116') {
-          console.log('🔄 [Dashboard] Profil non trouvé dans profiles, tentative profiles_pro...');
-          const { data: profilePro, error: profileProError } = await supabase
-            .from('profiles_pro')
-            .select('*') // Récupérer tous les champs
-            .eq('id', session.user.id)
-            .single();
-          
-          console.log('📋 [Dashboard] Résultat profiles_pro:', { profilePro, error: profileProError });
-          
-          if (profileProError || !profilePro) {
-            console.error("❌ [Dashboard] Aucun profil trouvé dans les deux tables");
-            throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous reconnecter.");
-          }
-          
-          finalProfile = profilePro;
-          fromTable = 'profiles_pro';
-          console.log('✅ [Dashboard] Profil trouvé dans profiles_pro');
-        } else if (profileError) {
-          console.error("❌ [Dashboard] Erreur lors de la récupération du profil:", profileError);
-          throw new Error(`Erreur profil: ${profileError.message}`);
-        }
-
-        if (!finalProfile) {
-          throw new Error("Profil introuvable.");
-        }
-
-        console.log('✅ [Dashboard] Profil final chargé depuis', fromTable, ':', finalProfile.manager_name);
-        console.log('🎭 [Dashboard] Type de compte:', finalProfile.account_type);
-
-        setUserProfile(finalProfile as ProProfile);
-
-        // Définir la navigation en fonction du type de compte
-        const accountType = finalProfile.account_type?.toLowerCase();
-        if (accountType === 'agency' || accountType === 'agence') {
-          const agencyNav = [...baseNavItems];
-          // Insérer 'Personnel' à la 3ème position (index 2)
-          agencyNav.splice(2, 0, agencyNavItem);
-          setNavigationItems(agencyNav);
-          console.log('📋 [Dashboard] Navigation agence configurée');
-        } else {
-          setNavigationItems(baseNavItems);
-          console.log('📋 [Dashboard] Navigation standard configurée');
-        }
-
-      } catch (error: any) {
-        console.error('💥 [Dashboard] Erreur complète lors du chargement:', error);
-        // En cas d'erreur, déconnecter et rediriger
-        await supabase.auth.signOut();
-        localStorage.removeItem('pickndrop_currentUser');
-        router.push('/');
-      } finally {
-        setIsLoading(false);
+        profile = profilePro;
       }
+      setUserProfile(profile as UserProfile);
+      setIsLoading(false);
     };
-
     fetchUserProfile();
   }, [router]);
-  
-  // --- Mettre à jour le profil (passé en props aux enfants) ---
-  const updateUserProfile = async () => {
-    if (!userProfile) return;
-    
-    try {
-      console.log('🔄 [Dashboard] Mise à jour du profil...');
-      
-      // Essayer d'abord profiles, puis profiles_pro
-      let updatedProfile = null;
-      
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userProfile.id)
-        .single();
-      
-      if (profileError && profileError.code === 'PGRST116') {
-        // Essayer profiles_pro
-        const { data: profileProData, error: profileProError } = await supabase
-          .from('profiles_pro')
-          .select('*')
-          .eq('id', userProfile.id)
-          .single();
-        
-        if (profileProData && !profileProError) {
-          updatedProfile = profileProData;
-        }
-      } else if (profileData && !profileError) {
-        updatedProfile = profileData;
-      }
-      
-      if (updatedProfile) {
-        setUserProfile(updatedProfile as ProProfile);
-        console.log('✅ [Dashboard] Profil mis à jour');
-      }
-    } catch (error) {
-      console.error('❌ [Dashboard] Erreur lors de la mise à jour du profil:', error);
-    }
-  };
 
+  // --- Définition dynamique des onglets de navigation ---
+  const navigationItems = useMemo((): NavItem[] => {
+    const accountType = userProfile?.account_type?.toLowerCase();
+    
+    switch (accountType) {
+      case 'client':
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'packages', label: 'Mes Colis', icon: Package, badge: 3 },
+          { id: 'profile', label: 'Mon Profil', icon: User },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+      case 'livreur':
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'deliveries', label: 'Mes Livraisons', icon: Truck, badge: 7 },
+          { id: 'profile', label: 'Mon Profil', icon: User },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+      case 'agence':
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'inventory', label: 'Inventaire Agence', icon: Package },
+          { id: 'staff', label: 'Personnel', icon: Users },
+          { id: 'profile', label: 'Profil Agence', icon: Briefcase },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+      case 'freelance':
+      default: // Freelance et fallback
+        return [
+          { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'inventory', label: 'Inventaire', icon: Package },
+          { id: 'profile', label: 'Profil Pro', icon: Briefcase },
+          { id: 'service-card', label: 'Carte de Service', icon: User },
+          { id: 'settings', label: 'Paramètres', icon: Settings },
+        ];
+    }
+  }, [userProfile]);
+
+  // S'assurer que l'onglet actif est valide
+  useEffect(() => {
+    if (navigationItems.length > 0 && !navigationItems.find(item => item.id === activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [navigationItems, activeTab]);
+
+  // --- Rendu du contenu de l'onglet actif ---
   const renderContent = () => {
     if (!userProfile) return null;
+    const accountType = userProfile.account_type.toLowerCase();
     
     switch(activeTab) {
-        case 'overview': return <OverviewDashboard />;
-        case 'inventory': return <InventoryPage />;
-        case 'profile': return <ProfilePage profile={userProfile} onUpdate={updateUserProfile} />;
-        case 'service-card': return <ServiceCardPage profile={userProfile} />;
-        case 'settings': return <SettingsPage profile={userProfile} onUpdate={updateUserProfile} />;
-        case 'staff': 
-          const accountType = userProfile.account_type?.toLowerCase();
-          return (accountType === 'agency' || accountType === 'agence') ? <PersonnelPage /> : null;
-        default: return null;
+      case 'overview': return <OverviewDashboard profile={userProfile} />;
+      case 'packages': return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
+      case 'deliveries': return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
+      case 'inventory': return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
+      case 'staff': return accountType === 'agence' ? <PersonnelPage /> : null;
+      case 'service-card': return accountType === 'freelance' ? <ServiceCardPage profile={userProfile} /> : null;
+      case 'profile': return <ProfilePage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
+      case 'settings': return <SettingsPage profile={userProfile} onUpdate={async () => { /* re-fetch logic */ }} />;
+      default: return <OverviewDashboard profile={userProfile} />;
     }
   };
 
-  if (isLoading) {
-    return (
-     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-       <div className="flex items-center">
-         <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin"></div>
-         <p className="ml-4 text-lg font-semibold text-gray-700">Chargement de votre espace...</p>
-       </div>
-     </div>
-   );
-  }
-
-  if (!userProfile) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-          <div className="text-center">
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Erreur de chargement</h2>
-              <p className="text-gray-600 mb-4">Impossible de charger votre profil de dashboard.</p>
-              <button 
-                  onClick={() => router.push('/')}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-              >
-                  Retour à la connexion
-              </button>
-          </div>
-      </div>
-    );
+  if (isLoading || !userProfile) {
+    return <LoadingScreen />;
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen flex text-gray-800">
+    <div className="bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/30 min-h-screen">
+      {/* Background Pattern */}
+      <div className="fixed inset-0 opacity-[0.02] pointer-events-none">
+        <div 
+          className="absolute inset-0" 
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f97316' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+          }} 
+        />
+      </div>
+
+      {/* Sidebar fixe */}
       <Sidebar 
         navigationItems={navigationItems}
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         isSidebarOpen={isSidebarOpen} 
-        setIsSidebarOpen={setIsSidebarOpen} 
+        setIsSidebarOpen={setIsSidebarOpen}
+        userProfile={userProfile}
       />
-      <div className="flex-1 flex flex-col lg:ml-72">
+      
+      {/* Main Content Area */}
+      <div className="lg:ml-72 min-h-screen flex flex-col">
+        {/* Header fixe */}
         <Header user={userProfile} setIsSidebarOpen={setIsSidebarOpen} />
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          {renderContent()}
+        
+        {/* Main Content avec padding pour le header fixe */}
+        <main className="flex-1 pt-16">
+          <div className="p-4 md:p-6 lg:p-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="max-w-7xl mx-auto"
+            >
+              {renderContent()}
+            </motion.div>
+          </div>
         </main>
       </div>
     </div>
