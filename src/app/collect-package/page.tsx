@@ -389,28 +389,23 @@ const CollectPackageApp = () => {
   // Récupérer le colis
   const handleCollectPackage = async () => {
     if (!selectedShipment) return;
-    
-    if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
-      setError('Code incorrect');
-      return;
-    }
-    
     setIsLoading(true);
-    setError(null); // Réinitialiser les erreurs
+    setError(null);
 
     try {
-      // Mettre à jour le statut du colis dans Supabase
-      const { error: updateError } = await supabase
-        .from('Shipments')
-        .update({ 
-          status: 'EN_TRANSIT',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedShipment.id);
+        // Supposons que vous ayez l'ID du livreur (par exemple, de la session)
+        const livreurId = (await supabase.auth.getUser()).data.user?.id;
+        if (!livreurId) throw new Error("Utilisateur non authentifié.");
 
-      if (updateError) {
-        throw new Error('Erreur lors de la mise à jour du statut');
-      }
+        const { error } = await supabase.rpc('handle_package_collection', {
+            p_shipment_id: selectedShipment.id,
+            p_livreur_id: livreurId
+        });
+
+        if (error) {
+            console.error("Erreur RPC Supabase:", error);
+            throw new Error(error.message);
+        }
 
       setTripStatus('to_dropoff');
       setPickupCode('');
