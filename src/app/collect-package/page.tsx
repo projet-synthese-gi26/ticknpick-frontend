@@ -177,31 +177,21 @@ const CollectPackageApp = () => {
     return [[origin.lng, origin.lat], [destination.lng, destination.lat]];
   };
 
-  // Mettre à jour la carte
+
+  // Mettre à jour la carte (remplacer l'ancien useEffect par celui-ci)
   useEffect(() => {
-    if (!mapRef.current) return;
-
-    // Attendre que la carte soit chargée
-    if (!mapRef.current.isStyleLoaded()) {
-      mapRef.current.on('styledata', () => {
-        updateMap();
-      });
-      return;
-    }
-
-    updateMap();
-
     function updateMap() {
-      if (!mapRef.current) return;
+      const map = mapRef.current; // Créez une variable locale
+      if (!map) return; // Vérifiez-la une seule fois
 
       // Nettoyer les couches existantes
       ['route', 'driver-path'].forEach(layerId => {
         try {
-          if (mapRef.current.getLayer(layerId)) {
-            mapRef.current.removeLayer(layerId);
+          if (map.getLayer(layerId)) {
+            map.removeLayer(layerId);
           }
-          if (mapRef.current.getSource(layerId)) {
-            mapRef.current.removeSource(layerId);
+          if (map.getSource(layerId)) {
+            map.removeSource(layerId);
           }
         } catch (e) {
           console.warn('Erreur lors de la suppression de la couche:', e);
@@ -224,11 +214,60 @@ const CollectPackageApp = () => {
         try {
           new maplibregl.Marker(el)
             .setLngLat([point.lng, point.lat])
-            .addTo(mapRef.current);
+            .addTo(map); // Utilisez `map`
         } catch (error) {
           console.warn('Erreur lors de l\'ajout du marqueur:', error);
         }
       });
+
+      // Fonction interne pour dessiner la route
+      const drawRoute = async () => {
+        if (!selectedShipment) return;
+
+        let start: {lat: number, lng: number}, end: {lat: number, lng: number};
+        
+        if (tripStatus === 'to_pickup' && selectedShipment.departure_point_id) {
+          start = driverLocation;
+          end = selectedShipment.departure_point_id;
+        } else if (tripStatus === 'to_dropoff' && selectedShipment.arrival_point_id) {
+          start = driverLocation;
+          end = selectedShipment.arrival_point_id;
+        } else if (selectedShipment.departure_point_id && selectedShipment.arrival_point_id) {
+          start = selectedShipment.departure_point_id;
+          end = selectedShipment.arrival_point_id;
+        } else {
+            return;
+        }
+
+        if (!start || !end) return;
+
+        try {
+          const coordinates = await fetchRoute(start, end);
+          
+          map.addSource('route', { // Utilisez `map`
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates }
+            }
+          });
+
+          map.addLayer({ // Utilisez `map`
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.8 }
+          });
+
+          const bounds = new maplibregl.LngLatBounds();
+          coordinates.forEach((coord: any) => bounds.extend(coord));
+          map.fitBounds(bounds, { padding: 50 }); // Utilisez `map`
+        } catch (error) {
+          console.warn('Erreur lors du tracé de l\'itinéraire:', error);
+        }
+      };
 
       // Dessiner l'itinéraire si un colis est sélectionné
       if (selectedShipment && (tripStatus === 'selected' || tripStatus === 'to_pickup' || tripStatus === 'to_dropoff')) {
@@ -238,19 +277,16 @@ const CollectPackageApp = () => {
       // Dessiner le chemin parcouru
       if (driverPath.length > 1) {
         try {
-          mapRef.current.addSource('driver-path', {
+          map.addSource('driver-path', { // Utilisez `map`
             type: 'geojson',
             data: {
               type: 'Feature',
               properties: {},
-              geometry: {
-                type: 'LineString',
-                coordinates: driverPath.map(p => [p.lng, p.lat])
-              }
+              geometry: { type: 'LineString', coordinates: driverPath.map(p => [p.lng, p.lat]) }
             }
           });
 
-          mapRef.current.addLayer({
+          map.addLayer({ // Utilisez `map`
             id: 'driver-path',
             type: 'line',
             source: 'driver-path',
@@ -263,57 +299,15 @@ const CollectPackageApp = () => {
       }
     }
 
-    async function drawRoute() {
-      if (!selectedShipment || !mapRef.current) return;
+    const map = mapRef.current;
+    if (!map) return;
 
-      let start: {lat: number, lng: number}, end: {lat: number, lng: number};
-      
-      if (tripStatus === 'to_pickup') {
-        start = driverLocation;
-        end = selectedShipment.departure_point_id;
-      } else if (tripStatus === 'to_dropoff') {
-        start = driverLocation;
-        end = selectedShipment.arrival_point_id;
-      } else {
-        start = selectedShipment.departure_point_id;
-        end = selectedShipment.arrival_point_id;
-      }
-
-      if (!start || !end) return;
-
-      try {
-        const coordinates = await fetchRoute(start, end);
-        
-        mapRef.current.addSource('route', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'LineString',
-              coordinates
-            }
-          }
-        });
-
-        mapRef.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.8 }
-        });
-
-        // Ajuster la vue
-        const bounds = new maplibregl.LngLatBounds();
-        coordinates.forEach(coord => bounds.extend(coord));
-        mapRef.current.fitBounds(bounds, { padding: 50 });
-      } catch (error) {
-        console.warn('Erreur lors du tracé de l\'itinéraire:', error);
-      }
+    if (!map.isStyleLoaded()) {
+      map.on('load', updateMap);
+    } else {
+      updateMap();
     }
-  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]);
-
+  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]); // Dependencies
   // Mettre à jour la position du livreur
   useEffect(() => {
     if (!mapRef.current) return;
