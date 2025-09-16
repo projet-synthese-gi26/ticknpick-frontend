@@ -388,39 +388,46 @@ const CollectPackageApp = () => {
 
   // Récupérer le colis
   const handleCollectPackage = async () => {
-    if (!selectedShipment) return;
-    setIsLoading(true);
-    setError(null);
+      if (!selectedShipment) return;
 
-    try {
-        // Supposons que vous ayez l'ID du livreur (par exemple, de la session)
-        const livreurId = (await supabase.auth.getUser()).data.user?.id;
-        if (!livreurId) throw new Error("Utilisateur non authentifié.");
+      // Étape 1 : Valider le code saisi par le livreur
+      // Il doit correspondre au numéro de suivi du colis.
+      if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
+        setError('Code incorrect. Le code doit correspondre au numéro de suivi du colis.');
+        // Optionnel : faire disparaître l'erreur après quelques secondes
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
 
-        const { error } = await supabase.rpc('handle_package_collection', {
-            p_shipment_id: selectedShipment.id,
-            p_livreur_id: livreurId
-        });
-
-        if (error) {
-            console.error("Erreur RPC Supabase:", error);
-            throw new Error(error.message);
-        }
-
-      setTripStatus('to_dropoff');
-      setPickupCode('');
+      // Si la validation est réussie, on simule le processus dans l'interface
+      setIsLoading(true);
       setError(null);
-      animateDriverMovement(selectedShipment.arrival_point_id, 20000);
-      
-      setTimeout(() => {
-        setTripStatus('finished');
-      }, 21000);
-    } catch (err: any) {
-      console.error('Erreur lors de la récupération:', err);
-      setError(err.message || 'Erreur lors de la récupération');
-    } finally {
-      setIsLoading(false);
-    }
+
+      // Simulation d'une attente pour un effet visuel (optionnel)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      try {
+        console.log(`Action de récupération simulée pour le colis ${selectedShipment.tracking_number}. Aucune mise à jour envoyée à la base de données à cette étape.`);
+
+        // Étape 2 : Mettre à jour l'état de l'interface pour passer à l'étape suivante
+        setTripStatus('to_dropoff');
+        setPickupCode(''); // Vider le champ de saisie
+        
+        // Lancer l'animation du trajet vers la destination
+        animateDriverMovement(selectedShipment.arrival_point_id, 8000);
+
+        // Simuler l'arrivée à destination après la fin de l'animation
+        setTimeout(() => {
+          setTripStatus('finished');
+        }, 9000); // 1 seconde après la fin de l'animation
+
+      } catch (err: any) {
+        // Gérer les erreurs inattendues qui pourraient survenir (même sans DB call)
+        console.error("Erreur inattendue dans handleCollectPackage:", err);
+        setError("Une erreur inattendue est survenue.");
+      } finally {
+        setIsLoading(false);
+      }
   };
 
   // Générer le PDF
