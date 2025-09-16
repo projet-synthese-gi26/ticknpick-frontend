@@ -53,6 +53,13 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// **ÉTAPE 1: Constantes pour la coordination des animations**
+const ANIMATION_DURATIONS = {
+  TO_PICKUP: 5000,    // 5 secondes pour aller au point de collecte
+  TO_DROPOFF: 8000,   // 8 secondes pour aller au point de livraison
+  BUFFER: 1000        // 1 seconde de buffer avant changement d'état
+};
+
 const CollectPackageApp = () => {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -67,7 +74,19 @@ const CollectPackageApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [driverPath, setDriverPath] = useState<Array<{lat: number, lng: number}>>([]);
-  const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
+  
+  // **ÉTAPE 2: État pour gérer les animations de manière coordonnée**
+  const [animationState, setAnimationState] = useState<{
+    isAnimating: boolean;
+    progress: number;
+    startTime: number | null;
+    duration: number;
+  }>({
+    isAnimating: false,
+    progress: 0,
+    startTime: null,
+    duration: 0
+  });
 
   // Filtrer les colis pour la recherche
   const filteredShipments = useMemo(() => 
@@ -177,12 +196,75 @@ const CollectPackageApp = () => {
     return [[origin.lng, origin.lat], [destination.lng, destination.lat]];
   };
 
+  // **ÉTAPE 3: Animation coordonnée et stabilisée**
+  const animateDriverMovement = async (
+    targetLocation: {lat: number, lng: number}, 
+    duration: number,
+    onComplete?: () => void
+  ) => {
+    if (!driverLocation || !targetLocation) {
+      onComplete?.();
+      return;
+    }
 
-  // Mettre à jour la carte (remplacer l'ancien useEffect par celui-ci)
+    console.log(`Début animation vers ${targetLocation.lat}, ${targetLocation.lng} pendant ${duration}ms`);
+
+    const route = await fetchRoute(driverLocation, targetLocation);
+    if (!route || route.length < 2) {
+      onComplete?.();
+      return;
+    }
+
+    const steps = Math.max(route.length, 20); // Minimum 20 étapes pour une animation fluide
+    const stepDuration = duration / steps;
+    let currentStep = 0;
+
+    // Mettre à jour l'état d'animation
+    setAnimationState({
+      isAnimating: true,
+      progress: 0,
+      startTime: Date.now(),
+      duration
+    });
+
+    const interval = setInterval(() => {
+      if (currentStep >= route.length) {
+        clearInterval(interval);
+        
+        // Finaliser l'animation
+        setAnimationState(prev => ({
+          ...prev,
+          isAnimating: false,
+          progress: 100
+        }));
+
+        console.log('Animation terminée');
+        onComplete?.();
+        return;
+      }
+
+      const [lng, lat] = route[currentStep];
+      const newLocation = { lat, lng };
+      
+      setDriverLocation(newLocation);
+      setDriverPath(prev => [...prev, newLocation]);
+      
+      // Mettre à jour le progrès
+      const progress = (currentStep / route.length) * 100;
+      setAnimationState(prev => ({
+        ...prev,
+        progress
+      }));
+
+      currentStep++;
+    }, stepDuration);
+  };
+
+  // Mettre à jour la carte (version stabilisée)
   useEffect(() => {
-    function updateMap() {
-      const map = mapRef.current; // Créez une variable locale
-      if (!map) return; // Vérifiez-la une seule fois
+    const updateMap = () => {
+      const map = mapRef.current;
+      if (!map || !map.isStyleLoaded()) return;
 
       // Nettoyer les couches existantes
       ['route', 'driver-path'].forEach(layerId => {
@@ -214,13 +296,13 @@ const CollectPackageApp = () => {
         try {
           new maplibregl.Marker(el)
             .setLngLat([point.lng, point.lat])
-            .addTo(map); // Utilisez `map`
+            .addTo(map);
         } catch (error) {
           console.warn('Erreur lors de l\'ajout du marqueur:', error);
         }
       });
 
-      // Fonction interne pour dessiner la route
+      // Fonction pour dessiner la route
       const drawRoute = async () => {
         if (!selectedShipment) return;
 
@@ -236,7 +318,7 @@ const CollectPackageApp = () => {
           start = selectedShipment.departure_point_id;
           end = selectedShipment.arrival_point_id;
         } else {
-            return;
+          return;
         }
 
         if (!start || !end) return;
@@ -244,7 +326,7 @@ const CollectPackageApp = () => {
         try {
           const coordinates = await fetchRoute(start, end);
           
-          map.addSource('route', { // Utilisez `map`
+          map.addSource('route', {
             type: 'geojson',
             data: {
               type: 'Feature',
@@ -253,7 +335,7 @@ const CollectPackageApp = () => {
             }
           });
 
-          map.addLayer({ // Utilisez `map`
+          map.addLayer({
             id: 'route',
             type: 'line',
             source: 'route',
@@ -263,7 +345,7 @@ const CollectPackageApp = () => {
 
           const bounds = new maplibregl.LngLatBounds();
           coordinates.forEach((coord: any) => bounds.extend(coord));
-          map.fitBounds(bounds, { padding: 50 }); // Utilisez `map`
+          map.fitBounds(bounds, { padding: 50 });
         } catch (error) {
           console.warn('Erreur lors du tracé de l\'itinéraire:', error);
         }
@@ -277,7 +359,7 @@ const CollectPackageApp = () => {
       // Dessiner le chemin parcouru
       if (driverPath.length > 1) {
         try {
-          map.addSource('driver-path', { // Utilisez `map`
+          map.addSource('driver-path', {
             type: 'geojson',
             data: {
               type: 'Feature',
@@ -286,7 +368,7 @@ const CollectPackageApp = () => {
             }
           });
 
-          map.addLayer({ // Utilisez `map`
+          map.addLayer({
             id: 'driver-path',
             type: 'line',
             source: 'driver-path',
@@ -297,7 +379,7 @@ const CollectPackageApp = () => {
           console.warn('Erreur lors de l\'ajout du chemin:', error);
         }
       }
-    }
+    };
 
     const map = mapRef.current;
     if (!map) return;
@@ -307,8 +389,16 @@ const CollectPackageApp = () => {
     } else {
       updateMap();
     }
-  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]); // Dependencies
-  // Mettre à jour la position du livreur
+
+    // Cleanup
+    return () => {
+      if (map && map.isStyleLoaded()) {
+        map.off('load', updateMap);
+      }
+    };
+  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]);
+
+  // **ÉTAPE 4: Marqueur du livreur avec icône de bicyclette**
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -318,14 +408,18 @@ const CollectPackageApp = () => {
       } else {
         const el = document.createElement('div');
         el.className = 'flex flex-col items-center';
+        
+        // **MODIFICATION: Icône de bicyclette au lieu du camion**
         el.innerHTML = `
-          <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
-              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
+          <div class="w-10 h-10 bg-blue-500 rounded-full border-3 border-white shadow-lg flex items-center justify-center ${animationState.isAnimating ? 'animate-pulse' : ''}">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0-3c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1zM19 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0-3c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1zM7.82 16h8.36c-.2-.6-.78-1-1.44-1H9.26c-.66 0-1.24.4-1.44 1zm6.28-6h2.4c.22 0 .4-.18.4-.4 0-.22-.18-.4-.4-.4h-2.4c-.22 0-.4.18-.4.4 0 .22.18.4.4.4zm-1.6-1.5L11 7l-1.5 1.5L11 10l1.5-1.5z"/>
+              <path d="M12 2c-.55 0-1 .45-1 1v2.17c0 .39.24.74.6.88L13 7l-1.4.95c-.36.14-.6.49-.6.88V11c0 .55.45 1 1 1s1-.45 1-1V8.83L14.4 8.5c.36-.14.6-.49.6-.88V5.17c0-.39-.24-.74-.6-.88L13 3V3c0-.55-.45-1-1-1z"/>
             </svg>
           </div>
-          <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Moi</span>
+          <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full shadow-sm mt-1 font-medium">
+            ${animationState.isAnimating ? `${Math.round(animationState.progress)}%` : 'Livreur'}
+          </span>
         `;
         
         driverMarkerRef.current = new maplibregl.Marker(el)
@@ -335,37 +429,7 @@ const CollectPackageApp = () => {
     } catch (error) {
       console.warn('Erreur lors de la mise à jour du marqueur livreur:', error);
     }
-  }, [driverLocation]);
-
-  // Animation du déplacement du livreur
-  const animateDriverMovement = async (targetLocation: {lat: number, lng: number}, duration = 5000) => {
-    if (!driverLocation || !targetLocation) return;
-
-    const route = await fetchRoute(driverLocation, targetLocation);
-    if (!route || route.length < 2) return;
-
-    const steps = route.length;
-    const stepDuration = duration / steps;
-    let currentStep = 0;
-
-    if (animationInterval) clearInterval(animationInterval);
-
-    const interval = setInterval(() => {
-      if (currentStep >= route.length) {
-        clearInterval(interval);
-        setAnimationInterval(null);
-        return;
-      }
-
-      const [lng, lat] = route[currentStep];
-      const newLocation = { lat, lng };
-      setDriverLocation(newLocation);
-      setDriverPath(prev => [...prev, newLocation]);
-      currentStep++;
-    }, stepDuration);
-
-    setAnimationInterval(interval);
-  };
+  }, [driverLocation, animationState]);
 
   // Gérer la sélection d'un colis
   const handleSelectShipment = (shipment: Shipment) => {
@@ -374,60 +438,66 @@ const CollectPackageApp = () => {
     setError(null);
   };
 
-  // Commencer la course
+  // **ÉTAPE 5: Commencer la course avec animation coordonnée**
   const handleStartTrip = () => {
     if (!selectedShipment) return;
+    
     setTripStatus('to_pickup');
     setDriverPath([driverLocation]);
-    animateDriverMovement(selectedShipment.departure_point_id, 5000);
     
-    setTimeout(() => {
-      setTripStatus('pickup_ready');
-    }, 6000);
+    // Animation coordonnée vers le point de collecte
+    animateDriverMovement(
+      selectedShipment.departure_point_id, 
+      ANIMATION_DURATIONS.TO_PICKUP,
+      () => {
+        // Callback exécuté à la fin de l'animation
+        setTimeout(() => {
+          setTripStatus('pickup_ready');
+        }, ANIMATION_DURATIONS.BUFFER);
+      }
+    );
   };
 
-  // Récupérer le colis
+  // **ÉTAPE 6: Récupérer le colis avec transition fluide**
   const handleCollectPackage = async () => {
-      if (!selectedShipment) return;
+    if (!selectedShipment) return;
 
-      // Étape 1 : Valider le code saisi par le livreur
-      // Il doit correspondre au numéro de suivi du colis.
-      if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
-        setError('Code incorrect. Le code doit correspondre au numéro de suivi du colis.');
-        // Optionnel : faire disparaître l'erreur après quelques secondes
-        setTimeout(() => setError(null), 3000);
-        return;
-      }
+    // Validation du code
+    if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
+      setError('Code incorrect. Le code doit correspondre au numéro de suivi du colis.');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
 
-      // Si la validation est réussie, on simule le processus dans l'interface
-      setIsLoading(true);
-      setError(null);
+    setIsLoading(true);
+    setError(null);
 
-      // Simulation d'une attente pour un effet visuel (optionnel)
+    try {
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log(`Colis récupéré: ${selectedShipment.tracking_number}`);
 
-      try {
-        console.log(`Action de récupération simulée pour le colis ${selectedShipment.tracking_number}. Aucune mise à jour envoyée à la base de données à cette étape.`);
+      setTripStatus('to_dropoff');
+      setPickupCode('');
+      
+      // Animation coordonnée vers le point de livraison
+      animateDriverMovement(
+        selectedShipment.arrival_point_id, 
+        ANIMATION_DURATIONS.TO_DROPOFF,
+        () => {
+          // Callback exécuté à la fin de l'animation
+          setTimeout(() => {
+            setTripStatus('finished');
+          }, ANIMATION_DURATIONS.BUFFER);
+        }
+      );
 
-        // Étape 2 : Mettre à jour l'état de l'interface pour passer à l'étape suivante
-        setTripStatus('to_dropoff');
-        setPickupCode(''); // Vider le champ de saisie
-        
-        // Lancer l'animation du trajet vers la destination
-        animateDriverMovement(selectedShipment.arrival_point_id, 8000);
-
-        // Simuler l'arrivée à destination après la fin de l'animation
-        setTimeout(() => {
-          setTripStatus('finished');
-        }, 9000); // 1 seconde après la fin de l'animation
-
-      } catch (err: any) {
-        // Gérer les erreurs inattendues qui pourraient survenir (même sans DB call)
-        console.error("Erreur inattendue dans handleCollectPackage:", err);
-        setError("Une erreur inattendue est survenue.");
-      } finally {
-        setIsLoading(false);
-      }
+    } catch (err: any) {
+      console.error("Erreur dans handleCollectPackage:", err);
+      setError("Une erreur inattendue est survenue.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Générer le PDF
@@ -477,8 +547,14 @@ const CollectPackageApp = () => {
         setTripStatus('listing');
         setDriverPath([]);
         setError(null);
+        setAnimationState({
+          isAnimating: false,
+          progress: 0,
+          startTime: null,
+          duration: 0
+        });
         
-        // Recharger les données pour mettre à jour la liste
+        // Recharger les données
         window.location.reload();
       }, 3000);
     } catch (err: any) {
@@ -490,12 +566,17 @@ const CollectPackageApp = () => {
   };
 
   const handleBackToList = () => {
-    if (animationInterval) clearInterval(animationInterval);
     setSelectedShipment(null);
     setTripStatus('listing');
     setPickupCode('');
     setError(null);
     setDriverPath([]);
+    setAnimationState({
+      isAnimating: false,
+      progress: 0,
+      startTime: null,
+      duration: 0
+    });
   };
 
   // Composant InfoRow
@@ -584,6 +665,22 @@ const CollectPackageApp = () => {
             
             <h2 className="text-xl font-bold text-gray-900 mb-4">{selectedShipment.tracking_number}</h2>
             
+            {/* **NOUVELLE: Barre de progression** */}
+            {animationState.isAnimating && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-700">Trajet en cours</span>
+                  <span className="text-sm text-blue-600">{Math.round(animationState.progress)}%</span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${animationState.progress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+            
             <div className="flex-1 overflow-y-auto space-y-3">
               <InfoRow icon={User} label="Expéditeur" value={selectedShipment.sender_name} detail={selectedShipment.sender_phone} />
               <InfoRow icon={User} label="Destinataire" value={selectedShipment.recipient_name} detail={selectedShipment.recipient_phone} />
@@ -608,7 +705,8 @@ const CollectPackageApp = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     onClick={handleStartTrip}
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                    disabled={animationState.isAnimating}
+                    className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
                   >
                     <Play className="w-5 h-5 mr-2" />
                     Commencer la course
@@ -622,8 +720,11 @@ const CollectPackageApp = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center p-4 bg-blue-50 rounded-lg"
                   >
-                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
+                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-bounce" />
                     <p className="text-sm font-medium text-blue-700">En route vers le point de collecte...</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Temps estimé: {Math.ceil((ANIMATION_DURATIONS.TO_PICKUP - (Date.now() - (animationState.startTime || 0))) / 1000)}s
+                    </p>
                   </motion.div>
                 )}
                 
@@ -650,8 +751,8 @@ const CollectPackageApp = () => {
                     </div>
                     <button
                       onClick={handleCollectPackage}
-                      disabled={isLoading || !pickupCode}
-                      className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                      disabled={isLoading || !pickupCode || animationState.isAnimating}
+                      className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
                     >
                       {isLoading ? (
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
@@ -670,8 +771,11 @@ const CollectPackageApp = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center p-4 bg-blue-50 rounded-lg"
                   >
-                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
+                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-bounce" />
                     <p className="text-sm font-medium text-blue-700">Colis récupéré ! En route vers la destination...</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Temps estimé: {Math.ceil((ANIMATION_DURATIONS.TO_DROPOFF - (Date.now() - (animationState.startTime || 0))) / 1000)}s
+                    </p>
                   </motion.div>
                 )}
                 
@@ -690,7 +794,7 @@ const CollectPackageApp = () => {
                     <button
                       onClick={handleFinishTrip}
                       disabled={isLoading}
-                      className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                      className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
                     >
                       {isLoading ? (
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
@@ -710,6 +814,16 @@ const CollectPackageApp = () => {
       {/* Carte */}
       <div className="flex-1 relative">
         <div ref={mapContainer} className="h-full w-full" />
+        
+        {/* **NOUVELLE: Informations de débogage (optionnel, à retirer en production)** */}
+        {process.env.NODE_ENV === 'development' && animationState.isAnimating && (
+          <div className="absolute top-4 right-4 bg-white p-3 rounded-lg shadow-lg text-xs">
+            <p><strong>Animation:</strong> {animationState.isAnimating ? 'En cours' : 'Arrêtée'}</p>
+            <p><strong>Progrès:</strong> {Math.round(animationState.progress)}%</p>
+            <p><strong>Durée:</strong> {animationState.duration}ms</p>
+            <p><strong>Position:</strong> {driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</p>
+          </div>
+        )}
       </div>
     </div>
   );
