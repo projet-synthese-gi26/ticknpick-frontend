@@ -404,7 +404,7 @@ const CollectPackageApp = () => {
           status: 'EN_COURS_DE_LIVRAISON',
           updated_at: new Date().toISOString()
         })
-        .eq('id', selectedShipment.id);
+        .eq('id', selectedShipment.tracking_number);
 
       if (updateError) {
         throw new Error('Erreur lors de la mise à jour du statut');
