@@ -54,9 +54,9 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const CollectPackageApp = () => {
-  const mapContainer = useRef(null);
-  const mapRef = useRef(null);
-  const driverMarkerRef = useRef(null);
+  const mapContainer = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const driverMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [searchInput, setSearchInput] = useState('');

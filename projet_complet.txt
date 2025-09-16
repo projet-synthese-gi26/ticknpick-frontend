@@ -18591,22 +18591,68 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { Search, Play, Loader2, ArrowLeft, User, Phone, MapPin, Package, Weight, CheckCircle, QrCode, Bike } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+// Types
+interface RelayPoint {
+  id: number;
+  name: string;
+  address: string;
+  quartier: string;
+  lat: number;
+  lng: number;
+  hours: string;
+  type: 'bureau' | 'commerce' | 'agence';
+  agency_id?: string;
+}
+
+interface Shipment {
+  id: number;
+  tracking_number: string;
+  status: string;
+  sender_name: string;
+  sender_phone: string;
+  recipient_name: string;
+  recipient_phone: string;
+  departure_point_id: RelayPoint;
+  arrival_point_id: RelayPoint;
+  description: string;
+  weight: number;
+  is_fragile: boolean;
+  is_perishable: boolean;
+  is_insured: boolean;
+  declared_value: number;
+  shipping_cost: number;
+  is_paid_at_departure: boolean;
+  amount_paid: number;
+  change_amount: number;
+}
+
+// Configuration Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Variables d\'environnement Supabase manquantes');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const CollectPackageApp = () => {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const driverMarkerRef = useRef(null);
-  const [shipments, setShipments] = useState([]);
-  const [relayPoints, setRelayPoints] = useState([]);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [searchInput, setSearchInput] = useState('');
-  const [selectedShipment, setSelectedShipment] = useState(null);
-  const [tripStatus, setTripStatus] = useState('listing'); // listing, selected, to_pickup, pickup_ready, to_dropoff, finished
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [tripStatus, setTripStatus] = useState<'listing' | 'selected' | 'to_pickup' | 'pickup_ready' | 'to_dropoff' | 'finished'>('listing');
   const [driverLocation, setDriverLocation] = useState({ lat: 3.8667, lng: 11.5213 });
   const [pickupCode, setPickupCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [driverPath, setDriverPath] = useState([]);
-  const [animationInterval, setAnimationInterval] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [driverPath, setDriverPath] = useState<Array<{lat: number, lng: number}>>([]);
+  const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Filtrer les colis pour la recherche
   const filteredShipments = useMemo(() => 
@@ -18625,49 +18671,72 @@ const CollectPackageApp = () => {
         acc[key].push(shipment);
       }
       return acc;
-    }, {}), [shipments]);
+    }, {} as Record<number, Shipment[]>), [shipments]);
 
- // Récupération des données initiales
+  // Récupération des données initiales
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       try {
+        // Récupérer les colis avec les points de relais associés
         const { data: shipmentsData, error: shipmentsError } = await supabase
           .from('shipments')
-          .select(`*, departure_point_id(*), arrival_point_id(*)`)
+          .select(`
+            *,
+            departure_point_id:relay_points!departure_point_id(*),
+            arrival_point_id:relay_points!arrival_point_id(*)
+          `)
           .eq('status', 'EN_ATTENTE_DE_DEPOT');
           
-        if (shipmentsError) throw shipmentsError;
+        if (shipmentsError) {
+          console.error('Erreur shipments:', shipmentsError);
+          throw new Error('Erreur lors du chargement des colis');
+        }
 
+        // Récupérer tous les points de relais
         const { data: relayPointsData, error: relayPointsError } = await supabase
           .from('relay_points')
           .select('*');
 
-        if (relayPointsError) throw relayPointsError;
+        if (relayPointsError) {
+          console.error('Erreur relay points:', relayPointsError);
+          throw new Error('Erreur lors du chargement des points de relais');
+        }
 
-        setShipments(shipmentsData as Shipment[]);
-        setRelayPoints(relayPointsData as RelayPoint[]);
+        console.log('Données chargées:', { shipments: shipmentsData, relayPoints: relayPointsData });
+        
+        setShipments(shipmentsData || []);
+        setRelayPoints(relayPointsData || []);
 
       } catch (err: any) {
-        setError("Erreur de chargement des données. Veuillez réessayer.");
-        console.error(err);
+        console.error('Erreur lors du chargement:', err);
+        setError(err.message || "Erreur de chargement des données. Veuillez réessayer.");
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
   }, []);
+
   // Initialiser la carte
   useEffect(() => {
     if (mapRef.current || !mapContainer.current) return;
     
-    mapRef.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: 'https://api.maptiler.com/maps/streets-v2/style.json?key=Lr72DkH8TYyjpP7RNZS9',
-      center: [11.5213, 3.8667],
-      zoom: 12
-    });
+    try {
+      mapRef.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: 'https://api.maptiler.com/maps/streets-v2/style.json?key=Lr72DkH8TYyjpP7RNZS9',
+        center: [11.5213, 3.8667],
+        zoom: 12
+      });
+
+      mapRef.current.on('load', () => {
+        console.log('Carte initialisée avec succès');
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation de la carte:', error);
+    }
 
     return () => {
       if (mapRef.current) {
@@ -18678,7 +18747,7 @@ const CollectPackageApp = () => {
   }, []);
 
   // Fonction pour obtenir un itinéraire
-  const fetchRoute = async (origin, destination) => {
+  const fetchRoute = async (origin: {lat: number, lng: number}, destination: {lat: number, lng: number}) => {
     try {
       const response = await fetch(
         `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
@@ -18697,46 +18766,107 @@ const CollectPackageApp = () => {
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Nettoyer les couches existantes
-    ['route', 'driver-path'].forEach(layerId => {
-      try {
-        if (mapRef.current.getLayer(layerId)) mapRef.current.removeLayer(layerId);
-        if (mapRef.current.getSource(layerId)) mapRef.current.removeSource(layerId);
-      } catch (e) {}
-    });
+    // Attendre que la carte soit chargée
+    if (!mapRef.current.isStyleLoaded()) {
+      mapRef.current.on('styledata', () => {
+        updateMap();
+      });
+      return;
+    }
 
-    // Ajouter les marqueurs des points relais
-    relayPoints.forEach(point => {
-      const count = groupedByRelayPoint[point.id]?.length || 0;
-      const el = document.createElement('div');
-      el.className = 'relative flex flex-col items-center';
-      el.innerHTML = `
-        <div class="w-6 h-6 bg-orange-500 rounded-full border-2 border-white shadow-lg"></div>
-        ${count > 0 ? `<div class="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">${count}</div>` : ''}
-        <span class="text-xs mt-1 bg-white px-2 py-0.5 rounded shadow-sm">${point.name}</span>
-      `;
-      
-      new maplibregl.Marker(el)
-        .setLngLat([point.lng, point.lat])
-        .addTo(mapRef.current);
-    });
+    updateMap();
 
-    // Dessiner l'itinéraire si un colis est sélectionné
-    if (selectedShipment && (tripStatus === 'selected' || tripStatus === 'to_pickup' || tripStatus === 'to_dropoff')) {
-      const drawRoute = async () => {
-        let start, end;
-        
-        if (tripStatus === 'to_pickup') {
-          start = driverLocation;
-          end = selectedShipment.departure_point_id;
-        } else if (tripStatus === 'to_dropoff') {
-          start = driverLocation;
-          end = selectedShipment.arrival_point_id;
-        } else {
-          start = selectedShipment.departure_point_id;
-          end = selectedShipment.arrival_point_id;
+    function updateMap() {
+      if (!mapRef.current) return;
+
+      // Nettoyer les couches existantes
+      ['route', 'driver-path'].forEach(layerId => {
+        try {
+          if (mapRef.current.getLayer(layerId)) {
+            mapRef.current.removeLayer(layerId);
+          }
+          if (mapRef.current.getSource(layerId)) {
+            mapRef.current.removeSource(layerId);
+          }
+        } catch (e) {
+          console.warn('Erreur lors de la suppression de la couche:', e);
         }
+      });
 
+      // Ajouter les marqueurs des points relais
+      relayPoints.forEach(point => {
+        if (!point.lat || !point.lng) return;
+        
+        const count = groupedByRelayPoint[point.id]?.length || 0;
+        const el = document.createElement('div');
+        el.className = 'relative flex flex-col items-center';
+        el.innerHTML = `
+          <div class="w-6 h-6 bg-orange-500 rounded-full border-2 border-white shadow-lg"></div>
+          ${count > 0 ? `<div class="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">${count}</div>` : ''}
+          <span class="text-xs mt-1 bg-white px-2 py-0.5 rounded shadow-sm max-w-20 truncate">${point.name}</span>
+        `;
+        
+        try {
+          new maplibregl.Marker(el)
+            .setLngLat([point.lng, point.lat])
+            .addTo(mapRef.current);
+        } catch (error) {
+          console.warn('Erreur lors de l\'ajout du marqueur:', error);
+        }
+      });
+
+      // Dessiner l'itinéraire si un colis est sélectionné
+      if (selectedShipment && (tripStatus === 'selected' || tripStatus === 'to_pickup' || tripStatus === 'to_dropoff')) {
+        drawRoute();
+      }
+
+      // Dessiner le chemin parcouru
+      if (driverPath.length > 1) {
+        try {
+          mapRef.current.addSource('driver-path', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: driverPath.map(p => [p.lng, p.lat])
+              }
+            }
+          });
+
+          mapRef.current.addLayer({
+            id: 'driver-path',
+            type: 'line',
+            source: 'driver-path',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#10b981', 'line-width': 3, 'line-opacity': 0.9 }
+          });
+        } catch (error) {
+          console.warn('Erreur lors de l\'ajout du chemin:', error);
+        }
+      }
+    }
+
+    async function drawRoute() {
+      if (!selectedShipment || !mapRef.current) return;
+
+      let start: {lat: number, lng: number}, end: {lat: number, lng: number};
+      
+      if (tripStatus === 'to_pickup') {
+        start = driverLocation;
+        end = selectedShipment.departure_point_id;
+      } else if (tripStatus === 'to_dropoff') {
+        start = driverLocation;
+        end = selectedShipment.arrival_point_id;
+      } else {
+        start = selectedShipment.departure_point_id;
+        end = selectedShipment.arrival_point_id;
+      }
+
+      if (!start || !end) return;
+
+      try {
         const coordinates = await fetchRoute(start, end);
         
         mapRef.current.addSource('route', {
@@ -18763,31 +18893,9 @@ const CollectPackageApp = () => {
         const bounds = new maplibregl.LngLatBounds();
         coordinates.forEach(coord => bounds.extend(coord));
         mapRef.current.fitBounds(bounds, { padding: 50 });
-      };
-      drawRoute();
-    }
-
-    // Dessiner le chemin parcouru
-    if (driverPath.length > 1) {
-      mapRef.current.addSource('driver-path', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: driverPath.map(p => [p.lng, p.lat])
-          }
-        }
-      });
-
-      mapRef.current.addLayer({
-        id: 'driver-path',
-        type: 'line',
-        source: 'driver-path',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#10b981', 'line-width': 3, 'line-opacity': 0.9 }
-      });
+      } catch (error) {
+        console.warn('Erreur lors du tracé de l\'itinéraire:', error);
+      }
     }
   }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]);
 
@@ -18795,29 +18903,33 @@ const CollectPackageApp = () => {
   useEffect(() => {
     if (!mapRef.current) return;
 
-    if (driverMarkerRef.current) {
-      driverMarkerRef.current.setLngLat([driverLocation.lng, driverLocation.lat]);
-    } else {
-      const el = document.createElement('div');
-      el.className = 'flex flex-col items-center';
-      el.innerHTML = `
-        <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-          <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
-            <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
-          </svg>
-        </div>
-        <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Moi</span>
-      `;
-      
-      driverMarkerRef.current = new maplibregl.Marker(el)
-        .setLngLat([driverLocation.lng, driverLocation.lat])
-        .addTo(mapRef.current);
+    try {
+      if (driverMarkerRef.current) {
+        driverMarkerRef.current.setLngLat([driverLocation.lng, driverLocation.lat]);
+      } else {
+        const el = document.createElement('div');
+        el.className = 'flex flex-col items-center';
+        el.innerHTML = `
+          <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
+            </svg>
+          </div>
+          <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Moi</span>
+        `;
+        
+        driverMarkerRef.current = new maplibregl.Marker(el)
+          .setLngLat([driverLocation.lng, driverLocation.lat])
+          .addTo(mapRef.current);
+      }
+    } catch (error) {
+      console.warn('Erreur lors de la mise à jour du marqueur livreur:', error);
     }
   }, [driverLocation]);
 
   // Animation du déplacement du livreur
-  const animateDriverMovement = async (targetLocation, duration = 5000) => {
+  const animateDriverMovement = async (targetLocation: {lat: number, lng: number}, duration = 5000) => {
     if (!driverLocation || !targetLocation) return;
 
     const route = await fetchRoute(driverLocation, targetLocation);
@@ -18847,7 +18959,7 @@ const CollectPackageApp = () => {
   };
 
   // Gérer la sélection d'un colis
-  const handleSelectShipment = (shipment) => {
+  const handleSelectShipment = (shipment: Shipment) => {
     setSelectedShipment(shipment);
     setTripStatus('selected');
     setError(null);
@@ -18867,6 +18979,8 @@ const CollectPackageApp = () => {
 
   // Récupérer le colis
   const handleCollectPackage = async () => {
+    if (!selectedShipment) return;
+    
     if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
       setError('Code incorrect');
       return;
@@ -18874,8 +18988,19 @@ const CollectPackageApp = () => {
     
     setIsLoading(true);
     try {
-      // Simuler la mise à jour du statut
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Mettre à jour le statut du colis dans Supabase
+      const { error: updateError } = await supabase
+        .from('shipments')
+        .update({ 
+          status: 'EN_COURS_DE_LIVRAISON',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedShipment.id);
+
+      if (updateError) {
+        throw new Error('Erreur lors de la mise à jour du statut');
+      }
+
       setTripStatus('to_dropoff');
       setPickupCode('');
       setError(null);
@@ -18884,41 +19009,47 @@ const CollectPackageApp = () => {
       setTimeout(() => {
         setTripStatus('finished');
       }, 21000);
-    } catch (err) {
-      setError('Erreur lors de la récupération');
+    } catch (err: any) {
+      console.error('Erreur lors de la récupération:', err);
+      setError(err.message || 'Erreur lors de la récupération');
     } finally {
       setIsLoading(false);
     }
   };
 
   // Générer le PDF
-  const generatePDF = async (shipment) => {
-    const pdf = new jsPDF();
-    const qrDataURL = await QRCode.toDataURL(shipment.tracking_number, { width: 50 });
-    
-    pdf.setFontSize(18);
-    pdf.text('Bordereau de Livraison', 20, 20);
-    pdf.addImage(qrDataURL, 'PNG', 150, 10, 50, 50);
-    
-    pdf.setFontSize(12);
-    pdf.text(`N° de suivi: ${shipment.tracking_number}`, 20, 40);
-    pdf.text(`Expéditeur: ${shipment.sender_name}`, 20, 50);
-    pdf.text(`Tel: ${shipment.sender_phone}`, 20, 60);
-    pdf.text(`Destinataire: ${shipment.recipient_name}`, 20, 70);
-    pdf.text(`Tel: ${shipment.recipient_phone}`, 20, 80);
-    pdf.text(`Départ: ${shipment.departure_point_id.name}`, 20, 90);
-    pdf.text(`Arrivée: ${shipment.arrival_point_id.name}`, 20, 100);
-    pdf.text(`Description: ${shipment.description}`, 20, 110);
-    pdf.text(`Poids: ${shipment.weight} kg`, 20, 120);
-    
-    // Espaces de signature
-    pdf.setFontSize(10);
-    pdf.text('Signature Livreur:', 20, 200);
-    pdf.rect(20, 205, 80, 30);
-    pdf.text('Signature Destinataire:', 120, 200);
-    pdf.rect(120, 205, 80, 30);
-    
-    pdf.save(`Bordereau_${shipment.tracking_number}.pdf`);
+  const generatePDF = async (shipment: Shipment) => {
+    try {
+      const pdf = new jsPDF();
+      const qrDataURL = await QRCode.toDataURL(shipment.tracking_number, { width: 50 });
+      
+      pdf.setFontSize(18);
+      pdf.text('Bordereau de Livraison', 20, 20);
+      pdf.addImage(qrDataURL, 'PNG', 150, 10, 50, 50);
+      
+      pdf.setFontSize(12);
+      pdf.text(`N° de suivi: ${shipment.tracking_number}`, 20, 40);
+      pdf.text(`Expéditeur: ${shipment.sender_name}`, 20, 50);
+      pdf.text(`Tel: ${shipment.sender_phone}`, 20, 60);
+      pdf.text(`Destinataire: ${shipment.recipient_name}`, 20, 70);
+      pdf.text(`Tel: ${shipment.recipient_phone}`, 20, 80);
+      pdf.text(`Départ: ${shipment.departure_point_id.name}`, 20, 90);
+      pdf.text(`Arrivée: ${shipment.arrival_point_id.name}`, 20, 100);
+      pdf.text(`Description: ${shipment.description || 'N/A'}`, 20, 110);
+      pdf.text(`Poids: ${shipment.weight || 0} kg`, 20, 120);
+      
+      // Espaces de signature
+      pdf.setFontSize(10);
+      pdf.text('Signature Livreur:', 20, 200);
+      pdf.rect(20, 205, 80, 30);
+      pdf.text('Signature Destinataire:', 120, 200);
+      pdf.rect(120, 205, 80, 30);
+      
+      pdf.save(`Bordereau_${shipment.tracking_number}.pdf`);
+    } catch (error) {
+      console.error('Erreur lors de la génération du PDF:', error);
+      throw new Error('Erreur lors de la génération du bordereau');
+    }
   };
 
   // Terminer la course
@@ -18926,15 +19057,33 @@ const CollectPackageApp = () => {
     if (!selectedShipment) return;
     setIsLoading(true);
     try {
+      // Mettre à jour le statut à "livré"
+      const { error: updateError } = await supabase
+        .from('shipments')
+        .update({ 
+          status: 'LIVRE',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedShipment.id);
+
+      if (updateError) {
+        throw new Error('Erreur lors de la finalisation');
+      }
+
       await generatePDF(selectedShipment);
+      
       setTimeout(() => {
         setSelectedShipment(null);
         setTripStatus('listing');
         setDriverPath([]);
         setError(null);
+        
+        // Recharger les données pour mettre à jour la liste
+        window.location.reload();
       }, 3000);
-    } catch (err) {
-      setError('Erreur lors de la finalisation');
+    } catch (err: any) {
+      console.error('Erreur lors de la finalisation:', err);
+      setError(err.message || 'Erreur lors de la finalisation');
     } finally {
       setIsLoading(false);
     }
@@ -18950,7 +19099,12 @@ const CollectPackageApp = () => {
   };
 
   // Composant InfoRow
-  const InfoRow = ({ icon: Icon, label, value, detail }) => (
+  const InfoRow = ({ icon: Icon, label, value, detail }: {
+    icon: React.ComponentType<any>;
+    label: string;
+    value: string;
+    detail?: string;
+  }) => (
     <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
       <Icon className="w-5 h-5 text-orange-500 mt-0.5" />
       <div className="flex-1 min-w-0">
@@ -18981,6 +19135,11 @@ const CollectPackageApp = () => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
               {isLoading ? (
                 <div className="flex justify-center items-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
@@ -18989,6 +19148,7 @@ const CollectPackageApp = () => {
                 <div className="text-center py-8 text-gray-500">
                   <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                   <p>Aucun colis à collecter</p>
+                  {error && <p className="text-sm mt-2">Vérifiez votre connexion à la base de données</p>}
                 </div>
               ) : (
                 filteredShipments.map(shipment => (
@@ -19006,7 +19166,7 @@ const CollectPackageApp = () => {
                     <p className="text-sm text-gray-600 mb-1">Pour: {shipment.recipient_name}</p>
                     <p className="text-sm text-orange-600 flex items-center">
                       <MapPin className="w-4 h-4 mr-1" />
-                      {shipment.departure_point_id?.name}
+                      {shipment.departure_point_id?.name || 'Point non défini'}
                     </p>
                   </motion.div>
                 ))
@@ -19027,10 +19187,10 @@ const CollectPackageApp = () => {
             <div className="flex-1 overflow-y-auto space-y-3">
               <InfoRow icon={User} label="Expéditeur" value={selectedShipment.sender_name} detail={selectedShipment.sender_phone} />
               <InfoRow icon={User} label="Destinataire" value={selectedShipment.recipient_name} detail={selectedShipment.recipient_phone} />
-              <InfoRow icon={MapPin} label="Point de départ" value={selectedShipment.departure_point_id?.name} />
-              <InfoRow icon={MapPin} label="Point d'arrivée" value={selectedShipment.arrival_point_id?.name} />
-              <InfoRow icon={Package} label="Description" value={selectedShipment.description} />
-              <InfoRow icon={Weight} label="Poids" value={`${selectedShipment.weight} kg`} />
+              <InfoRow icon={MapPin} label="Point de départ" value={selectedShipment.departure_point_id?.name || 'Non défini'} />
+              <InfoRow icon={MapPin} label="Point d'arrivée" value={selectedShipment.arrival_point_id?.name || 'Non défini'} />
+              <InfoRow icon={Package} label="Description" value={selectedShipment.description || 'Aucune description'} />
+              <InfoRow icon={Weight} label="Poids" value={`${selectedShipment.weight || 0} kg`} />
             </div>
             
             {error && (
@@ -21530,11 +21690,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\app-build-m
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_e67f8056._.js",
+      "static/chunks/node_modules_880dc18c._.js",
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
       "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
       "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_b8905932._.js",
+      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
+      "static/chunks/node_modules_54104548._.js",
       "static/chunks/src_app_collect-package_page_tsx_68106fcf._.js",
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
       "static/chunks/src_app_collect-package_page_tsx_2e88f23e._.js",
@@ -21762,25 +21923,15 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 ================================================================================
 
 {
-  "node": {},
-  "edge": {},
-  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
-}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
-================================================================================
-
-{
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
+  "/_not-found/page": "app/_not-found/page.js",
+  "/collect-package/page": "app/collect-package/page.js",
+  "/home/page": "app/home/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js"
 }
 
 
@@ -21797,25 +21948,33 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
-================================================================================
-
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/collect-package/page": "app/collect-package/page.js",
-  "/expedition/page": "app/expedition/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/home/page": "app/home/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js"
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
 ================================================================================
 
 {}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
+================================================================================
+
+{
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {},
+  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
+}
 
 
 ================================================================================
@@ -23819,6 +23978,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .max-w-7xl {
     max-width: var(--container-7xl);
+  }
+
+  .max-w-20 {
+    max-width: calc(var(--spacing) * 20);
   }
 
   .max-w-\[65\%\] {
@@ -28033,12 +28196,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:bg-blue-600:hover {
-      background-color: var(--color-blue-600);
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:bg-blue-700:hover {
       background-color: var(--color-blue-700);
     }
@@ -28404,12 +28561,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:text-red-600:hover {
       color: var(--color-red-600);
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:text-red-800:hover {
-      color: var(--color-red-800);
     }
   }
 
@@ -29398,18 +29549,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 64rem) {
     .lg\:hidden {
       display: none;
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .lg\:w-1\/3 {
-      width: 33.3333%;
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .lg\:w-1\/4 {
-      width: 25%;
     }
   }
 
@@ -32644,43 +32783,15 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_e67f8056._.js",
+      "static/chunks/node_modules_880dc18c._.js",
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
       "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
       "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_b8905932._.js",
+      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
+      "static/chunks/node_modules_54104548._.js",
       "static/chunks/src_app_collect-package_page_tsx_68106fcf._.js",
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
       "static/chunks/src_app_collect-package_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
-    "/expedition/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/_c8166adc._.js",
-      "static/chunks/src_86534bfe._.js",
-      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
-      "static/chunks/node_modules_react-icons_md_index_mjs_78df2b41._.js",
-      "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
-      "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
-      "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_82e050a8._.js",
-      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
-      "static/chunks/src_app_expedition_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
       "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
@@ -32776,9 +32887,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "ae4b92f4f6a8eeba63fa84697794f660",
-    "previewModeSigningKey": "11e453dac4f9819176c4034201f36b7fa959ec33f9647869e3f59b75a469886d",
-    "previewModeEncryptionKey": "c285918f83f22e334a27e43718f4c6b43e5d74ce0fd58aee8fef52edf4dae70b"
+    "previewModeId": "528903e52d9587b25e3fd54c3c8e2f83",
+    "previewModeSigningKey": "0eb10cd827901b2142cb738cd3c5fb88a127bab7ad03f38c10dc4b7afede2044",
+    "previewModeEncryptionKey": "824df84d63e3a04ce479d8a9374a9a5a6b85a9ca88bc5ec9fdf4c5778b6b677f"
   }
 }
 
