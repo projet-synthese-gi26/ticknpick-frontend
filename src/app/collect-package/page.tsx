@@ -470,19 +470,6 @@ const CollectPackageApp = () => {
     if (!selectedShipment) return;
     setIsLoading(true);
     try {
-      // Mettre à jour le statut à "livré"
-      const { error: updateError } = await supabase
-        .from('shipments')
-        .update({ 
-          status: 'LIVRE',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedShipment.id);
-
-      if (updateError) {
-        throw new Error('Erreur lors de la finalisation');
-      }
-
       await generatePDF(selectedShipment);
       
       setTimeout(() => {
