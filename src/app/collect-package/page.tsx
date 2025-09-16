@@ -206,7 +206,7 @@ const CollectPackageApp = () => {
         const el = document.createElement('div');
         el.className = 'relative flex flex-col items-center';
         el.innerHTML = `
-          <div class="w-5 h-5 bg-orange-500 rounded-full border-2 border-white shadow-lg"></div>
+          <div class="w-6 h-6 bg-orange-500 rounded-full border-2 border-white shadow-lg"></div>
           ${count > 0 ? `<div class="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">${count}</div>` : ''}
           <span class="text-xs mt-1 bg-white px-2 py-0.5 rounded shadow-sm max-w-20 truncate">${point.name}</span>
         `;
@@ -319,22 +319,13 @@ const CollectPackageApp = () => {
         const el = document.createElement('div');
         el.className = 'flex flex-col items-center';
         el.innerHTML = `
-          <div class="w-12 h-12 bg-green-600 rounded-full border-4 border-white shadow-xl flex items-center justify-center animate-pulse">
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="28" 
-              height="28" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="white" 
-              stroke-width="2" 
-              stroke-linecap="round" 
-              stroke-linejoin="round" 
-              class="w-7 h-7 text-white">
-                <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>
+          <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
             </svg>
           </div>
-          <span class="text-xs mt-1 bg-white px-2 py-0.5 rounded shadow-sm font-semibold">Moi</span>
+          <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Moi</span>
         `;
         
         driverMarkerRef.current = new maplibregl.Marker(el)
@@ -405,41 +396,33 @@ const CollectPackageApp = () => {
     }
     
     setIsLoading(true);
+    setError(null); // Réinitialiser les erreurs
+
     try {
       // Mettre à jour le statut du colis dans Supabase
       const { error: updateError } = await supabase
-        .from('Shipment') // Assurez-vous que le nom de la table est exact (majuscule/minuscule)
+        .from('Shipments')
         .update({ 
-          // CORRIGÉ 1: Utiliser un statut valide de votre schéma Prisma/BDD
-          status: 'EN_TRANSIT', 
+          status: 'EN_COURS_DE_LIVRAISON',
           updated_at: new Date().toISOString()
         })
-        // CORRIGÉ 2: Filtrer par 'tracking_number' et non par 'id'
-        .eq('tracking_number', selectedShipment.tracking_number);
+        .eq('id', selectedShipment.id);
 
       if (updateError) {
-        console.error('Erreur Supabase détaillée:', updateError); // Log pour le débogage
-        // Lance une erreur plus explicite qui sera attrapée par le bloc catch
-        throw new Error('La mise à jour du statut a échoué. Vérifiez les permissions (RLS) ou les données.');
+        throw new Error('Erreur lors de la mise à jour du statut');
       }
 
       setTripStatus('to_dropoff');
       setPickupCode('');
-
-      if (selectedShipment.arrival_point_id) {
-        animateDriverMovement(selectedShipment.arrival_point_id, 20000);
+      setError(null);
+      animateDriverMovement(selectedShipment.arrival_point_id, 20000);
       
-        setTimeout(() => {
-          setTripStatus('finished');
-        }, 21000);
-      } else {
-        // Gérer le cas où le point d'arrivée n'est pas défini
-        setTripStatus('finished'); 
-      }
-
+      setTimeout(() => {
+        setTripStatus('finished');
+      }, 21000);
     } catch (err: any) {
       console.error('Erreur lors de la récupération:', err);
-      setError(err.message || 'Une erreur inconnue est survenue.');
+      setError(err.message || 'Erreur lors de la récupération');
     } finally {
       setIsLoading(false);
     }
