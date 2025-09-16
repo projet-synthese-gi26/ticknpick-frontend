@@ -57,19 +57,19 @@ export default function NavbarHome() {
           <nav className="hidden md:flex items-center gap-8">
             <Link 
               href="/expedition" 
-              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
               Envoyer un colis
             </Link>
             <Link 
               href="/track-package" 
-              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
               Retrouver mon colis
             </Link>
             <Link 
               href="#how-it-works" 
-              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
               Comment ça marche
             </Link>

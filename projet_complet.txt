@@ -8151,27 +8151,27 @@ import PersonnelPage from './Personnel';
 import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
+// --- CORRIGÉ DANS: src/app/dashboard/page.tsx ---
 
-// --- Type du profil utilisateur (unifié pour tous) ---
+// Pour plus de clarté, unifions les cas (majuscules)
+type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+
+// Le profil de base, qui peut être n'importe quel type
 export interface UserProfile {
   id: string;
-  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
+  account_type: AccountType; // Utilise notre type unifié
   manager_name: string | null;
   email?: string | null;
-  
-  // Properties required by child components (non-nullable)
-  name: string;
-  role: string;
-  
+  name: string; // Ajouté pour la cohérence
+  role: string; // Ajouté pour la cohérence
   [key: string]: any;
 }
 
-// Type spécifique pour le profil pro (ajouté pour corriger l'erreur)
+// Le profil PRO, qui est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  // Propriétés spécifiques au profil professionnel
+  account_type: 'FREELANCE' | 'AGENCY'; // On spécifie ici que c'est forcément l'un de ces deux
   business_name?: string;
   business_type?: string;
-  // Autres propriétés spécifiques si nécessaire
 }
 
 // Helper function to normalize profile data
@@ -8468,6 +8468,7 @@ const DashboardSwitcher: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  
 
   // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
@@ -8596,13 +8597,15 @@ const DashboardSwitcher: React.FC = () => {
       case 'staff': 
         return accountType === 'agence' ? <PersonnelPage /> : null;
       case 'service-card': 
-        return accountType === 'freelance' ? <ServiceCardPage profile={userProfile as ProProfile} /> : null;
-      case 'profile': 
-        return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
-      case 'settings': 
-        return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
-      default: 
-        return <OverviewDashboard profile={userProfile} />;
+        //  <<< MODIFICATION LOGIQUE IMPORTANTE >>>
+        // On s'assure que le profil est compatible avant de rendre le composant.
+        if (accountType === 'FREELANCE' || accountType === 'AGENCY') {
+          return <ServiceCardPage profile={userProfile as ProProfile} />;
+        }
+        return null;
+      case 'profile': return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      case 'settings': return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      default: return <OverviewDashboard profile={userProfile} />;
     }
   };
 
@@ -9712,18 +9715,8 @@ import React, { useState, useEffect } from 'react';
 import { Truck, MapPin, Camera, User, Package, Tag, PlusCircle, Trash2, Car, Palette, Fingerprint, Ruler, Edit, Save, X, Eye, Users, ShieldCheck, Clock, Sprout, Sparkles, Star, Award } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AnimatePresence, motion } from 'framer-motion';
+import type { ProProfile } from './page'; 
 
-// INTERFACES
-interface ProProfile {
-  id: string;
-  nom?: string;
-  adresse_gps?: string;
-  adresse_informelle?: string;
-  description?: string;
-  photo?: string;
-  account_type: 'AGENCY' | 'FREELANCE';
-  service_card_details?: ServiceCardDetails;
-}
 
 interface StaffMember {
   id: string;
@@ -10342,7 +10335,7 @@ import { supabase } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import { Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, AlertCircle, Car, Users, Star, Truck, Package, Shield } from 'lucide-react';
-
+import type { UserProfile } from './page';
 // Define the ProProfile interface once with all possible account types
 interface ProProfile {
   id: string;
@@ -10437,13 +10430,13 @@ interface DeliveryInfo {
 }
 
 interface ProfilePageProps {
-  profile: ProProfile;
+  profile: UserProfile;
   onUpdate: () => void;
 }
 
 export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<ProProfile>(profile);
+ const [formData, setFormData] = useState<UserProfile>(profile);
   const [isLoading, setIsLoading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
@@ -11402,6 +11395,7 @@ import React from 'react';
 import { supabase } from '@/lib/supabase';
 import { CreditCard, Lock, Shield, ArrowRight, Building } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import type { UserProfile } from './page';
 
 // Define the profile type interface
 interface ProProfile {
@@ -11411,7 +11405,7 @@ interface ProProfile {
 }
 
 interface SettingsPageProps {
-    profile: ProProfile;
+   profile: UserProfile; 
     onUpdate: () => void;
 }
 
@@ -13727,7 +13721,6 @@ export default function ShippingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50 dark:from-gray-900 dark:to-gray-800">
-      <NavbarHome />
       <main className="container mx-auto px-4 py-4">
         <motion.div 
           className="text-center mb-4"
@@ -13749,7 +13742,7 @@ export default function ShippingPage() {
           <ShippingSteps currentStep={formData.currentStep} />
         </div>
 
-        <div className="bg-transparent rounded-xl p-4 md:p-6">
+        <div className="bg-transparent rounded-xl p-4 md:p-1">
           <AnimatePresence mode="wait">
             <motion.div
               key={formData.currentStep}
@@ -18587,6 +18580,585 @@ export default TrackPackagePage;
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\collect-package\page.tsx
+================================================================================
+
+'use client';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
+import { Search, Play, Loader2, ArrowLeft, User, Phone, MapPin, Package, Weight, CheckCircle, QrCode, Bike } from 'lucide-react';
+
+const CollectPackageApp = () => {
+  const mapContainer = useRef(null);
+  const mapRef = useRef(null);
+  const driverMarkerRef = useRef(null);
+  const [shipments, setShipments] = useState([]);
+  const [relayPoints, setRelayPoints] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [selectedShipment, setSelectedShipment] = useState(null);
+  const [tripStatus, setTripStatus] = useState('listing'); // listing, selected, to_pickup, pickup_ready, to_dropoff, finished
+  const [driverLocation, setDriverLocation] = useState({ lat: 3.8667, lng: 11.5213 });
+  const [pickupCode, setPickupCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [driverPath, setDriverPath] = useState([]);
+  const [animationInterval, setAnimationInterval] = useState(null);
+
+  // Filtrer les colis pour la recherche
+  const filteredShipments = useMemo(() => 
+    shipments.filter(s => 
+      s.tracking_number?.toLowerCase().includes(searchInput.toLowerCase()) ||
+      s.recipient_name?.toLowerCase().includes(searchInput.toLowerCase()) ||
+      s.sender_name?.toLowerCase().includes(searchInput.toLowerCase())
+    ), [shipments, searchInput]);
+
+  // Grouper par point relais
+  const groupedByRelayPoint = useMemo(() => 
+    shipments.reduce((acc, shipment) => {
+      const key = shipment.departure_point_id?.id;
+      if (key) {
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(shipment);
+      }
+      return acc;
+    }, {}), [shipments]);
+
+ // Récupération des données initiales
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { data: shipmentsData, error: shipmentsError } = await supabase
+          .from('shipments')
+          .select(`*, departure_point_id(*), arrival_point_id(*)`)
+          .eq('status', 'EN_ATTENTE_DE_DEPOT');
+          
+        if (shipmentsError) throw shipmentsError;
+
+        const { data: relayPointsData, error: relayPointsError } = await supabase
+          .from('relay_points')
+          .select('*');
+
+        if (relayPointsError) throw relayPointsError;
+
+        setShipments(shipmentsData as Shipment[]);
+        setRelayPoints(relayPointsData as RelayPoint[]);
+
+      } catch (err: any) {
+        setError("Erreur de chargement des données. Veuillez réessayer.");
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+  // Initialiser la carte
+  useEffect(() => {
+    if (mapRef.current || !mapContainer.current) return;
+    
+    mapRef.current = new maplibregl.Map({
+      container: mapContainer.current,
+      style: 'https://api.maptiler.com/maps/streets-v2/style.json?key=Lr72DkH8TYyjpP7RNZS9',
+      center: [11.5213, 3.8667],
+      zoom: 12
+    });
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  // Fonction pour obtenir un itinéraire
+  const fetchRoute = async (origin, destination) => {
+    try {
+      const response = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
+      );
+      const data = await response.json();
+      if (data.routes && data.routes.length > 0) {
+        return data.routes[0].geometry.coordinates;
+      }
+    } catch (error) {
+      console.warn('Erreur lors du calcul de l\'itinéraire:', error);
+    }
+    return [[origin.lng, origin.lat], [destination.lng, destination.lat]];
+  };
+
+  // Mettre à jour la carte
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Nettoyer les couches existantes
+    ['route', 'driver-path'].forEach(layerId => {
+      try {
+        if (mapRef.current.getLayer(layerId)) mapRef.current.removeLayer(layerId);
+        if (mapRef.current.getSource(layerId)) mapRef.current.removeSource(layerId);
+      } catch (e) {}
+    });
+
+    // Ajouter les marqueurs des points relais
+    relayPoints.forEach(point => {
+      const count = groupedByRelayPoint[point.id]?.length || 0;
+      const el = document.createElement('div');
+      el.className = 'relative flex flex-col items-center';
+      el.innerHTML = `
+        <div class="w-6 h-6 bg-orange-500 rounded-full border-2 border-white shadow-lg"></div>
+        ${count > 0 ? `<div class="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">${count}</div>` : ''}
+        <span class="text-xs mt-1 bg-white px-2 py-0.5 rounded shadow-sm">${point.name}</span>
+      `;
+      
+      new maplibregl.Marker(el)
+        .setLngLat([point.lng, point.lat])
+        .addTo(mapRef.current);
+    });
+
+    // Dessiner l'itinéraire si un colis est sélectionné
+    if (selectedShipment && (tripStatus === 'selected' || tripStatus === 'to_pickup' || tripStatus === 'to_dropoff')) {
+      const drawRoute = async () => {
+        let start, end;
+        
+        if (tripStatus === 'to_pickup') {
+          start = driverLocation;
+          end = selectedShipment.departure_point_id;
+        } else if (tripStatus === 'to_dropoff') {
+          start = driverLocation;
+          end = selectedShipment.arrival_point_id;
+        } else {
+          start = selectedShipment.departure_point_id;
+          end = selectedShipment.arrival_point_id;
+        }
+
+        const coordinates = await fetchRoute(start, end);
+        
+        mapRef.current.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates
+            }
+          }
+        });
+
+        mapRef.current.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.8 }
+        });
+
+        // Ajuster la vue
+        const bounds = new maplibregl.LngLatBounds();
+        coordinates.forEach(coord => bounds.extend(coord));
+        mapRef.current.fitBounds(bounds, { padding: 50 });
+      };
+      drawRoute();
+    }
+
+    // Dessiner le chemin parcouru
+    if (driverPath.length > 1) {
+      mapRef.current.addSource('driver-path', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: driverPath.map(p => [p.lng, p.lat])
+          }
+        }
+      });
+
+      mapRef.current.addLayer({
+        id: 'driver-path',
+        type: 'line',
+        source: 'driver-path',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#10b981', 'line-width': 3, 'line-opacity': 0.9 }
+      });
+    }
+  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]);
+
+  // Mettre à jour la position du livreur
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setLngLat([driverLocation.lng, driverLocation.lat]);
+    } else {
+      const el = document.createElement('div');
+      el.className = 'flex flex-col items-center';
+      el.innerHTML = `
+        <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+            <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
+          </svg>
+        </div>
+        <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Moi</span>
+      `;
+      
+      driverMarkerRef.current = new maplibregl.Marker(el)
+        .setLngLat([driverLocation.lng, driverLocation.lat])
+        .addTo(mapRef.current);
+    }
+  }, [driverLocation]);
+
+  // Animation du déplacement du livreur
+  const animateDriverMovement = async (targetLocation, duration = 5000) => {
+    if (!driverLocation || !targetLocation) return;
+
+    const route = await fetchRoute(driverLocation, targetLocation);
+    if (!route || route.length < 2) return;
+
+    const steps = route.length;
+    const stepDuration = duration / steps;
+    let currentStep = 0;
+
+    if (animationInterval) clearInterval(animationInterval);
+
+    const interval = setInterval(() => {
+      if (currentStep >= route.length) {
+        clearInterval(interval);
+        setAnimationInterval(null);
+        return;
+      }
+
+      const [lng, lat] = route[currentStep];
+      const newLocation = { lat, lng };
+      setDriverLocation(newLocation);
+      setDriverPath(prev => [...prev, newLocation]);
+      currentStep++;
+    }, stepDuration);
+
+    setAnimationInterval(interval);
+  };
+
+  // Gérer la sélection d'un colis
+  const handleSelectShipment = (shipment) => {
+    setSelectedShipment(shipment);
+    setTripStatus('selected');
+    setError(null);
+  };
+
+  // Commencer la course
+  const handleStartTrip = () => {
+    if (!selectedShipment) return;
+    setTripStatus('to_pickup');
+    setDriverPath([driverLocation]);
+    animateDriverMovement(selectedShipment.departure_point_id, 5000);
+    
+    setTimeout(() => {
+      setTripStatus('pickup_ready');
+    }, 6000);
+  };
+
+  // Récupérer le colis
+  const handleCollectPackage = async () => {
+    if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
+      setError('Code incorrect');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      // Simuler la mise à jour du statut
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setTripStatus('to_dropoff');
+      setPickupCode('');
+      setError(null);
+      animateDriverMovement(selectedShipment.arrival_point_id, 20000);
+      
+      setTimeout(() => {
+        setTripStatus('finished');
+      }, 21000);
+    } catch (err) {
+      setError('Erreur lors de la récupération');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Générer le PDF
+  const generatePDF = async (shipment) => {
+    const pdf = new jsPDF();
+    const qrDataURL = await QRCode.toDataURL(shipment.tracking_number, { width: 50 });
+    
+    pdf.setFontSize(18);
+    pdf.text('Bordereau de Livraison', 20, 20);
+    pdf.addImage(qrDataURL, 'PNG', 150, 10, 50, 50);
+    
+    pdf.setFontSize(12);
+    pdf.text(`N° de suivi: ${shipment.tracking_number}`, 20, 40);
+    pdf.text(`Expéditeur: ${shipment.sender_name}`, 20, 50);
+    pdf.text(`Tel: ${shipment.sender_phone}`, 20, 60);
+    pdf.text(`Destinataire: ${shipment.recipient_name}`, 20, 70);
+    pdf.text(`Tel: ${shipment.recipient_phone}`, 20, 80);
+    pdf.text(`Départ: ${shipment.departure_point_id.name}`, 20, 90);
+    pdf.text(`Arrivée: ${shipment.arrival_point_id.name}`, 20, 100);
+    pdf.text(`Description: ${shipment.description}`, 20, 110);
+    pdf.text(`Poids: ${shipment.weight} kg`, 20, 120);
+    
+    // Espaces de signature
+    pdf.setFontSize(10);
+    pdf.text('Signature Livreur:', 20, 200);
+    pdf.rect(20, 205, 80, 30);
+    pdf.text('Signature Destinataire:', 120, 200);
+    pdf.rect(120, 205, 80, 30);
+    
+    pdf.save(`Bordereau_${shipment.tracking_number}.pdf`);
+  };
+
+  // Terminer la course
+  const handleFinishTrip = async () => {
+    if (!selectedShipment) return;
+    setIsLoading(true);
+    try {
+      await generatePDF(selectedShipment);
+      setTimeout(() => {
+        setSelectedShipment(null);
+        setTripStatus('listing');
+        setDriverPath([]);
+        setError(null);
+      }, 3000);
+    } catch (err) {
+      setError('Erreur lors de la finalisation');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBackToList = () => {
+    if (animationInterval) clearInterval(animationInterval);
+    setSelectedShipment(null);
+    setTripStatus('listing');
+    setPickupCode('');
+    setError(null);
+    setDriverPath([]);
+  };
+
+  // Composant InfoRow
+  const InfoRow = ({ icon: Icon, label, value, detail }) => (
+    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+      <Icon className="w-5 h-5 text-orange-500 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+        <p className="text-sm font-semibold text-gray-900 break-words">{value}</p>
+        {detail && <p className="text-xs text-gray-600 break-words">{detail}</p>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="h-screen w-screen flex bg-gray-50">
+      {/* Sidebar */}
+      <div className="w-96 bg-white shadow-xl border-r border-gray-200 flex flex-col">
+        {tripStatus === 'listing' ? (
+          <>
+            <div className="p-4 border-b bg-white">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Colis à collecter ({filteredShipments.length})</h2>
+              <div className="relative">
+                <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Rechercher un colis..."
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {isLoading ? (
+                <div className="flex justify-center items-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                </div>
+              ) : filteredShipments.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>Aucun colis à collecter</p>
+                </div>
+              ) : (
+                filteredShipments.map(shipment => (
+                  <motion.div
+                    key={shipment.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={() => handleSelectShipment(shipment)}
+                    className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-orange-300 hover:bg-orange-50 transition-all duration-200"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-gray-900">{shipment.tracking_number}</span>
+                      <Package className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">Pour: {shipment.recipient_name}</p>
+                    <p className="text-sm text-orange-600 flex items-center">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      {shipment.departure_point_id?.name}
+                    </p>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </>
+        ) : selectedShipment && (
+          <div className="p-4 flex flex-col h-full">
+            <button
+              onClick={handleBackToList}
+              className="flex items-center text-orange-600 font-medium mb-4 hover:text-orange-700 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" /> Retour à la liste
+            </button>
+            
+            <h2 className="text-xl font-bold text-gray-900 mb-4">{selectedShipment.tracking_number}</h2>
+            
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <InfoRow icon={User} label="Expéditeur" value={selectedShipment.sender_name} detail={selectedShipment.sender_phone} />
+              <InfoRow icon={User} label="Destinataire" value={selectedShipment.recipient_name} detail={selectedShipment.recipient_phone} />
+              <InfoRow icon={MapPin} label="Point de départ" value={selectedShipment.departure_point_id?.name} />
+              <InfoRow icon={MapPin} label="Point d'arrivée" value={selectedShipment.arrival_point_id?.name} />
+              <InfoRow icon={Package} label="Description" value={selectedShipment.description} />
+              <InfoRow icon={Weight} label="Poids" value={`${selectedShipment.weight} kg`} />
+            </div>
+            
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+            
+            <div className="pt-4 border-t">
+              <AnimatePresence mode="wait">
+                {tripStatus === 'selected' && (
+                  <motion.button
+                    key="start"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    onClick={handleStartTrip}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                  >
+                    <Play className="w-5 h-5 mr-2" />
+                    Commencer la course
+                  </motion.button>
+                )}
+                
+                {tripStatus === 'to_pickup' && (
+                  <motion.div
+                    key="to-pickup"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center p-4 bg-blue-50 rounded-lg"
+                  >
+                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
+                    <p className="text-sm font-medium text-blue-700">En route vers le point de collecte...</p>
+                  </motion.div>
+                )}
+                
+                {tripStatus === 'pickup_ready' && (
+                  <motion.div
+                    key="pickup"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4"
+                  >
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <CheckCircle className="w-6 h-6 text-green-500 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-green-700">Arrivé au point de collecte !</p>
+                    </div>
+                    <div className="relative">
+                      <QrCode className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Code du colis ou scanner QR"
+                        value={pickupCode}
+                        onChange={e => setPickupCode(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={handleCollectPackage}
+                      disabled={isLoading || !pickupCode}
+                      className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                      )}
+                      Récupérer le colis
+                    </button>
+                  </motion.div>
+                )}
+                
+                {tripStatus === 'to_dropoff' && (
+                  <motion.div
+                    key="to-dropoff"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center p-4 bg-blue-50 rounded-lg"
+                  >
+                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
+                    <p className="text-sm font-medium text-blue-700">Colis récupéré ! En route vers la destination...</p>
+                  </motion.div>
+                )}
+                
+                {tripStatus === 'finished' && (
+                  <motion.div
+                    key="finished"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4"
+                  >
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-2" />
+                      <h3 className="font-bold text-green-800">Livraison terminée !</h3>
+                      <p className="text-sm text-green-700">Le bordereau a été généré</p>
+                    </div>
+                    <button
+                      onClick={handleFinishTrip}
+                      disabled={isLoading}
+                      className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                      )}
+                      Confirmer la livraison
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Carte */}
+      <div className="flex-1 relative">
+        <div ref={mapContainer} className="h-full w-full" />
+      </div>
+    </div>
+  );
+};
+
+export default CollectPackageApp;
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\globals.css
 ================================================================================
 
@@ -19510,19 +20082,19 @@ export default function NavbarHome() {
           <nav className="hidden md:flex items-center gap-8">
             <Link 
               href="/expedition" 
-              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
               Envoyer un colis
             </Link>
             <Link 
               href="/track-package" 
-              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
               Retrouver mon colis
             </Link>
             <Link 
               href="#how-it-works" 
-              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
               Comment ça marche
             </Link>
@@ -19753,6 +20325,32 @@ export async function notifyOnPackageWithdrawal(packageInfo: PackageInfo, retira
   // Message de notification pour l'expéditeur
   const senderMessage = `Votre colis (N°: ${packageInfo.trackingNumber}) envoyé à ${packageInfo.recipientName} a été retiré avec succès par ${retirantName}. - Pick & Drop`;
   await sendSms(packageInfo.senderPhone, senderMessage);
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\lib\types.ts
+================================================================================
+
+// Pour plus de clarté, unifions les cas (majuscules)
+type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+
+// Le profil de base, qui peut être n'importe quel type
+export interface UserProfile {
+  id: string;
+  account_type: AccountType; // Utilise notre type unifié
+  manager_name: string | null;
+  email?: string | null;
+  name: string; // Ajouté pour la cohérence
+  role: string; // Ajouté pour la cohérence
+  [key: string]: any;
+}
+
+// Le profil PRO, qui est un UserProfile mais avec un type de compte RESTREINT
+export interface ProProfile extends UserProfile {
+  account_type: 'FREELANCE' | 'AGENCY'; // On spécifie ici que c'est forcément l'un de ces deux
+  business_name?: string;
+  business_type?: string;
 }
 
 
@@ -20919,6 +21517,107 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\login\page\next-font-manifest.js
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\app-build-manifest.json
+================================================================================
+
+{
+  "pages": {
+    "/collect-package/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_8ece2e07._.js",
+      "static/chunks/src_ed325b91._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
+      "static/chunks/node_modules_e67f8056._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
+      "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
+      "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
+      "static/chunks/node_modules_b8905932._.js",
+      "static/chunks/src_app_collect-package_page_tsx_68106fcf._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
+      "static/chunks/src_app_collect-package_page_tsx_2e88f23e._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ]
+  }
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+    "static/chunks/node_modules_next_dist_445d8acf._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+    "static/chunks/_e69f0d32._.js",
+    "static/chunks/_01f48b92._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\app-paths-manifest.json
+================================================================================
+
+{
+  "/collect-package/page": "app/collect-package/page.js"
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\collect-package\page\react-loadable-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_app\pages-manifest.json
 ================================================================================
 
@@ -21063,18 +21762,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
-================================================================================
-
-{
-  "version": 3,
-  "middleware": {},
-  "sortedMiddleware": [],
-  "functions": {}
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 ================================================================================
 
@@ -21082,27 +21769,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
   "node": {},
   "edge": {},
   "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
-}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
-================================================================================
-
-{}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
-================================================================================
-
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/home/page": "app/home/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js"
 }
 
 
@@ -21116,6 +21782,40 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
   "pages": {},
   "pagesUsingSizeAdjust": false
 }
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
+================================================================================
+
+{
+  "version": 3,
+  "middleware": {},
+  "sortedMiddleware": [],
+  "functions": {}
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
+================================================================================
+
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/collect-package/page": "app/collect-package/page.js",
+  "/expedition/page": "app/expedition/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/home/page": "app/home/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js"
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+================================================================================
+
+{}
 
 
 ================================================================================
@@ -22153,6 +22853,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     inset: calc(var(--spacing) * 2);
   }
 
+  .inset-4 {
+    inset: calc(var(--spacing) * 4);
+  }
+
   .inset-y-0 {
     inset-block: calc(var(--spacing) * 0);
   }
@@ -22585,6 +23289,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .m-0 {
     margin: calc(var(--spacing) * 0);
+  }
+
+  .m-4 {
+    margin: calc(var(--spacing) * 4);
   }
 
   .-mx-4 {
@@ -23081,6 +23789,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     width: 100%;
   }
 
+  .w-screen {
+    width: 100vw;
+  }
+
   .max-w-0 {
     max-width: calc(var(--spacing) * 0);
   }
@@ -23143,10 +23855,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .min-w-\[18px\] {
     min-width: 18px;
-  }
-
-  .min-w-\[20px\] {
-    min-width: 20px;
   }
 
   .min-w-\[140px\] {
@@ -23253,10 +23961,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   .scale-x-0 {
     --tw-scale-x: 0%;
     scale: var(--tw-scale-x) var(--tw-scale-y);
-  }
-
-  .scale-\[1\.02\] {
-    scale: 1.02;
   }
 
   .rotate-2 {
@@ -25915,6 +26619,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     padding-right: calc(var(--spacing) * 12);
   }
 
+  .pb-2 {
+    padding-bottom: calc(var(--spacing) * 2);
+  }
+
   .pb-3 {
     padding-bottom: calc(var(--spacing) * 3);
   }
@@ -25937,6 +26645,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .pl-4 {
     padding-left: calc(var(--spacing) * 4);
+  }
+
+  .pl-6 {
+    padding-left: calc(var(--spacing) * 6);
   }
 
   .pl-8 {
@@ -26944,6 +27656,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     transition-timing-function: var(--ease-out);
   }
 
+  .outline-none {
+    --tw-outline-style: none;
+    outline-style: none;
+  }
+
   .group-focus-within\:text-emerald-500:is(:where(.group):focus-within *) {
     color: var(--color-emerald-500);
   }
@@ -26972,13 +27689,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .group-hover\:-translate-x-1:is(:where(.group):hover *) {
       --tw-translate-x: calc(var(--spacing) * -1);
-      translate: var(--tw-translate-x) var(--tw-translate-y);
-    }
-  }
-
-  @media (hover: hover) {
-    .group-hover\:translate-x-1:is(:where(.group):hover *) {
-      --tw-translate-x: calc(var(--spacing) * 1);
       translate: var(--tw-translate-x) var(--tw-translate-y);
     }
   }
@@ -27323,6 +28033,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:bg-blue-600:hover {
+      background-color: var(--color-blue-600);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-blue-700:hover {
       background-color: var(--color-blue-700);
     }
@@ -27638,12 +28354,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:text-gray-800:hover {
-      color: var(--color-gray-800);
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:text-gray-900:hover {
       color: var(--color-gray-900);
     }
@@ -27694,6 +28404,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:text-red-600:hover {
       color: var(--color-red-600);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-red-800:hover {
+      color: var(--color-red-800);
     }
   }
 
@@ -28512,38 +29228,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 48rem) {
-    :where(.md\:space-x-4 > :not(:last-child)) {
-      --tw-space-x-reverse: 0;
-    }
-
-    :where(.md\:space-x-4 > :not(:last-child)):not(:-webkit-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))) {
-      margin-left: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
-      margin-right: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
-    }
-
-    :where(.md\:space-x-4 > :not(:last-child)):not(:-moz-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))) {
-      margin-left: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
-      margin-right: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
-    }
-
-    :where(.md\:space-x-4 > :not(:last-child)):not(:is(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))) {
-      margin-left: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
-      margin-right: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
-    }
-
-    :where(.md\:space-x-4 > :not(:last-child)):-webkit-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
-      margin-right: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
-      margin-left: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
-    }
-
-    :where(.md\:space-x-4 > :not(:last-child)):-moz-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
-      margin-right: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
-      margin-left: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
-    }
-
-    :where(.md\:space-x-4 > :not(:last-child)):is(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
-      margin-right: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
-      margin-left: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    .md\:p-1 {
+      padding: calc(var(--spacing) * 1);
     }
   }
 
@@ -28562,12 +29248,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 48rem) {
     .md\:px-6 {
       padding-inline: calc(var(--spacing) * 6);
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .md\:px-8 {
-      padding-inline: calc(var(--spacing) * 8);
     }
   }
 
@@ -28591,13 +29271,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 48rem) {
-    .md\:text-3xl {
-      font-size: var(--text-3xl);
-      line-height: var(--tw-leading, var(--text-3xl--line-height));
-    }
-  }
-
-  @media (min-width: 48rem) {
     .md\:text-4xl {
       font-size: var(--text-4xl);
       line-height: var(--tw-leading, var(--text-4xl--line-height));
@@ -28615,13 +29288,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     .md\:text-6xl {
       font-size: var(--text-6xl);
       line-height: var(--tw-leading, var(--text-6xl--line-height));
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .md\:text-base {
-      font-size: var(--text-base);
-      line-height: var(--tw-leading, var(--text-base--line-height));
     }
   }
 
@@ -28712,12 +29378,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 64rem) {
-    .lg\:ml-80 {
-      margin-left: calc(var(--spacing) * 80);
-    }
-  }
-
-  @media (min-width: 64rem) {
     .lg\:ml-\[calc\(35\%\+3rem\)\] {
       margin-left: calc(35% + 3rem);
     }
@@ -28738,6 +29398,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 64rem) {
     .lg\:hidden {
       display: none;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .lg\:w-1\/3 {
+      width: 33.3333%;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .lg\:w-1\/4 {
+      width: 25%;
     }
   }
 
@@ -31964,7 +32636,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
     ],
-    "/dashboard/page": [
+    "/collect-package/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
       "static/chunks/src_app_globals_b805903d.css",
@@ -31972,14 +32644,43 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_ed325b91._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_bc4cac5b._.js",
-      "static/chunks/src_aa38ae9d._.js",
+      "static/chunks/node_modules_e67f8056._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
+      "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
+      "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
+      "static/chunks/node_modules_b8905932._.js",
+      "static/chunks/src_app_collect-package_page_tsx_68106fcf._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
+      "static/chunks/src_app_collect-package_page_tsx_2e88f23e._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ],
+    "/expedition/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_8ece2e07._.js",
+      "static/chunks/src_ed325b91._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
+      "static/chunks/_c8166adc._.js",
+      "static/chunks/src_86534bfe._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
-      "static/chunks/node_modules_leaflet_dist_leaflet-src_e7e140e9.js",
-      "static/chunks/node_modules_32f2909a._.js",
-      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
-      "static/chunks/src_app_dashboard_page_tsx_2e88f23e._.js",
+      "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
+      "static/chunks/node_modules_react-icons_md_index_mjs_78df2b41._.js",
+      "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
+      "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
+      "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
+      "static/chunks/node_modules_82e050a8._.js",
+      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
+      "static/chunks/src_app_expedition_page_tsx_2e88f23e._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
       "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
@@ -32075,9 +32776,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "f0b52cf866f6ce7bce374a7b46ce39f1",
-    "previewModeSigningKey": "8e0908438b9335bc3b0032e39b10790fbc4ada812489b94911e61143de58ffce",
-    "previewModeEncryptionKey": "2197190e629264ecfc411dae75f81ce6d67348d6f4b3cdfc675e0aeb0882ad97"
+    "previewModeId": "ae4b92f4f6a8eeba63fa84697794f660",
+    "previewModeSigningKey": "11e453dac4f9819176c4034201f36b7fa959ec33f9647869e3f59b75a469886d",
+    "previewModeEncryptionKey": "c285918f83f22e334a27e43718f4c6b43e5d74ce0fd58aee8fef52edf4dae70b"
   }
 }
 

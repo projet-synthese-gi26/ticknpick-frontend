@@ -384,7 +384,6 @@ export default function ShippingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50 dark:from-gray-900 dark:to-gray-800">
-      <NavbarHome />
       <main className="container mx-auto px-4 py-4">
         <motion.div 
           className="text-center mb-4"
@@ -406,7 +405,7 @@ export default function ShippingPage() {
           <ShippingSteps currentStep={formData.currentStep} />
         </div>
 
-        <div className="bg-transparent rounded-xl p-4 md:p-6">
+        <div className="bg-transparent rounded-xl p-4 md:p-1">
           <AnimatePresence mode="wait">
             <motion.div
               key={formData.currentStep}
