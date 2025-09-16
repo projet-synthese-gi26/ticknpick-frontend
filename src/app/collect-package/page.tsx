@@ -403,7 +403,7 @@ const CollectPackageApp = () => {
       const { error: updateError } = await supabase
         .from('Shipments')
         .update({ 
-          status: 'EN_COURS_DE_LIVRAISON',
+          status: 'EN_TRANSIT',
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedShipment.id);
