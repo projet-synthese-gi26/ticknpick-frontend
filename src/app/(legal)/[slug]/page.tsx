@@ -5,9 +5,10 @@ import { FileText, Calendar } from 'lucide-react';
 import NavbarHome from '@/components/NavbarHome';
 import Footer from '@/components/FooterHome';
 
-type Props = {
-  params: { slug: string };
-};
+// L'interface `Props` n'est plus nécessaire, nous allons typer directement.
+// type Props = {
+//   params: { slug: string };
+// };
 
 export function generateStaticParams() {
   return Object.keys(legalDocs).map((slug) => ({
@@ -15,7 +16,8 @@ export function generateStaticParams() {
   }));
 }
 
-export default function LegalPage({ params }: Props) {
+// CORRIGÉ : La signature de la page est mise à jour pour typer `params` explicitement.
+export default function LegalPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const doc = legalDocs[slug];
 
