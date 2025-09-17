@@ -947,17 +947,6 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                       onFocus={() => setFocusedField('trunk_dimensions')} 
                       onBlur={() => setFocusedField(null)}
                     />
-                    <AnimatedInputField 
-                      label="NIU" 
-                      name="niu" 
-                      value={deliveryData.niu} 
-                      onChange={handleChange} 
-                      readOnly={!isEditing} 
-                      icon={CreditCard} 
-                      focused={focusedField === 'niu'} 
-                      onFocus={() => setFocusedField('niu')} 
-                      onBlur={() => setFocusedField(null)}
-                    />
                   </>
                 );
               })()}
