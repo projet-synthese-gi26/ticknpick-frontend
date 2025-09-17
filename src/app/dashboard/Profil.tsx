@@ -4,30 +4,75 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
-import { Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, AlertCircle, Car, Users, Star, Truck, Package, Shield } from 'lucide-react';
-import type { UserProfile } from './page';
-// Define the ProProfile interface once with all possible account types
-interface ProProfile {
+import { 
+  Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, 
+  Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, 
+  AlertCircle, Car, Users, Star, Truck, Package, Shield, X, Check 
+} from 'lucide-react';
+
+// Interfaces corrigées et unifiées
+interface BaseProfile {
   id: string;
-  manager_name: string | null;
-  home_address: string | null;
-  phone_number: string | null;
-  nationality: string | null;
-  identity_photo_url: string | null;
-  relay_point_name: string | null;
-  relay_point_address: string | null;
-  account_type: 'CLIENT' | 'DELIVERY' | 'FREELANCE' | 'AGENCY' | 'client' | 'livreur' | 'freelance' | 'agence';
-  current_latitude: number | null;
-  current_longitude: number | null;
+  email: string;
   created_at: string;
-  updated_at: string;
-  email?: string | null;
-  name: string;
-  role: string;
-  [key: string]: any;
+  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+  manager_name: string | null;
+  phone_number: string | null;
+  birth_date: string | null;
+  nationality: string | null;
+  home_address: string | null;
+  home_address_locality?: string | null;
+  id_card_number: string | null;
+  niu?: string | null;
 }
 
-// Dynamic imports with proper loading states
+interface ClientProfile extends BaseProfile {
+  account_type: 'CLIENT';
+  // Pas de champs spécifiques pour les clients
+}
+
+interface DeliveryProfile extends BaseProfile {
+  account_type: 'LIVREUR';
+  vehicle_type: string | null;
+  vehicle_brand: string | null;
+  vehicle_registration: string | null;
+  vehicle_color: string | null;
+  trunk_dimensions: string | null;
+  driving_license_front_url: string | null;
+  driving_license_back_url: string | null;
+  accident_history: string | null;
+}
+
+interface ProProfile extends BaseProfile {
+  account_type: 'FREELANCE' | 'AGENCY';
+  identity_photo_url: string | null;
+  id_card_url: string | null;
+  tax_id: string | null;
+  professional_experience: string | null;
+  relay_point_name: string | null;
+  relay_point_address: string | null;
+  relay_point_gps: string | null;
+  opening_hours: string | null;
+  storage_capacity: string | null;
+  service_card_details: any;
+}
+
+type UserProfile = ClientProfile | DeliveryProfile | ProProfile;
+
+interface RelayPoint {
+  id: number;
+  name: string;
+  address: string;
+  quartier?: string;
+  lat: number;
+  lng: number;
+  hours?: string;
+  type: 'bureau' | 'commerce' | 'agence';
+  agency_id: string;
+  created_at: string;
+}
+
+// Dynamic imports pour Leaflet
 const MapContainer = dynamic(
   () => import('react-leaflet').then((mod) => mod.MapContainer), 
   { 
@@ -44,60 +89,111 @@ const MapContainer = dynamic(
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
 
-// Map hook component with error handling
+// Composant Map avec gestion d'erreurs améliorée
 const ProfileMap = ({ position }: { position: [number, number] }) => {
-  const [mapInstance, setMapInstance] = useState<any>(null);
-  
-  const MapUpdater = () => {
-    const [map, setMap] = useState<any>(null);
-    
-    useEffect(() => {
-      // Only use useMap hook on client side and when map libraries are loaded
-      if (typeof window !== 'undefined') {
-        try {
-          const { useMap } = require('react-leaflet');
-          const mapInstance = useMap();
-          setMap(mapInstance);
-        } catch (error) {
-          console.warn('Erreur avec le hook useMap:', error);
-        }
-      }
-    }, []);
+  const [isClient, setIsClient] = useState(false);
 
-    useEffect(() => {
-      if (map && position && typeof map.setView === 'function') {
-        map.setView(position, 15);
-        setMapInstance(map);
-      }
-    }, [map, position]);
-    
-    return null;
-  };
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient || !position) {
+    return (
+      <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50">
+        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <>
-      <MapUpdater />
-      {position && <Marker position={position} />}
-    </>
+    <MapContainer center={position} zoom={13} style={{ height: '100%', width: '100%' }}>
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <Marker position={position} />
+    </MapContainer>
   );
 };
 
-interface RelayPoint {
-  id: string;
-  name: string;
-  address: string;
-  status: 'active' | 'inactive';
-  deactivation_reason?: string;
-  created_at: string;
-}
+// Composant de prévisualisation d'image amélioré
+const ProfileImagePreview = ({ 
+  src, 
+  alt, 
+  className, 
+  onError 
+}: { 
+  src: string; 
+  alt: string; 
+  className: string; 
+  onError?: () => void;
+}) => {
+  const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [currentSrc, setCurrentSrc] = useState(src);
 
-interface DeliveryInfo {
-  vehicle_type: string;
-  license_plate: string;
-  vehicle_model: string;
-  affiliated_agency_id?: string;
-  affiliated_agency_name?: string;
-}
+  useEffect(() => {
+    setCurrentSrc(src);
+    setImageState('loading');
+  }, [src]);
+
+  const handleImageLoad = () => {
+    setImageState('loaded');
+  };
+
+  const handleImageError = () => {
+    setImageState('error');
+    setCurrentSrc('/avatars/default.png');
+    onError?.();
+  };
+
+  return (
+    <div className="relative w-full h-full">
+      {imageState === 'loading' && (
+        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center rounded-full">
+          <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+        </div>
+      )}
+      <img 
+        src={currentSrc} 
+        alt={alt} 
+        className={`${className} ${imageState === 'loaded' ? 'visible' : 'invisible'}`} 
+        onError={handleImageError} 
+        onLoad={handleImageLoad} 
+      />
+    </div>
+  );
+};
+
+// Composant de notification Toast
+const Toast = ({ message, type, onClose }: { 
+  message: string; 
+  type: 'success' | 'error' | 'warning'; 
+  onClose: () => void;
+}) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, type === 'success' ? 3000 : 5000);
+    return () => clearTimeout(timer);
+  }, [type, onClose]);
+
+  const bgColor = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    warning: 'bg-yellow-500'
+  }[type];
+
+  const icon = {
+    success: <Check className="w-5 h-5" />,
+    error: <X className="w-5 h-5" />,
+    warning: <AlertCircle className="w-5 h-5" />
+  }[type];
+
+  return (
+    <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 animate-fade-in`}>
+      {icon}
+      <span>{message}</span>
+      <button onClick={onClose} className="ml-2 hover:opacity-75">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
 
 interface ProfilePageProps {
   profile: UserProfile;
@@ -106,26 +202,28 @@ interface ProfilePageProps {
 
 export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [isEditing, setIsEditing] = useState(false);
- const [formData, setFormData] = useState<UserProfile>(profile);
+  const [formData, setFormData] = useState<UserProfile>(profile);
   const [isLoading, setIsLoading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [showAddRelay, setShowAddRelay] = useState(false);
-  const [newRelayData, setNewRelayData] = useState({ name: '', address: '' });
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo>({ 
-    vehicle_type: '', 
-    license_plate: '', 
-    vehicle_model: '' 
+  const [newRelayData, setNewRelayData] = useState({ 
+    name: '', 
+    address: '', 
+    quartier: '',
+    type: 'bureau' as 'bureau' | 'commerce' | 'agence'
   });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Update formData when profile changes
+  // Mise à jour du formData quand le profil change
   useEffect(() => {
     setFormData(profile);
   }, [profile]);
 
+  // Obtenir la géolocalisation
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -134,20 +232,22 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         }, 
         (err) => { 
           console.warn("Impossible d'obtenir la localisation:", err.message); 
-          setCurrentLocation([10.5911, 14.3155]); // Default to Maroua coordinates
+          // Coordonnées par défaut (Yaoundé)
+          setCurrentLocation([3.8480, 11.5021]); 
         }, 
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 600000 }
       );
     } else {
-      setCurrentLocation([10.5911, 14.3155]);
+      setCurrentLocation([3.8480, 11.5021]);
     }
   }, []);
 
+  // Charger les points relais pour les agences
   useEffect(() => {
-    const accountType = profile.account_type.toUpperCase();
-    if (accountType === 'AGENCY' || accountType === 'AGENCE') fetchRelayPoints();
-    if (accountType === 'DELIVERY' || accountType === 'LIVREUR') fetchDeliveryInfo();
-  }, [profile.account_type]);
+    if (profile.account_type === 'AGENCY') {
+      fetchRelayPoints();
+    }
+  }, [profile.account_type, profile.id]);
 
   const fetchRelayPoints = async () => {
     try {
@@ -161,31 +261,12 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       setRelayPoints(data || []);
     } catch (error) {
       console.error('Erreur lors du chargement des points relais:', error);
+      showToast('Erreur lors du chargement des points relais', 'error');
     }
   };
 
-  const fetchDeliveryInfo = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('delivery_info')
-        .select('*, agencies(name)')
-        .eq('user_id', profile.id)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') throw error;
-      
-      if (data) {
-        setDeliveryInfo({
-          vehicle_type: data.vehicle_type || '',
-          license_plate: data.license_plate || '',
-          vehicle_model: data.vehicle_model || '',
-          affiliated_agency_id: data.affiliated_agency_id,
-          affiliated_agency_name: data.agencies?.name
-        });
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des infos livreur:', error);
-    }
+  const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+    setToast({ message, type });
   };
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -193,23 +274,21 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
 
-  const handleDeliveryInfoChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setDeliveryInfo(prev => ({ ...prev, [name]: value }));
-  }, []);
-
+  // Gestion du téléchargement de photos améliorée
   const handlePhotoUpload = async (file: File) => {
     if (!file) return;
     
+    // Validation du type de fichier
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) { 
-      alert('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.'); 
+      showToast('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.', 'error'); 
       return; 
     }
     
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    // Validation de la taille (5MB max)
+    const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) { 
-      alert('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.'); 
+      showToast('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.', 'error'); 
       return; 
     }
     
@@ -220,8 +299,8 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       const timestamp = Date.now();
       const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
       
-      // Remove old photo if exists
-      if (formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
+      // Supprimer l'ancienne photo si elle existe
+      if ('identity_photo_url' in formData && formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
         try {
           const urlParts = formData.identity_photo_url.split('/');
           const existingFileName = urlParts[urlParts.length - 1];
@@ -235,19 +314,32 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         }
       }
       
+      // Upload de la nouvelle photo
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('profile-photos')
-        .upload(fileName, file, { upsert: true, cacheControl: '3600' });
+        .upload(fileName, file, { 
+          upsert: true, 
+          cacheControl: '3600',
+          contentType: file.type 
+        });
       
       if (uploadError) throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
       
+      // Obtenir l'URL publique
       const { data: { publicUrl } } = supabase.storage
         .from('profile-photos')
         .getPublicUrl(fileName);
       
       if (!publicUrl) throw new Error('Impossible d\'obtenir l\'URL de la photo');
       
-      setFormData(prev => ({ ...prev, identity_photo_url: publicUrl }));
+      // Mise à jour du formData (seulement pour les profils PRO)
+      if ('identity_photo_url' in formData) {
+        setFormData(prev => ({ 
+          ...prev, 
+          identity_photo_url: `${publicUrl}?t=${timestamp}` // Cache busting
+        }));
+      }
+      
       showToast('Photo téléchargée avec succès !', 'success');
     } catch (error: any) {
       console.error('Erreur lors du téléchargement:', error);
@@ -258,122 +350,115 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     }
   };
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    const toast = document.createElement('div');
-    toast.className = `fixed top-4 right-4 ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
-    toast.innerHTML = `
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          ${type === 'success' 
-            ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' 
-            : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>'
-          }
-        </svg>
-        ${message}
-      </div>
-    `;
-    document.body.appendChild(toast);
-    setTimeout(() => { 
-      if (toast.parentNode) toast.remove(); 
-    }, type === 'success' ? 3000 : 5000);
-  };
-
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) handlePhotoUpload(file);
   };
 
-  const ProfileImagePreview = ({ src, alt, className }: { src: string; alt: string; className: string; }) => {
-    const [imageError, setImageError] = useState(false);
-    const [imageLoading, setImageLoading] = useState(true);
-    
-    return (
-      <div className="relative w-full h-full">
-        {imageLoading && (
-          <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-          </div>
-        )}
-        <img 
-          src={imageError ? '/avatars/default.png' : src} 
-          alt={alt} 
-          className={`${className} ${imageLoading ? 'invisible' : 'visible'}`} 
-          onError={() => { setImageError(true); setImageLoading(false); }} 
-          onLoad={() => { setImageLoading(false); setImageError(false); }} 
-        />
-      </div>
-    );
-  };
-
+  // Sauvegarde des modifications
   const handleSaveChanges = async () => {
     setIsLoading(true);
     try {
-      const updateData: any = {
+      let updateData: any = {
         manager_name: formData.manager_name,
-        home_address: formData.home_address,
         phone_number: formData.phone_number,
+        birth_date: formData.birth_date,
         nationality: formData.nationality,
-        identity_photo_url: formData.identity_photo_url,
-        current_latitude: currentLocation?.[0],
-        current_longitude: currentLocation?.[1],
+        home_address: formData.home_address,
+        id_card_number: formData.id_card_number,
+        email: formData.email
       };
+
+      // Table et champs spécifiques selon le type de compte
+      let tableName: string;
       
-      const accountType = profile.account_type.toUpperCase();
-      if (accountType !== 'CLIENT') {
-        updateData.relay_point_name = formData.relay_point_name;
-        updateData.relay_point_address = formData.relay_point_address;
+      if (profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR') {
+        tableName = 'profiles';
+        
+        // Champs spécifiques aux livreurs
+        if (profile.account_type === 'LIVREUR') {
+          const deliveryData = formData as DeliveryProfile;
+          updateData = {
+            ...updateData,
+            home_address_locality: deliveryData.home_address_locality,
+            niu: deliveryData.niu,
+            vehicle_type: deliveryData.vehicle_type,
+            vehicle_brand: deliveryData.vehicle_brand,
+            vehicle_registration: deliveryData.vehicle_registration,
+            vehicle_color: deliveryData.vehicle_color,
+            trunk_dimensions: deliveryData.trunk_dimensions,
+            driving_license_front_url: deliveryData.driving_license_front_url,
+            driving_license_back_url: deliveryData.driving_license_back_url,
+            accident_history: deliveryData.accident_history
+          };
+        } else {
+          // Client - champs additionnels si nécessaire
+          const clientData = formData as ClientProfile;
+          if ('home_address_locality' in clientData) {
+            updateData.home_address_locality = clientData.home_address_locality;
+          }
+        }
+      } else {
+        tableName = 'profiles_pro';
+        const proData = formData as ProProfile;
+        
+        updateData = {
+          ...updateData,
+          identity_photo_url: proData.identity_photo_url,
+          id_card_url: proData.id_card_url,
+          tax_id: proData.tax_id,
+          professional_experience: proData.professional_experience,
+          relay_point_name: proData.relay_point_name,
+          relay_point_address: proData.relay_point_address,
+          relay_point_gps: proData.relay_point_gps,
+          opening_hours: proData.opening_hours,
+          storage_capacity: proData.storage_capacity,
+          service_card_details: proData.service_card_details
+        };
       }
       
       const { error } = await supabase
-        .from('profiles_pro')
+        .from(tableName)
         .update(updateData)
         .eq('id', profile.id);
       
       if (error) throw error;
       
-      if (accountType === 'DELIVERY' || accountType === 'LIVREUR') {
-        const { error: deliveryError } = await supabase
-          .from('delivery_info')
-          .upsert({
-            user_id: profile.id,
-            vehicle_type: deliveryInfo.vehicle_type,
-            license_plate: deliveryInfo.license_plate,
-            vehicle_model: deliveryInfo.vehicle_model,
-            affiliated_agency_id: deliveryInfo.affiliated_agency_id
-          });
-        
-        if (deliveryError) throw deliveryError;
-      }
-      
       setIsEditing(false);
       onUpdate();
       showToast('Profil mis à jour avec succès !', 'success');
     } catch (error: any) {
-      alert("Erreur lors de la sauvegarde : " + error.message);
+      console.error('Erreur lors de la sauvegarde:', error);
+      showToast('Erreur lors de la sauvegarde : ' + error.message, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const toggleEdit = () => {
-    if (isEditing) {
-      handleSaveChanges();
-    } else {
-      setIsEditing(true);
-    }
-  };
-
+  // Ajouter un point relais
   const addRelayPoint = async () => {
-    if (!newRelayData.name || !newRelayData.address) return;
+    if (!newRelayData.name || !newRelayData.address) {
+      showToast('Veuillez remplir tous les champs obligatoires', 'warning');
+      return;
+    }
     
+    if (!currentLocation) {
+      showToast('Position géographique non disponible', 'error');
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('relay_points')
         .insert({ 
           agency_id: profile.id, 
           name: newRelayData.name, 
-          address: newRelayData.address, 
-          status: 'active' 
+          address: newRelayData.address,
+          quartier: newRelayData.quartier || null,
+          lat: currentLocation[0],
+          lng: currentLocation[1],
+          type: newRelayData.type,
+          hours: '08:00-18:00' // Valeur par défaut
         })
         .select()
         .single();
@@ -381,90 +466,113 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       if (error) throw error;
       
       setRelayPoints(prev => [data, ...prev]);
-      setNewRelayData({ name: '', address: '' });
+      setNewRelayData({ name: '', address: '', quartier: '', type: 'bureau' });
       setShowAddRelay(false);
-    } catch (error) {
+      showToast('Point relais ajouté avec succès !', 'success');
+    } catch (error: any) {
       console.error('Erreur lors de l\'ajout du point relais:', error);
+      showToast('Erreur lors de l\'ajout du point relais : ' + error.message, 'error');
     }
   };
 
-  const toggleRelayPointStatus = async (relayId: string, currentStatus: string) => {
-    const reason = currentStatus === 'active' 
-      ? prompt('Raison de la désactivation:') 
-      : prompt('Raison de la réactivation:');
-    
-    if (reason === null) return;
-    
-    try {
-      const { error } = await supabase
-        .from('relay_points')
-        .update({ 
-          status: currentStatus === 'active' ? 'inactive' : 'active', 
-          deactivation_reason: reason 
-        })
-        .eq('id', relayId);
-      
-      if (error) throw error;
-      
-      fetchRelayPoints();
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du statut:', error);
-    }
-  };
-
-  const upgradeAccount = async (newType: string) => {
+  // Mise à niveau de compte
+  const upgradeAccount = async (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
     const typeNames = {
       'FREELANCE': 'Freelance PRO',
-      'DELIVERY': 'Livreur',
+      'LIVREUR': 'Livreur',
       'AGENCY': 'Agence'
     };
     
-    if (confirm(`Êtes-vous sûr de vouloir passer à un compte ${typeNames[newType as keyof typeof typeNames]} ?`)) {
+    if (confirm(`Êtes-vous sûr de vouloir passer à un compte ${typeNames[newType]} ?`)) {
       try {
-        const { error } = await supabase
-          .from('profiles_pro')
-          .update({ account_type: newType })
-          .eq('id', profile.id);
+        setIsLoading(true);
         
-        if (error) throw error;
+        // Préparer les données pour la migration
+        const migrationData = {
+          id: profile.id,
+          email: profile.email,
+          account_type: newType,
+          manager_name: formData.manager_name,
+          phone_number: formData.phone_number,
+          birth_date: formData.birth_date,
+          nationality: formData.nationality,
+          home_address: formData.home_address,
+          id_card_number: formData.id_card_number,
+          created_at: new Date().toISOString()
+        };
+
+        // Si migration vers PRO (FREELANCE ou AGENCY)
+        if (newType === 'FREELANCE' || newType === 'AGENCY') {
+          // Insérer dans profiles_pro
+          const { error: insertError } = await supabase
+            .from('profiles_pro')
+            .insert(migrationData);
+          
+          if (insertError) throw insertError;
+          
+          // Supprimer de profiles si c'était un client/livreur
+          if (profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR') {
+            const { error: deleteError } = await supabase
+              .from('profiles')
+              .delete()
+              .eq('id', profile.id);
+            
+            if (deleteError) throw deleteError;
+          }
+        } else if (newType === 'LIVREUR') {
+          // Migration vers livreur
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .upsert({
+              ...migrationData,
+              account_type: newType,
+              home_address_locality: null,
+              niu: null,
+              vehicle_type: null,
+              vehicle_brand: null,
+              vehicle_registration: null,
+              vehicle_color: null,
+              trunk_dimensions: null,
+              driving_license_front_url: null,
+              driving_license_back_url: null,
+              accident_history: null
+            });
+          
+          if (updateError) throw updateError;
+          
+          // Supprimer de profiles_pro si c'était un PRO
+          if (profile.account_type === 'FREELANCE' || profile.account_type === 'AGENCY') {
+            const { error: deleteError } = await supabase
+              .from('profiles_pro')
+              .delete()
+              .eq('id', profile.id);
+            
+            if (deleteError) throw deleteError;
+          }
+        }
         
         showToast('Compte mis à niveau avec succès !', 'success');
         onUpdate();
       } catch (error: any) {
-        alert('Erreur lors de la mise à niveau : ' + error.message);
+        console.error('Erreur lors de la mise à niveau:', error);
+        showToast('Erreur lors de la mise à niveau : ' + error.message, 'error');
+      } finally {
+        setIsLoading(false);
       }
     }
   };
 
   const getAccountTitle = () => {
-    const accountType = profile.account_type.toUpperCase();
-    switch (accountType) {
+    switch (profile.account_type) {
       case 'CLIENT': return 'Client';
-      case 'DELIVERY':
       case 'LIVREUR': return 'Livreur';
       case 'FREELANCE': return 'Freelance PRO';
-      case 'AGENCY':
-      case 'AGENCE': return 'Agence';
+      case 'AGENCY': return 'Agence';
       default: return 'Profil';
     }
   };
 
-  interface AnimatedInputFieldProps {
-    label: string;
-    name: string;
-    value: string | null;
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-    readOnly: boolean;
-    icon?: React.ComponentType<{ className?: string }>;
-    focused: boolean;
-    onFocus: () => void;
-    onBlur: () => void;
-    fullWidth?: boolean;
-    type?: string;
-    isSelect?: boolean;
-    options?: Array<{ value: string; label: string }>;
-  }
-
+  // Composant de champ d'entrée animé
   const AnimatedInputField = ({ 
     label, 
     name, 
@@ -479,7 +587,21 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     type = 'text', 
     isSelect = false, 
     options = [] 
-  }: AnimatedInputFieldProps) => (
+  }: {
+    label: string;
+    name: string;
+    value: string | null;
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+    readOnly: boolean;
+    icon?: React.ComponentType<{ className?: string }>;
+    focused: boolean;
+    onFocus: () => void;
+    onBlur: () => void;
+    fullWidth?: boolean;
+    type?: string;
+    isSelect?: boolean;
+    options?: Array<{ value: string; label: string }>;
+  }) => (
     <div className={fullWidth ? 'md:col-span-2' : ''}>
       <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
         {Icon && <Icon className="w-4 h-4 text-orange-500" />}
@@ -531,18 +653,76 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     </div>
   );
 
-  // Helper function to check account type (handles both uppercase and lowercase)
-  const isAccountType = (type: string) => {
-    return profile.account_type.toUpperCase() === type.toUpperCase();
+  const renderPhotoSection = () => {
+    // Seuls les profils PRO ont des photos
+    if (profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR') {
+      return (
+        <div className="w-48 h-48 rounded-full bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center border-4 border-orange-200">
+          <User className="w-24 h-24 text-orange-400" />
+        </div>
+      );
+    }
+
+    const proData = formData as ProProfile;
+    
+    return (
+      <div className="relative group">
+        <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
+          <ProfileImagePreview 
+            src={proData.identity_photo_url || '/avatars/default.png'} 
+            alt="Photo de profil" 
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+          />
+          {uploadingPhoto && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
+                <p className="text-white text-sm font-medium">Téléchargement...</p>
+              </div>
+            </div>
+          )}
+        </div>
+        {isEditing && (
+          <>
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              disabled={uploadingPhoto} 
+              className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed" 
+              title="Changer la photo de profil"
+            >
+              {uploadingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept="image/jpeg,image/jpg,image/png,image/webp" 
+              onChange={handleFileInputChange} 
+              disabled={uploadingPhoto} 
+            />
+          </>
+        )}
+      </div>
+    );
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-6">
+      {/* Toast notification */}
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
+
       <div className="max-w-7xl mx-auto space-y-8 relative">
+        {/* Header */}
         <div className="relative">
           <div className="absolute top-0 right-0 z-20">
             <button 
-              onClick={toggleEdit} 
+              onClick={isEditing ? handleSaveChanges : () => setIsEditing(true)} 
               disabled={isLoading} 
               className={`group flex items-center gap-2 font-bold py-3 px-6 rounded-full text-white shadow-xl transform transition-all duration-500 hover:scale-110 hover:rotate-3 active:scale-95 ${
                 isEditing 
@@ -576,54 +756,11 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
           </div>
         </div>
 
-        {/* Profile Info Section */}
+        {/* Section Informations Profil */}
         <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
           <div className="flex flex-col lg:flex-row items-start gap-8">
             <div className="text-center flex-shrink-0">
-              <div className="relative group">
-                <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
-                  <ProfileImagePreview 
-                    src={formData.identity_photo_url || '/avatars/default.png'} 
-                    alt="Photo de profil" 
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                  />
-                  {uploadingPhoto && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <div className="text-center">
-                        <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
-                        <p className="text-white text-sm font-medium">Téléchargement...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {isEditing && (
-                  <>
-                    <button 
-                      onClick={() => fileInputRef.current?.click()} 
-                      disabled={uploadingPhoto} 
-                      className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed" 
-                      title="Changer la photo de profil"
-                    >
-                      {uploadingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
-                    </button>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="image/jpeg,image/jpg,image/png,image/webp" 
-                      onChange={handleFileInputChange} 
-                      disabled={uploadingPhoto} 
-                    />
-                  </>
-                )}
-                {isEditing && !uploadingPhoto && (
-                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                    <div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">
-                      Formats: JPG, PNG, WebP (max 5MB)
-                    </div>
-                  </div>
-                )}
-              </div>
+              {renderPhotoSection()}
               <div className="mt-6">
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">
                   {formData.manager_name || 'Nom non renseigné'}
@@ -631,6 +768,9 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-full text-sm shadow-lg">
                   <Building className="w-4 h-4" />
                   {getAccountTitle()}
+                </div>
+                <div className="mt-3 text-sm text-gray-600">
+                  {formData.email}
                 </div>
               </div>
             </div>
@@ -663,6 +803,29 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                   onBlur={() => setFocusedField(null)} 
                 />
                 <AnimatedInputField 
+                  label="Email" 
+                  name="email" 
+                  value={formData.email} 
+                  onChange={handleChange} 
+                  readOnly={true} 
+                  icon={Mail} 
+                  focused={false} 
+                  onFocus={() => {}} 
+                  onBlur={() => {}} 
+                />
+                <AnimatedInputField 
+                  label="Date de Naissance" 
+                  name="birth_date" 
+                  value={formData.birth_date} 
+                  onChange={handleChange} 
+                  readOnly={!isEditing} 
+                  icon={Calendar} 
+                  focused={focusedField === 'birth_date'} 
+                  onFocus={() => setFocusedField('birth_date')} 
+                  onBlur={() => setFocusedField(null)}
+                  type="date" 
+                />
+                <AnimatedInputField 
                   label="Adresse Domicile" 
                   name="home_address" 
                   value={formData.home_address} 
@@ -685,55 +848,182 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                   onFocus={() => setFocusedField('nationality')} 
                   onBlur={() => setFocusedField(null)} 
                 />
+                <AnimatedInputField 
+                  label="Numéro CNI" 
+                  name="id_card_number" 
+                  value={formData.id_card_number} 
+                  onChange={handleChange} 
+                  readOnly={!isEditing} 
+                  icon={CreditCard} 
+                  focused={focusedField === 'id_card_number'} 
+                  onFocus={() => setFocusedField('id_card_number')} 
+                  onBlur={() => setFocusedField(null)} 
+                />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Relay Point Section */}
-        {!isAccountType('CLIENT') && (
+        {/* Section spécifique aux Livreurs */}
+        {profile.account_type === 'LIVREUR' && (
+          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <Car className="w-6 h-6 text-orange-500" />
+                Informations Véhicule & Livraison
+              </h3>
+              <button 
+                onClick={() => upgradeAccount('AGENCY')} 
+                className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
+              >
+                <Star className="w-5 h-5" />
+                Devenir Agence
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {(() => {
+                const deliveryData = formData as DeliveryProfile;
+                return (
+                  <>
+                    <AnimatedInputField 
+                      label="Type de Véhicule" 
+                      name="vehicle_type" 
+                      value={deliveryData.vehicle_type} 
+                      onChange={handleChange} 
+                      readOnly={!isEditing} 
+                      icon={Truck} 
+                      focused={focusedField === 'vehicle_type'} 
+                      onFocus={() => setFocusedField('vehicle_type')} 
+                      onBlur={() => setFocusedField(null)}
+                      isSelect 
+                      options={[
+                        { value: 'moto', label: 'Moto' }, 
+                        { value: 'voiture', label: 'Voiture' }, 
+                        { value: 'camionnette', label: 'Camionnette' }, 
+                        { value: 'camion', label: 'Camion' }
+                      ]} 
+                    />
+                    <AnimatedInputField 
+                      label="Marque du Véhicule" 
+                      name="vehicle_brand" 
+                      value={deliveryData.vehicle_brand} 
+                      onChange={handleChange} 
+                      readOnly={!isEditing} 
+                      icon={Car} 
+                      focused={focusedField === 'vehicle_brand'} 
+                      onFocus={() => setFocusedField('vehicle_brand')} 
+                      onBlur={() => setFocusedField(null)}
+                    />
+                    <AnimatedInputField 
+                      label="Plaque d'Immatriculation" 
+                      name="vehicle_registration" 
+                      value={deliveryData.vehicle_registration} 
+                      onChange={handleChange} 
+                      readOnly={!isEditing} 
+                      icon={CreditCard} 
+                      focused={focusedField === 'vehicle_registration'} 
+                      onFocus={() => setFocusedField('vehicle_registration')} 
+                      onBlur={() => setFocusedField(null)}
+                    />
+                    <AnimatedInputField 
+                      label="Couleur du Véhicule" 
+                      name="vehicle_color" 
+                      value={deliveryData.vehicle_color} 
+                      onChange={handleChange} 
+                      readOnly={!isEditing} 
+                      icon={Car} 
+                      focused={focusedField === 'vehicle_color'} 
+                      onFocus={() => setFocusedField('vehicle_color')} 
+                      onBlur={() => setFocusedField(null)}
+                    />
+                    <AnimatedInputField 
+                      label="Dimensions du Coffre" 
+                      name="trunk_dimensions" 
+                      value={deliveryData.trunk_dimensions} 
+                      onChange={handleChange} 
+                      readOnly={!isEditing} 
+                      icon={Package} 
+                      focused={focusedField === 'trunk_dimensions'} 
+                      onFocus={() => setFocusedField('trunk_dimensions')} 
+                      onBlur={() => setFocusedField(null)}
+                    />
+                    <AnimatedInputField 
+                      label="NIU" 
+                      name="niu" 
+                      value={deliveryData.niu} 
+                      onChange={handleChange} 
+                      readOnly={!isEditing} 
+                      icon={CreditCard} 
+                      focused={focusedField === 'niu'} 
+                      onFocus={() => setFocusedField('niu')} 
+                      onBlur={() => setFocusedField(null)}
+                    />
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Section Point Relais pour PRO */}
+        {(profile.account_type === 'FREELANCE' || profile.account_type === 'AGENCY') && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <Building className="w-6 h-6 text-orange-500" />
-              {isAccountType('AGENCY') ? 'Point Relais Principal' : 'Mon Point Relais'}
+              {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               <div className="space-y-6">
-                <AnimatedInputField 
-                  label="Nom du Point Relais" 
-                  name="relay_point_name" 
-                  value={formData.relay_point_name} 
-                  onChange={handleChange} 
-                  readOnly={!isEditing} 
-                  icon={Building} 
-                  focused={focusedField === 'relay_point_name'} 
-                  onFocus={() => setFocusedField('relay_point_name')} 
-                  onBlur={() => setFocusedField(null)} 
-                />
-                <AnimatedInputField 
-                  label="Adresse du Point Relais" 
-                  name="relay_point_address" 
-                  value={formData.relay_point_address} 
-                  onChange={handleChange} 
-                  readOnly={!isEditing} 
-                  icon={MapPin} 
-                  focused={focusedField === 'relay_point_address'} 
-                  onFocus={() => setFocusedField('relay_point_address')} 
-                  onBlur={() => setFocusedField(null)} 
-                />
+                {(() => {
+                  const proData = formData as ProProfile;
+                  return (
+                    <>
+                      <AnimatedInputField 
+                        label="Nom du Point Relais" 
+                        name="relay_point_name" 
+                        value={proData.relay_point_name} 
+                        onChange={handleChange} 
+                        readOnly={!isEditing} 
+                        icon={Building} 
+                        focused={focusedField === 'relay_point_name'} 
+                        onFocus={() => setFocusedField('relay_point_name')} 
+                        onBlur={() => setFocusedField(null)} 
+                      />
+                      <AnimatedInputField 
+                        label="Adresse du Point Relais" 
+                        name="relay_point_address" 
+                        value={proData.relay_point_address} 
+                        onChange={handleChange} 
+                        readOnly={!isEditing} 
+                        icon={MapPin} 
+                        focused={focusedField === 'relay_point_address'} 
+                        onFocus={() => setFocusedField('relay_point_address')} 
+                        onBlur={() => setFocusedField(null)} 
+                      />
+                      <AnimatedInputField 
+                        label="Heures d'Ouverture" 
+                        name="opening_hours" 
+                        value={proData.opening_hours} 
+                        onChange={handleChange} 
+                        readOnly={!isEditing} 
+                        icon={Calendar} 
+                        focused={focusedField === 'opening_hours'} 
+                        onFocus={() => setFocusedField('opening_hours')} 
+                        onBlur={() => setFocusedField(null)} 
+                      />
+                    </>
+                  );
+                })()}
                 {currentLocation && (
                   <div className="flex items-center gap-2 text-sm text-gray-600 bg-orange-50 p-3 rounded-lg">
                     <MapPin className="w-4 h-4 text-orange-500" />
-                    <span>Localisation actuelle: {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}</span>
+                    <span>Position: {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}</span>
                   </div>
                 )}
               </div>
               <div className="h-80 rounded-2xl overflow-hidden shadow-lg border-2 border-orange-100 hover:border-orange-300 transition-all duration-300">
                 {currentLocation ? (
-                  <MapContainer center={currentLocation} zoom={13} style={{ height: '100%', width: '100%' }} className="z-0">
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    <ProfileMap position={currentLocation} />
-                  </MapContainer>
+                  <ProfileMap position={currentLocation} />
                 ) : (
                   <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50">
                     <div className="text-center">
@@ -747,84 +1037,138 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
           </div>
         )}
 
-        {/* Delivery Info Section */}
-        {isAccountType('DELIVERY') && (
+        {/* Section Points Relais Multiples pour Agences */}
+        {profile.account_type === 'AGENCY' && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Car className="w-6 h-6 text-orange-500" />
-                Informations Véhicule & Affiliation
+                <Building className="w-6 h-6 text-orange-500" />
+                Points Relais de l'Agence ({relayPoints.length})
               </h3>
               <button 
-                onClick={() => upgradeAccount('AGENCY')} 
-                className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
+                onClick={() => setShowAddRelay(!showAddRelay)} 
+                className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
               >
-                <Star className="w-5 h-5" />
-                Devenir Agence
+                <Plus className="w-5 h-5" />
+                Ajouter un Point Relais
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <AnimatedInputField 
-                label="Type de Véhicule" 
-                name="vehicle_type" 
-                value={deliveryInfo.vehicle_type} 
-                onChange={handleDeliveryInfoChange} 
-                readOnly={!isEditing} 
-                icon={Truck} 
-                focused={focusedField === 'vehicle_type'} 
-                onFocus={() => setFocusedField('vehicle_type')} 
-                onBlur={() => setFocusedField(null)}
-                isSelect 
-                options={[
-                  { value: 'moto', label: 'Moto' }, 
-                  { value: 'voiture', label: 'Voiture' }, 
-                  { value: 'camionnette', label: 'Camionnette' }, 
-                  { value: 'camion', label: 'Camion' }
-                ]} 
-              />
-              <AnimatedInputField 
-                label="Plaque d'Immatriculation" 
-                name="license_plate" 
-                value={deliveryInfo.license_plate} 
-                onChange={handleDeliveryInfoChange} 
-                readOnly={!isEditing} 
-                icon={CreditCard} 
-                focused={focusedField === 'license_plate'} 
-                onFocus={() => setFocusedField('license_plate')} 
-                onBlur={() => setFocusedField(null)}
-              />
-              <AnimatedInputField 
-                label="Modèle du Véhicule" 
-                name="vehicle_model" 
-                value={deliveryInfo.vehicle_model} 
-                onChange={handleDeliveryInfoChange} 
-                readOnly={!isEditing} 
-                icon={Car} 
-                focused={focusedField === 'vehicle_model'} 
-                onFocus={() => setFocusedField('vehicle_model')} 
-                onBlur={() => setFocusedField(null)}
-              />
-              {deliveryInfo.affiliated_agency_name && (
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                  <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                    <Building className="w-4 h-4" />
-                    Agence d'Affiliation
-                  </h4>
-                  <p className="text-blue-700">{deliveryInfo.affiliated_agency_name}</p>
+            
+            {showAddRelay && (
+              <div className="mb-6 p-6 bg-orange-50 rounded-2xl border border-orange-200">
+                <h4 className="font-semibold text-gray-800 mb-4">Nouveau Point Relais</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                  <input 
+                    type="text" 
+                    placeholder="Nom du point relais" 
+                    value={newRelayData.name} 
+                    onChange={(e) => setNewRelayData(prev => ({ ...prev, name: e.target.value }))} 
+                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" 
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Adresse" 
+                    value={newRelayData.address} 
+                    onChange={(e) => setNewRelayData(prev => ({ ...prev, address: e.target.value }))} 
+                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" 
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Quartier (optionnel)" 
+                    value={newRelayData.quartier} 
+                    onChange={(e) => setNewRelayData(prev => ({ ...prev, quartier: e.target.value }))} 
+                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" 
+                  />
+                  <select 
+                    value={newRelayData.type} 
+                    onChange={(e) => setNewRelayData(prev => ({ ...prev, type: e.target.value as 'bureau' | 'commerce' | 'agence' }))} 
+                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all"
+                  >
+                    <option value="bureau">Bureau</option>
+                    <option value="commerce">Commerce</option>
+                    <option value="agence">Agence</option>
+                  </select>
                 </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={addRelayPoint} 
+                    className="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Ajouter
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setShowAddRelay(false);
+                      setNewRelayData({ name: '', address: '', quartier: '', type: 'bureau' });
+                    }} 
+                    className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              {relayPoints.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+                  <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">Aucun point relais configuré</p>
+                  <p className="text-gray-400">Ajoutez votre premier point relais pour commencer</p>
+                </div>
+              ) : (
+                relayPoints.map((relay) => (
+                  <div key={relay.id} className="bg-white p-6 rounded-2xl shadow-md border hover:shadow-lg transition-all duration-300">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                          <Building className="w-5 h-5 text-orange-500" />
+                          {relay.name}
+                        </h4>
+                        <p className="text-gray-600 flex items-center gap-2 mt-2">
+                          <MapPin className="w-4 h-4" />
+                          {relay.address}
+                          {relay.quartier && <span className="text-orange-500">• {relay.quartier}</span>}
+                        </p>
+                        <div className="flex items-center gap-4 mt-3">
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800">
+                            <Package className="w-4 h-4" />
+                            {relay.type}
+                          </span>
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            Créé le {new Date(relay.created_at).toLocaleDateString('fr-FR')}
+                          </span>
+                        </div>
+                        {relay.hours && (
+                          <p className="text-sm text-gray-600 mt-2 flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            Horaires: {relay.hours}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">
+                          GPS: {relay.lat.toFixed(4)}, {relay.lng.toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
         )}
 
-        {/* Client Upgrade Section */}
-        {isAccountType('CLIENT') && (
+        {/* Section Évolution de Compte pour Clients */}
+        {profile.account_type === 'CLIENT' && (
           <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <Star className="w-6 h-6 text-orange-500" />
               Évolution de Compte
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-200 hover:border-blue-400 transition-all duration-300">
                 <div className="flex items-center gap-3 mb-4">
                   <Package className="w-8 h-8 text-blue-500" />
@@ -871,163 +1215,43 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                   </li>
                 </ul>
                 <button 
-                  onClick={() => upgradeAccount('DELIVERY')} 
+                  onClick={() => upgradeAccount('LIVREUR')} 
                   className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold py-3 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
                 >
                   Devenir Livreur
+                </button>
+              </div>
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-2xl border border-purple-200 hover:border-purple-400 transition-all duration-300">
+                <div className="flex items-center gap-3 mb-4">
+                  <Building className="w-8 h-8 text-purple-500" />
+                  <h4 className="text-xl font-bold text-purple-800">Agence</h4>
+                </div>
+                <ul className="space-y-2 mb-6 text-purple-700">
+                  <li className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Gestion d'équipe
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Building className="w-4 h-4" />
+                    Points relais multiples
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Star className="w-4 h-4" />
+                    Commissions maximales
+                  </li>
+                </ul>
+                <button 
+                  onClick={() => upgradeAccount('AGENCY')} 
+                  className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
+                >
+                  Devenir Agence
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Freelance Stats Section */}
-        {isAccountType('FREELANCE') && (
-          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Package className="w-6 h-6 text-orange-500" />
-                Activité Freelance
-              </h3>
-              <button 
-                onClick={() => upgradeAccount('AGENCY')} 
-                className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
-              >
-                <Building className="w-5 h-5" />
-                Devenir Agence
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-center">
-                <Package className="w-12 h-12 text-blue-500 mx-auto mb-3" />
-                <h4 className="font-bold text-blue-800 mb-2">Commissions</h4>
-                <p className="text-blue-700 text-2xl font-bold">8%</p>
-              </div>
-              <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-center">
-                <Star className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                <h4 className="font-bold text-green-800 mb-2">Évaluations</h4>
-                <p className="text-green-700 text-2xl font-bold">4.8/5</p>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 text-center">
-                <Users className="w-12 h-12 text-purple-500 mx-auto mb-3" />
-                <h4 className="font-bold text-purple-800 mb-2">Clients</h4>
-                <p className="text-purple-700 text-2xl font-bold">24</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Agency Relay Points Section */}
-        {isAccountType('AGENCY') && (
-          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Building className="w-6 h-6 text-orange-500" />
-                Points Relais de l'Agence ({relayPoints.length})
-              </h3>
-              <button 
-                onClick={() => setShowAddRelay(!showAddRelay)} 
-                className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold py-2 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                Ajouter un Point Relais
-              </button>
-            </div>
-            
-            {showAddRelay && (
-              <div className="mb-6 p-6 bg-orange-50 rounded-2xl border border-orange-200">
-                <h4 className="font-semibold text-gray-800 mb-4">Nouveau Point Relais</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <input 
-                    type="text" 
-                    placeholder="Nom du point relais" 
-                    value={newRelayData.name} 
-                    onChange={(e) => setNewRelayData(prev => ({ ...prev, name: e.target.value }))} 
-                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" 
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="Adresse" 
-                    value={newRelayData.address} 
-                    onChange={(e) => setNewRelayData(prev => ({ ...prev, address: e.target.value }))} 
-                    className="p-3 border border-orange-200 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all" 
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={addRelayPoint} 
-                    className="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    Ajouter
-                  </button>
-                  <button 
-                    onClick={() => setShowAddRelay(false)} 
-                    className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            <div className="space-y-4">
-              {relayPoints.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
-                  <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">Aucun point relais configuré</p>
-                  <p className="text-gray-400">Ajoutez votre premier point relais pour commencer</p>
-                </div>
-              ) : (
-                relayPoints.map((relay) => (
-                  <div key={relay.id} className="bg-white p-6 rounded-2xl shadow-md border hover:shadow-lg transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-lg text-gray-800">{relay.name}</h4>
-                        <p className="text-gray-600 flex items-center gap-2 mt-1">
-                          <MapPin className="w-4 h-4" />
-                          {relay.address}
-                        </p>
-                        <div className="flex items-center gap-4 mt-3">
-                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
-                            relay.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {relay.status === 'active' ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                            {relay.status === 'active' ? 'Actif' : 'Désactivé'}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            Créé le {new Date(relay.created_at).toLocaleDateString('fr-FR')}
-                          </span>
-                        </div>
-                        {relay.deactivation_reason && (
-                          <div className="mt-2 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
-                            <p className="text-sm text-yellow-800 flex items-center gap-1">
-                              <AlertCircle className="w-4 h-4" />
-                              Raison: {relay.deactivation_reason}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      <button 
-                        onClick={() => toggleRelayPointStatus(relay.id, relay.status)} 
-                        className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 hover:scale-105 ${
-                          relay.status === 'active' 
-                            ? 'bg-red-500 text-white hover:bg-red-600' 
-                            : 'bg-green-500 text-white hover:bg-green-600'
-                        }`}
-                      >
-                        {relay.status === 'active' ? 'Désactiver' : 'Réactiver'}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Custom CSS for Leaflet */}
+        {/* Styles CSS personnalisés */}
         <style jsx global>{`
           .leaflet-container {
             height: 100%;
@@ -1047,6 +1271,21 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
           
           .leaflet-control-zoom a:hover {
             background: rgba(249, 115, 22, 1) !important;
+          }
+
+          @keyframes fade-in {
+            from {
+              opacity: 0;
+              transform: translateY(-10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          .animate-fade-in {
+            animation: fade-in 0.3s ease-out;
           }
         `}</style>
       </div>

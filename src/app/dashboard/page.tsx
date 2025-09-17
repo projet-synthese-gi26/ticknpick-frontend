@@ -20,6 +20,7 @@ import PersonnelPage from './Personnel';
 import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
+import TrackPackageMin from './TrackMin';
 // --- CORRIGÉ DANS: src/app/dashboard/page.tsx ---
 
 // Pour plus de clarté, unifions les cas (majuscules)
@@ -41,6 +42,29 @@ export interface ProProfile extends UserProfile {
   account_type: 'FREELANCE' | 'AGENCY'; // On spécifie ici que c'est forcément l'un de ces deux
   business_name?: string;
   business_type?: string;
+}
+
+export interface RelayPointInfo {
+  id: number;
+  name: string;
+  address: string;
+  quartier: string;
+}
+
+export interface Shipment {
+  id: number;
+  tracking_number: string;
+  status: 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE';
+  sender_name: string;
+  recipient_name: string;
+  shipping_cost: number;
+  created_at: string;
+  created_by_user: string;
+  departure_point: RelayPointInfo | null;
+  arrival_point: RelayPointInfo | null;
+  description: string;
+  weight: number;
+  is_fragile: boolean;
 }
 
 // Helper function to normalize profile data
@@ -72,6 +96,8 @@ interface SidebarProps {
 interface HeaderProps {
   user: UserProfile;
   setIsSidebarOpen: (open: boolean) => void;
+  showTrackingModal: boolean;
+  setShowTrackingModal: (show: boolean) => void;
 }
 
 // --- Composant Sidebar Moderne ---
@@ -237,70 +263,109 @@ const Sidebar: React.FC<SidebarProps> = ({
   );
 };
 
-// --- Header Moderne - Fixed ---
+// --- Header Moderne et Élégant ---
 const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
 
   return (
-    <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/90 backdrop-blur-xl shadow-sm border-b border-gray-100 z-30 h-16">
-      <div className="px-4 md:px-6 h-full">
-        <div className="flex justify-between items-center h-full">
-          {/* Left Section */}
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={() => setIsSidebarOpen(true)} 
-              className="lg:hidden p-2 hover:bg-orange-100 rounded-lg transition-all duration-200 text-orange-600"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-            
-            <div>
-              <h2 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
-                Bonjour, <span className="bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
-                  {user?.manager_name || 'Utilisateur'}
-                </span> ! 👋
-              </h2>
-              <p className="text-gray-500 text-xs hidden sm:block">
-                {new Date().toLocaleDateString('fr-FR', { 
-                  weekday: 'long', 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}
-              </p>
-            </div>
-          </div>
+    <>
+      <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white border-b border-orange-100 z-30 h-20 shadow-sm">
+        <div className="px-6 h-full">
+          <div className="flex justify-between items-center h-full">
+            {/* Left Section - Greeting & Menu */}
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={() => setIsSidebarOpen(true)} 
+                className="lg:hidden p-3 hover:bg-orange-50 rounded-xl transition-all duration-200 text-orange-500 border border-orange-100"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              
+              <div className="flex items-center space-x-4">
 
-          {/* Right Section */}
-          <div className="flex items-center space-x-2">
-            {/* Search Bar (hidden on small screens) */}
-            <div className="hidden md:flex relative">
-              <input
-                type="text"
-                placeholder="Rechercher..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 pr-3 py-1.5 w-48 lg:w-56 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-              />
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-            </div>
-
-            {/* Notifications */}
-            <button className="relative p-2 hover:bg-orange-50 rounded-lg transition-all duration-200 group">
-              <Bell className="h-4 w-4 text-gray-600 group-hover:text-orange-600" />
-              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse" />
-            </button>
-
-            {/* Profile Avatar */}
-            <div className="relative">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-500 rounded-lg flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer group">
-                <User className="h-4 w-4 text-white group-hover:scale-110 transition-transform duration-200"/>
+                {/* Greeting */}
+                <div>
+                  <h2 className="text-4xl font-bold text-gray-900 flex items-center space-x-2">
+                    <span>Bonjour,</span>
+                    <span className="text-orange-600">{user?.manager_name || 'Utilisateur'}</span>
+                    <span className="text-4xl">😊</span>
+                  </h2>
+                  <p className="text-gray-500 text-sm font-medium">
+                    {new Date().toLocaleDateString('fr-FR', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
               </div>
-              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border border-white rounded-full" />
+            </div>
+
+            {/* Right Section - Actions */}
+            <div className="flex items-center space-x-2">
+              {/* Package Tracking Button */}
+              <button 
+                onClick={() => setShowTrackingModal(true)}
+                className="relative bg-orange-50 border border-orange-200 hover:bg-orange-100 px-4 py-3 rounded-xl transition-all duration-200 group flex items-center space-x-2"
+                title="Suivi de colis"
+              >
+                <Search className="h-5 w-5 text-orange-600 group-hover:scale-110 transition-transform duration-200" />
+                <span className="text-orange-700 font-medium text-sm hidden sm:block">Rechercher un colis</span>
+              </button>
+
+              {/* Profile Section */}
+              <div className="flex items-center space-x-3 bg-transparent  px-4 py-2 rounded-xl">
+                <div className="text-right hidden md:block">
+                  <p className="text-sm font-semibold text-gray-900">{user?.manager_name || 'Utilisateur'}</p>
+                  <p className="text-xs text-orange-600 font-medium capitalize">{user?.account_type.toLowerCase()}</p>
+                </div>
+                
+                <div className="relative">
+                  <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group">
+                    <User className="h-5 w-5 text-white group-hover:scale-110 transition-transform duration-200"/>
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Modal de suivi de colis */}
+      <AnimatePresence>
+        {showTrackingModal && (
+          <>
+            {/* Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+              onClick={() => setShowTrackingModal(false)}
+            />
+            
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TrackPackageMin
+                onClose={() => setShowTrackingModal(false)}
+                onOpenFullTracker={() => {
+                  setShowTrackingModal(false);
+                  window.open('/track-package', '_blank');
+                }}
+              />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 
@@ -337,6 +402,8 @@ const DashboardSwitcher: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
+  
   
 
   // --- Logique de récupération de l'utilisateur ---
@@ -365,6 +432,8 @@ const DashboardSwitcher: React.FC = () => {
         // Normaliser le profil pour s'assurer que toutes les propriétés requises sont présentes
         const normalizedProfile = normalizeProfile(profile);
         setUserProfile(normalizedProfile);
+
+        
       } catch (error) {
         console.error('Erreur lors de la récupération du profil:', error);
         router.push('/');
@@ -507,7 +576,7 @@ const DashboardSwitcher: React.FC = () => {
       {/* Main Content Area */}
       <div className="lg:ml-72 min-h-screen flex flex-col">
         {/* Header fixe */}
-        <Header user={userProfile} setIsSidebarOpen={setIsSidebarOpen} />
+        <Header user={userProfile} setIsSidebarOpen={setIsSidebarOpen} showTrackingModal={showTrackingModal} setShowTrackingModal={setShowTrackingModal} />
         
         {/* Main Content avec padding pour le header fixe */}
         <main className="flex-1 pt-16">

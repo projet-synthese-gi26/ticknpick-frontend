@@ -409,7 +409,7 @@ export default function RegisterProPage() {
               </div>
               <div className="flex items-start space-x-2">
                 <input type="checkbox" id="terms" required className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
-                <label htmlFor="terms" className="text-xs text-gray-700">J'ai lu et j'accepte les <a href="#" className="font-medium text-orange-600 hover:underline">conditions d'utilisation</a>.</label>
+                <label htmlFor="terms" className="text-xs text-gray-700">J'ai lu et j'accepte les <a href="/terms-of-use" className="font-medium text-orange-600 hover:underline">conditions d'utilisation</a>.</label>
               </div>
             </motion.form>
           );

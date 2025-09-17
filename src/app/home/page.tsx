@@ -145,9 +145,9 @@ export default function HomePage() {
           welcomeMessage: "votre espace personnel pour gérer vos envois.",
           mainIcon: <Package className='text-white h-12 w-12' />,
           services: [
-            { title: "Envoyer un colis", description: "Initiez une nouvelle expédition rapidement.", href: "/expedition", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-sky-400 to-sky-500" },
-            { title: "Retrouver un colis", description: "Suivez votre colis en temps réel.", href: "/track-package", icon: <Search className="h-8 w-8 text-white" />, color: "from-cyan-400 to-cyan-500" },
-            { title: "Mon compte", description: "Gérez votre profil et vos informations.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-sky-500 to-cyan-600" },
+            { title: "Envoyer un colis", description: "Initiez une nouvelle expédition rapidement.", href: "/expedition", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-500" },
+            { title: "Retrouver un colis", description: "Suivez votre colis en temps réel.", href: "/track-package", icon: <Search className="h-8 w-8 text-white" />, color: "from-amber-400 to-amber-500" },
+            { title: "Mon compte", description: "Gérez votre profil et vos informations.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-orange-500 to-amber-600" },
           ]
         };
         break;
@@ -158,9 +158,9 @@ export default function HomePage() {
           welcomeMessage: "dans votre espace de gestion des livraisons.",
           mainIcon: <Truck className='text-white h-12 w-12' />,
           services: [
-            { title: "Récupérer un colis", description: "Consultez les colis à récupérer aux points relais.", href: "/collect-package", icon: <Archive className="h-8 w-8 text-white" />, color: "from-lime-500 to-lime-600" },
-            { title: "Déposer un colis", description: "Validez la livraison d'un colis à destination.", href: "/drop-package", icon: <PackageOpen className="h-8 w-8 text-white" />, color: "from-green-500 to-green-600" },
-            { title: "Mon compte", description: "Suivez vos courses et vos performances.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-emerald-500 to-emerald-600" },
+            { title: "Récupérer un colis", description: "Consultez les colis à récupérer aux points relais.", href: "/collect-package", icon: <Archive className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-500" },
+            { title: "Déposer un colis", description: "Validez la livraison d'un colis à destination.", href: "/drop-package", icon: <PackageOpen className="h-8 w-8 text-white" />, color: "from-amber-400 to-amber-500" },
+            { title: "Mon compte", description: "Suivez vos courses et vos performances.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-orange-500 to-amber-600" },
           ]
         };
         break;

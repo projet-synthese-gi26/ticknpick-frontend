@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import NavbarHome from '@/components/NavbarHome';
+import { supabase } from '@/lib/supabase'; 
 
 interface TrackingInfo {
   trackingNumber: string;
@@ -100,73 +101,6 @@ const TrackPackagePage: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const mockTrackingData: Record<string, TrackingInfo> = {
-    'TRK001XYZ': {
-      trackingNumber: 'TRK001XYZ',
-      status: 'En transit',
-      senderName: 'Marie Dubois',
-      senderPhone: '+237 678 901 234',
-      recipientName: 'Jean Martin',
-      recipientPhone: '+237 690 123 456',
-      departurePoint: 'Douala Centre',
-      arrivalPoint: 'Yaoundé Mvan',
-      description: 'Vêtements et accessoires',
-      weight: '2.5',
-      estimatedDelivery: '2025-09-03',
-      lastUpdate: '2025-09-01 14:30',
-      currentLocation: 'Edéa - Point relais intermédiaire',
-      trackingHistory: [
-        { date: '2025-08-30 09:15', status: 'Colis déposé', location: 'Douala Centre', description: 'Colis accepté et enregistré' },
-        { date: '2025-08-30 16:45', status: 'En préparation', location: 'Douala Centre', description: 'Préparation pour expédition' },
-        { date: '2025-08-31 08:00', status: 'Au départ', location: 'Douala Centre', description: 'Colis quitté le point de départ' },
-        { date: '2025-09-01 14:30', status: 'En transit', location: 'Edéa', description: 'Passage par point relais intermédiaire' }
-      ]
-    },
-    'TRK002ABC': {
-      trackingNumber: 'TRK002ABC',
-      status: 'Arrivé au relais',
-      senderName: 'Paul Nguyen',
-      senderPhone: '+237 677 890 123',
-      recipientName: 'Sophie Kamga',
-      recipientPhone: '+237 694 567 890',
-      departurePoint: 'Yaoundé Nlongkak',
-      arrivalPoint: 'Bafoussam Centre',
-      description: 'Documents et matériel informatique',
-      weight: '1.8',
-      estimatedDelivery: '2025-09-02',
-      lastUpdate: '2025-09-01 11:20',
-      currentLocation: 'Bafoussam Centre',
-      trackingHistory: [
-        { date: '2025-08-29 14:20', status: 'Colis déposé', location: 'Yaoundé Nlongkak', description: 'Colis accepté et enregistré' },
-        { date: '2025-08-30 07:30', status: 'Au départ', location: 'Yaoundé Nlongkak', description: 'Colis quitté le point de départ' },
-        { date: '2025-08-31 15:45', status: 'En transit', location: 'Bafia', description: 'Passage par point relais intermédiaire' },
-        { date: '2025-09-01 11:20', status: 'Arrivé au relais', location: 'Bafoussam Centre', description: 'Colis disponible pour retrait' }
-      ]
-    },
-    'TRK003DEF': {
-      trackingNumber: 'TRK003DEF',
-      status: 'Livré',
-      senderName: 'Ahmed Hassan',
-      senderPhone: '+237 675 432 109',
-      recipientName: 'Claire Fotso',
-      recipientPhone: '+237 698 765 432',
-      departurePoint: 'Garoua Marché',
-      arrivalPoint: 'Maroua Centre',
-      description: 'Produits artisanaux',
-      weight: '3.2',
-      estimatedDelivery: '2025-08-31',
-      lastUpdate: '2025-08-31 16:45',
-      currentLocation: 'Livré',
-      trackingHistory: [
-        { date: '2025-08-28 10:00', status: 'Colis déposé', location: 'Garoua Marché', description: 'Colis accepté et enregistré' },
-        { date: '2025-08-29 08:15', status: 'Au départ', location: 'Garoua Marché', description: 'Colis quitté le point de départ' },
-        { date: '2025-08-30 12:30', status: 'En transit', location: 'Guider', description: 'Passage par point relais intermédiaire' },
-        { date: '2025-08-31 09:20', status: 'Arrivé au relais', location: 'Maroua Centre', description: 'Colis disponible pour retrait' },
-        { date: '2025-08-31 16:45', status: 'Livré', location: 'Maroua Centre', description: 'Colis remis au destinataire' }
-      ]
-    }
-  };
 
   const resetPageState = () => {
     setSearchInput('');
@@ -287,21 +221,118 @@ const TrackPackagePage: React.FC = () => {
     if (value && searchInput !== value) setSearchInput(value);
     
     try {
-      // Simulation d'appel API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const data = mockTrackingData[query];
-      if (data) {
-        setTrackingInfo(data);
-      } else {
-        throw new Error("Colis non trouvé.");
+      // Étape 1 : Interroger la base de données Supabase
+      const { data: shipment, error: dbError } = await supabase
+        .from('shipments')
+        .select(`
+          *,
+          departurePoint:departure_point_id(name, quartier),
+          arrivalPoint:arrival_point_id(name, quartier)
+        `)
+        .eq('tracking_number', query)
+        .single(); // .single() est idéal pour une clé unique, il renvoie une erreur si 0 ou >1 résultat
+
+      if (dbError || !shipment) {
+        throw new Error("Colis non trouvé ou erreur de communication.");
       }
+
+      // Étape 2 : Transformer les données de la base pour correspondre à l'interface `TrackingInfo`
+      const departurePointName = (shipment.departurePoint as any)?.name || 'Inconnu';
+      const arrivalPointName = (shipment.arrivalPoint as any)?.name || 'Inconnu';
+
+      const statusMap: Record<string, TrackingInfo['status']> = {
+        'EN_ATTENTE_DE_DEPOT': 'Au départ',
+        'AU_DEPART': 'Au départ', // regroupé
+        'EN_TRANSIT': 'En transit',
+        'ARRIVE_AU_RELAIS': 'Arrivé au relais',
+        'RECU': 'Livré', // "Reçu" dans la base correspond à "Livré" sur l'interface
+      };
+      const frontendStatus = statusMap[shipment.status] || 'Au départ';
+
+      // Logique pour déterminer la localisation actuelle
+      let currentLocation = departurePointName;
+      if (frontendStatus === 'En transit') currentLocation = `En transit vers ${arrivalPointName}`;
+      if (frontendStatus === 'Arrivé au relais') currentLocation = arrivalPointName;
+      if (frontendStatus === 'Livré') currentLocation = "Livré";
+
+      // Générer un historique de suivi plausible à partir des données disponibles
+      const generateTrackingHistory = (shipmentData: typeof shipment) => {
+        const history = [];
+        const depName = (shipmentData.departurePoint as any)?.name || 'Point de départ';
+        const arrName = (shipmentData.arrivalPoint as any)?.name || 'Point d\'arrivée';
+
+        // 1. Dépôt (toujours présent)
+        history.push({
+          date: new Date(shipmentData.created_at).toLocaleString('fr-CM'),
+          status: 'Colis déposé',
+          location: depName,
+          description: 'Colis accepté et enregistré.',
+        });
+
+        // 2. Départ (si applicable)
+        if (['EN_TRANSIT', 'ARRIVE_AU_RELAIS', 'RECU'].includes(shipmentData.status)) {
+            const departureTime = new Date(new Date(shipmentData.created_at).getTime() + 2 * 60 * 60 * 1000); // 2h après le dépôt
+            history.push({
+                date: departureTime.toLocaleString('fr-CM'),
+                status: 'Au départ',
+                location: depName,
+                description: 'Le colis a quitté son point de départ.',
+            });
+        }
+        
+        // 3. Arrivé au relais (si applicable)
+        if (['ARRIVE_AU_RELAIS', 'RECU'].includes(shipmentData.status)) {
+            const arrivalTime = new Date(new Date(shipmentData.updated_at).getTime() - 1 * 60 * 60 * 1000); // 1h avant la dernière mise à jour
+            history.push({
+                date: arrivalTime.toLocaleString('fr-CM'),
+                status: 'Arrivé au relais',
+                location: arrName,
+                description: 'Colis disponible pour le retrait.',
+            });
+        }
+        
+        // 4. Livré (si applicable)
+        if (shipmentData.status === 'RECU') {
+            history.push({
+                date: new Date(shipmentData.updated_at).toLocaleString('fr-CM'),
+                status: 'Livré',
+                location: arrName,
+                description: 'Colis remis au destinataire.',
+            });
+        }
+
+        // Tri par date pour s'assurer que c'est chronologique
+        return history.sort((a, b) => new Date(a.date.split(' ')[0].split('/').reverse().join('-') + ' ' + a.date.split(' ')[1]).getTime() - new Date(b.date.split(' ')[0].split('/').reverse().join('-') + ' ' + b.date.split(' ')[1]).getTime());
+      };
+
+
+      const transformedData: TrackingInfo = {
+        trackingNumber: shipment.tracking_number,
+        status: frontendStatus,
+        senderName: shipment.sender_name,
+        senderPhone: shipment.sender_phone,
+        recipientName: shipment.recipient_name,
+        recipientPhone: shipment.recipient_phone,
+        departurePoint: departurePointName,
+        arrivalPoint: arrivalPointName,
+        description: shipment.description || 'Non spécifié',
+        weight: String(shipment.weight || '0'),
+        // Génère une date de livraison estimée car non présente en BDD
+        estimatedDelivery: new Date(new Date(shipment.created_at).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        lastUpdate: new Date(shipment.updated_at).toLocaleString('fr-CM'),
+        currentLocation: currentLocation,
+        trackingHistory: generateTrackingHistory(shipment),
+      };
+
+      setTrackingInfo(transformedData);
+
     } catch (err: any) {
       setError(`Erreur de recherche pour "${query}": ${err.message}`);
     } finally {
       setIsLoading(false);
     }
   };
+  // --- FIN DE LA MODIFICATION PRINCIPALE ---
 
   const getStatusColorClasses = (status: TrackingInfo['status']) => {
     switch (status) {
@@ -348,7 +379,6 @@ const TrackPackagePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 text-slate-800 p-0 font-sans relative overflow-hidden">
-      <NavbarHome />
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <motion.div 
@@ -513,18 +543,6 @@ const TrackPackagePage: React.FC = () => {
                     <QrCodeIcon className="w-5 h-5 mr-2" /> 
                     Scanner le QR Code
                   </motion.button>
-
-                  <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                    <h3 className="font-semibold text-orange-800 mb-2 flex items-center">
-                      <Info className="w-4 h-4 mr-1" />
-                      Exemples de numéros de suivi
-                    </h3>
-                    <div className="text-sm text-orange-700 space-y-1">
-                      <p><code className="bg-orange-100 px-2 py-1 rounded">TRK001XYZ</code> - Colis en transit</p>
-                      <p><code className="bg-orange-100 px-2 py-1 rounded">TRK002ABC</code> - Colis arrivé au relais</p>
-                      <p><code className="bg-orange-100 px-2 py-1 rounded">TRK003DEF</code> - Colis livré</p>
-                    </div>
-                  </div>
                 </div>
                 
                 {error && (
