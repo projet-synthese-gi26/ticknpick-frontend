@@ -40,10 +40,11 @@ interface TrackingInfo {
 }
 
 interface TrackPackageMinProps {
+  onClose: () => void;
   onOpenFullTracker?: () => void;
 }
 
-const TrackPackageMin: React.FC<TrackPackageMinProps> = ({ onOpenFullTracker }) => {
+const TrackPackageMin: React.FC<TrackPackageMinProps> = ({ onClose, onOpenFullTracker }) => {
   const [searchInput, setSearchInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [trackingInfo, setTrackingInfo] = useState<TrackingInfo | null>(null);
