@@ -51,12 +51,19 @@ export interface RelayPointInfo {
   quartier: string;
 }
 
+/ Interface Shipment complète
 export interface Shipment {
   id: number;
   tracking_number: string;
   status: 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE';
   sender_name: string;
+  sender_phone?: string;
+  sender_city?: string;
+  sender_address?: string;
   recipient_name: string;
+  recipient_phone?: string;
+  recipient_city?: string;
+  recipient_address?: string;
   shipping_cost: number;
   created_at: string;
   created_by_user: string;
@@ -65,6 +72,7 @@ export interface Shipment {
   description: string;
   weight: number;
   is_fragile: boolean;
+  service_type?: string; // Type de service (Standard, Express, etc.)
 }
 
 // Helper function to normalize profile data
