@@ -1,12 +1,11 @@
-// src/app/(legal)/legalContent.ts
-
-import React from 'react';
+// src/app/(legal)/legalContent.tsx
+import React, { ReactElement } from 'react';
 
 // Interface pour définir la structure de chaque document légal
 interface LegalContent {
   title: string;
   lastUpdated: string;
-  content: () => JSX.Element;
+  content: () => ReactElement;
 }
 
 // Collection de tous les documents légaux, indexés par leur "slug" d'URL
@@ -19,7 +18,7 @@ export const legalDocs: Record<string, LegalContent> = {
     title: "Conditions Générales d'Utilisation",
     lastUpdated: "25 Mai 2024",
     content: () => (
-      <>   
+      <>  
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold">PicknDrop — Terms of Use / Conditions d’Utilisation</h2>
         <p className="text-md mt-2">Version 2.0 — 02 Sep 2025</p>
