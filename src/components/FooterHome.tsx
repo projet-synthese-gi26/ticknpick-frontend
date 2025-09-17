@@ -26,13 +26,17 @@ export default function Footer() {
               <li><Link href="/tracking" className="text-gray-400 hover:text-white transition-colors">Suivre un colis</Link></li>
             </ul>
           </div>
+          {/* === NOUVELLE SECTION === */}
           <div>
             <h3 className="font-bold text-lg mb-4">Légal</h3>
             <ul className="space-y-2">
-              <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Conditions Générales</a></li>
-              <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Politique de Confidentialité</a></li>
+              <li><Link href="/legal-notice" className="text-gray-400 hover:text-white transition-colors">Mentions Légales</Link></li>
+              <li><Link href="/terms-of-use" className="text-gray-400 hover:text-white transition-colors">Conditions d'Utilisation</Link></li>
+              <li><Link href="/privacy-policy" className="text-gray-400 hover:text-white transition-colors">Politique de Confidentialité</Link></li>
+               <li><Link href="/cookies-policy" className="text-gray-400 hover:text-white transition-colors">Politique de Cookies</Link></li>
             </ul>
           </div>
+          {/* === FIN NOUVELLE SECTION === */}
           <div>
             <h3 className="font-bold text-lg mb-4">Suivez-nous</h3>
             <div className="flex gap-4">

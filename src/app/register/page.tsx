@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone, MapPin, Calendar, Users, Truck, Camera, Upload, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 // Types pour améliorer la sécurité des types
 interface City {
@@ -571,10 +572,38 @@ export default function RegisterProPage() {
               <p><strong>Point Relais :</strong> {formData.relay_point_name}</p>
             )}
           </div>
-          <div className="flex items-start space-x-2">
-            <input type="checkbox" id="terms" required className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
-            <label htmlFor="terms" className="text-xs text-gray-700">J'ai lu et j'accepte les <a href="#" className="font-medium text-orange-600 hover:underline">conditions d'utilisation</a>.</label>
+          {/* === NOUVELLE SECTION À AJOUTER === */}
+          <div className="space-y-3 mt-4">
+            <div className="flex items-start space-x-3">
+              <input 
+                type="checkbox" 
+                id="terms" 
+                required 
+                className="mt-1 h-5 w-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 shrink-0" 
+              />
+              <label htmlFor="terms" className="text-xs text-gray-700">
+                J'ai lu et j'accepte les{' '}
+                <Link href="/policy/terms-of-use" target="_blank" className="font-semibold text-orange-600 hover:underline">
+                  Conditions Générales d'Utilisation
+                </Link>.
+              </label>
+            </div>
+            <div className="flex items-start space-x-3">
+              <input 
+                type="checkbox" 
+                id="privacy" 
+                required 
+                className="mt-1 h-5 w-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 shrink-0"
+              />
+              <label htmlFor="privacy" className="text-xs text-gray-700">
+                Je comprends comment mes données sont utilisées conformément à la{' '}
+                <Link href="/policy/privacy-policy" target="_blank" className="font-semibold text-orange-600 hover:underline">
+                  Politique de Confidentialité
+                </Link>.
+              </label>
+            </div>
           </div>
+          {/* === FIN NOUVELLE SECTION === */}
         </motion.form>
       );
 

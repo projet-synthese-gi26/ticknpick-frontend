@@ -18590,7 +18590,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
-import { Search, Play, Loader2, ArrowLeft, User, Phone, MapPin, Package, Weight, CheckCircle, QrCode, Bike } from 'lucide-react';
+import { Search, Play, Loader2, ArrowLeft, User, Phone, MapPin, Package, Weight, CheckCircle, QrCode, Bike, Truck } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Types
@@ -18646,13 +18646,20 @@ const CollectPackageApp = () => {
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
-  const [tripStatus, setTripStatus] = useState<'listing' | 'selected' | 'to_pickup' | 'pickup_ready' | 'to_dropoff' | 'finished'>('listing');
+  const [tripStatus, setTripStatus] = useState<'listing' | 'selected' | 'to_pickup' | 'pickup_ready' | 'to_dropoff' | 'dropoff_ready' | 'finished'>('listing');
   const [driverLocation, setDriverLocation] = useState({ lat: 3.8667, lng: 11.5213 });
   const [pickupCode, setPickupCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [driverPath, setDriverPath] = useState<Array<{lat: number, lng: number}>>([]);
   const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
+
+  // Constantes pour les durées d'animation
+  const ANIMATION_DURATIONS = {
+    TO_PICKUP: 8000,  // 8 secondes vers le point de départ
+    TO_DROPOFF: 10000, // 10 secondes vers le point d'arrivée
+  };
 
   // Filtrer les colis pour la recherche
   const filteredShipments = useMemo(() => 
@@ -18762,12 +18769,11 @@ const CollectPackageApp = () => {
     return [[origin.lng, origin.lat], [destination.lng, destination.lat]];
   };
 
-
-  // Mettre à jour la carte (remplacer l'ancien useEffect par celui-ci)
+  // Mettre à jour la carte
   useEffect(() => {
     function updateMap() {
-      const map = mapRef.current; // Créez une variable locale
-      if (!map) return; // Vérifiez-la une seule fois
+      const map = mapRef.current;
+      if (!map) return;
 
       // Nettoyer les couches existantes
       ['route', 'driver-path'].forEach(layerId => {
@@ -18799,7 +18805,7 @@ const CollectPackageApp = () => {
         try {
           new maplibregl.Marker(el)
             .setLngLat([point.lng, point.lat])
-            .addTo(map); // Utilisez `map`
+            .addTo(map);
         } catch (error) {
           console.warn('Erreur lors de l\'ajout du marqueur:', error);
         }
@@ -18821,7 +18827,7 @@ const CollectPackageApp = () => {
           start = selectedShipment.departure_point_id;
           end = selectedShipment.arrival_point_id;
         } else {
-            return;
+          return;
         }
 
         if (!start || !end) return;
@@ -18829,7 +18835,7 @@ const CollectPackageApp = () => {
         try {
           const coordinates = await fetchRoute(start, end);
           
-          map.addSource('route', { // Utilisez `map`
+          map.addSource('route', {
             type: 'geojson',
             data: {
               type: 'Feature',
@@ -18838,7 +18844,7 @@ const CollectPackageApp = () => {
             }
           });
 
-          map.addLayer({ // Utilisez `map`
+          map.addLayer({
             id: 'route',
             type: 'line',
             source: 'route',
@@ -18848,7 +18854,7 @@ const CollectPackageApp = () => {
 
           const bounds = new maplibregl.LngLatBounds();
           coordinates.forEach((coord: any) => bounds.extend(coord));
-          map.fitBounds(bounds, { padding: 50 }); // Utilisez `map`
+          map.fitBounds(bounds, { padding: 50 });
         } catch (error) {
           console.warn('Erreur lors du tracé de l\'itinéraire:', error);
         }
@@ -18862,7 +18868,7 @@ const CollectPackageApp = () => {
       // Dessiner le chemin parcouru
       if (driverPath.length > 1) {
         try {
-          map.addSource('driver-path', { // Utilisez `map`
+          map.addSource('driver-path', {
             type: 'geojson',
             data: {
               type: 'Feature',
@@ -18871,7 +18877,7 @@ const CollectPackageApp = () => {
             }
           });
 
-          map.addLayer({ // Utilisez `map`
+          map.addLayer({
             id: 'driver-path',
             type: 'line',
             source: 'driver-path',
@@ -18892,8 +18898,9 @@ const CollectPackageApp = () => {
     } else {
       updateMap();
     }
-  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]); // Dependencies
-  // Mettre à jour la position du livreur
+  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]);
+
+  // Mettre à jour la position du livreur avec l'icône appropriée
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -18903,15 +18910,32 @@ const CollectPackageApp = () => {
       } else {
         const el = document.createElement('div');
         el.className = 'flex flex-col items-center';
-        el.innerHTML = `
-          <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
-              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
-            </svg>
-          </div>
-          <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Moi</span>
-        `;
+        
+        // Choisir l'icône selon l'état
+        const IconComponent = tripStatus === 'to_pickup' || tripStatus === 'pickup_ready' ? 'bike' : 'truck';
+        const iconClass = isMoving ? 'animate-bounce' : '';
+        
+        if (IconComponent === 'bike') {
+          el.innerHTML = `
+            <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center ${iconClass}">
+              <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M5 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM19 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM12 14c-1.1 0-2-.9-2-2V7c0-1.1.9-2 2-2s2 .9 2 2v5c0 1.1-.9 2-2 2z"/>
+                <path d="M8 12l-3.5-3.5c-.3-.3-.3-.8 0-1.1l1.4-1.4c.3-.3.8-.3 1.1 0L10 9"/>
+                <path d="M16 12l3.5-3.5c.3-.3.3-.8 0-1.1l-1.4-1.4c-.3-.3-.8-.3-1.1 0L14 9"/>
+              </svg>
+            </div>
+            <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Livreur</span>
+          `;
+        } else {
+          el.innerHTML = `
+            <div class="w-8 h-8 bg-green-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center ${iconClass}">
+              <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9L21 12H17V9.5h2.5zm-.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+              </svg>
+            </div>
+            <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Camion</span>
+          `;
+        }
         
         driverMarkerRef.current = new maplibregl.Marker(el)
           .setLngLat([driverLocation.lng, driverLocation.lat])
@@ -18920,36 +18944,44 @@ const CollectPackageApp = () => {
     } catch (error) {
       console.warn('Erreur lors de la mise à jour du marqueur livreur:', error);
     }
-  }, [driverLocation]);
+  }, [driverLocation, tripStatus, isMoving]);
 
-  // Animation du déplacement du livreur
-  const animateDriverMovement = async (targetLocation: {lat: number, lng: number}, duration = 5000) => {
+  // Animation du déplacement du livreur améliorée
+  const animateDriverMovement = async (targetLocation: {lat: number, lng: number}, duration: number) => {
     if (!driverLocation || !targetLocation) return;
 
     const route = await fetchRoute(driverLocation, targetLocation);
     if (!route || route.length < 2) return;
 
+    setIsMoving(true);
     const steps = route.length;
     const stepDuration = duration / steps;
     let currentStep = 0;
 
-    if (animationInterval) clearInterval(animationInterval);
+    // Nettoyer l'ancien intervalle
+    if (animationInterval) {
+      clearInterval(animationInterval);
+    }
 
-    const interval = setInterval(() => {
-      if (currentStep >= route.length) {
-        clearInterval(interval);
-        setAnimationInterval(null);
-        return;
-      }
+    return new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        if (currentStep >= route.length) {
+          clearInterval(interval);
+          setAnimationInterval(null);
+          setIsMoving(false);
+          resolve();
+          return;
+        }
 
-      const [lng, lat] = route[currentStep];
-      const newLocation = { lat, lng };
-      setDriverLocation(newLocation);
-      setDriverPath(prev => [...prev, newLocation]);
-      currentStep++;
-    }, stepDuration);
+        const [lng, lat] = route[currentStep];
+        const newLocation = { lat, lng };
+        setDriverLocation(newLocation);
+        setDriverPath(prev => [...prev, newLocation]);
+        currentStep++;
+      }, stepDuration);
 
-    setAnimationInterval(interval);
+      setAnimationInterval(interval);
+    });
   };
 
   // Gérer la sélection d'un colis
@@ -18960,52 +18992,51 @@ const CollectPackageApp = () => {
   };
 
   // Commencer la course
-  const handleStartTrip = () => {
+  const handleStartTrip = async () => {
     if (!selectedShipment) return;
+    
     setTripStatus('to_pickup');
     setDriverPath([driverLocation]);
-    animateDriverMovement(selectedShipment.departure_point_id, 5000);
     
-    setTimeout(() => {
-      setTripStatus('pickup_ready');
-    }, 6000);
+    // Animation vers le point de départ
+    await animateDriverMovement(selectedShipment.departure_point_id, ANIMATION_DURATIONS.TO_PICKUP);
+    
+    // Une fois arrivé au point de départ
+    setTripStatus('pickup_ready');
   };
 
   // Récupérer le colis
   const handleCollectPackage = async () => {
     if (!selectedShipment) return;
-    
+
+    // Valider le code
     if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
-      setError('Code incorrect');
+      setError('Code incorrect. Le code doit correspondre au numéro de suivi du colis.');
+      setTimeout(() => setError(null), 3000);
       return;
     }
-    
+
     setIsLoading(true);
+    setError(null);
+
     try {
-      // Mettre à jour le statut du colis dans Supabase
-      const { error: updateError } = await supabase
-        .from('shipments')
-        .update({ 
-          status: 'EN_COURS_DE_LIVRAISON',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedShipment.id);
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (updateError) {
-        throw new Error('Erreur lors de la mise à jour du statut');
-      }
+      console.log(`Colis récupéré: ${selectedShipment.tracking_number}`);
 
+      // Passer à l'état "en route vers la destination"
       setTripStatus('to_dropoff');
       setPickupCode('');
-      setError(null);
-      animateDriverMovement(selectedShipment.arrival_point_id, 20000);
       
-      setTimeout(() => {
-        setTripStatus('finished');
-      }, 21000);
+      // Animation vers le point d'arrivée
+      await animateDriverMovement(selectedShipment.arrival_point_id, ANIMATION_DURATIONS.TO_DROPOFF);
+
+      // Une fois arrivé à destination
+      setTripStatus('finished');
+
     } catch (err: any) {
-      console.error('Erreur lors de la récupération:', err);
-      setError(err.message || 'Erreur lors de la récupération');
+      console.error("Erreur dans handleCollectPackage:", err);
+      setError("Une erreur inattendue est survenue.");
     } finally {
       setIsLoading(false);
     }
@@ -19051,19 +19082,6 @@ const CollectPackageApp = () => {
     if (!selectedShipment) return;
     setIsLoading(true);
     try {
-      // Mettre à jour le statut à "livré"
-      const { error: updateError } = await supabase
-        .from('shipments')
-        .update({ 
-          status: 'LIVRE',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedShipment.id);
-
-      if (updateError) {
-        throw new Error('Erreur lors de la finalisation');
-      }
-
       await generatePDF(selectedShipment);
       
       setTimeout(() => {
@@ -19090,6 +19108,7 @@ const CollectPackageApp = () => {
     setPickupCode('');
     setError(null);
     setDriverPath([]);
+    setIsMoving(false);
   };
 
   // Composant InfoRow
@@ -19202,10 +19221,11 @@ const CollectPackageApp = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     onClick={handleStartTrip}
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                    disabled={isMoving}
+                    className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
                   >
                     <Play className="w-5 h-5 mr-2" />
-                    Commencer la course
+                    {isMoving ? 'Démarrage...' : 'Commencer la course'}
                   </motion.button>
                 )}
                 
@@ -19218,6 +19238,9 @@ const CollectPackageApp = () => {
                   >
                     <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
                     <p className="text-sm font-medium text-blue-700">En route vers le point de collecte...</p>
+                    <div className="mt-2 bg-blue-200 rounded-full h-2">
+                      <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                    </div>
                   </motion.div>
                 )}
                 
@@ -19264,8 +19287,11 @@ const CollectPackageApp = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center p-4 bg-blue-50 rounded-lg"
                   >
-                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
+                    <Truck className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
                     <p className="text-sm font-medium text-blue-700">Colis récupéré ! En route vers la destination...</p>
+                    <div className="mt-2 bg-blue-200 rounded-full h-2">
+                      <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{width: '40%'}}></div>
+                    </div>
                   </motion.div>
                 )}
                 
@@ -19304,6 +19330,50 @@ const CollectPackageApp = () => {
       {/* Carte */}
       <div className="flex-1 relative">
         <div ref={mapContainer} className="h-full w-full" />
+        
+        {/* Indicateur de statut en overlay */}
+        {selectedShipment && (
+          <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-sm">
+            <div className="flex items-center gap-3">
+              {tripStatus === 'to_pickup' && (
+                <>
+                  <Bike className="w-6 h-6 text-blue-500 animate-bounce" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Collecte en cours</p>
+                    <p className="text-sm text-gray-600">Direction: {selectedShipment.departure_point_id?.name}</p>
+                  </div>
+                </>
+              )}
+              {tripStatus === 'pickup_ready' && (
+                <>
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Prêt pour collecte</p>
+                    <p className="text-sm text-gray-600">Saisissez le code du colis</p>
+                  </div>
+                </>
+              )}
+              {tripStatus === 'to_dropoff' && (
+                <>
+                  <Truck className="w-6 h-6 text-green-500 animate-bounce" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Livraison en cours</p>
+                    <p className="text-sm text-gray-600">Direction: {selectedShipment.arrival_point_id?.name}</p>
+                  </div>
+                </>
+              )}
+              {tripStatus === 'finished' && (
+                <>
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Livraison terminée</p>
+                    <p className="text-sm text-gray-600">Colis livré avec succès</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -21917,19 +21987,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
-================================================================================
-
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/collect-package/page": "app/collect-package/page.js",
-  "/home/page": "app/home/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js"
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 ================================================================================
 
@@ -21939,13 +21996,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
   "sortedMiddleware": [],
   "functions": {}
 }
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
-================================================================================
-
-{}
 
 
 ================================================================================
@@ -21961,6 +22011,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
+================================================================================
+
+{}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 ================================================================================
 
@@ -21969,6 +22026,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
   "edge": {},
   "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
 }
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+================================================================================
+
+{}
 
 
 ================================================================================
@@ -32711,7 +32775,9 @@ svg.leaflet-zoom-animated {
 FICHIER: D:\4GI\PO\pick-n-drop\.next\package.json
 ================================================================================
 
-{"type": "commonjs"}
+{
+  "type": "commonjs"
+}
 
 
 ================================================================================
@@ -32724,24 +32790,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
   },
   "devFiles": [],
   "ampDevFiles": [],
-  "polyfillFiles": [
-    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
-  ],
+  "polyfillFiles": [],
   "lowPriorityFiles": [
     "static/development/_ssgManifest.js",
     "static/development/_buildManifest.js"
   ],
-  "rootMainFiles": [
-    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-    "static/chunks/node_modules_next_dist_445d8acf._.js",
-    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-    "static/chunks/_e69f0d32._.js",
-    "static/chunks/_01f48b92._.js"
-  ],
+  "rootMainFiles": [],
   "ampFirstPages": []
 }
 
@@ -32751,116 +32805,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
 ================================================================================
 
 {
-  "pages": {
-    "/_not-found/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
-    "/collect-package/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_880dc18c._.js",
-      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
-      "static/chunks/node_modules_pako_dist_pako_esm_mjs_b4dc27e5._.js",
-      "static/chunks/node_modules_jspdf_dist_jspdf_es_min_c277e70f.js",
-      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_54104548._.js",
-      "static/chunks/src_app_collect-package_page_tsx_68106fcf._.js",
-      "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_91e0d12a.css",
-      "static/chunks/src_app_collect-package_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
-    "/home/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/node_modules_325934f0._.js",
-      "static/chunks/src_aec4d5f4._.js",
-      "static/chunks/src_app_home_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
-    "/login/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/node_modules_3c173bac._.js",
-      "static/chunks/src_1664adfa._.js",
-      "static/chunks/src_app_login_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
-    "/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_8ece2e07._.js",
-      "static/chunks/src_ed325b91._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_2e88f23e.js",
-      "static/chunks/_6cdfd430._.js",
-      "static/chunks/src_app_page_tsx_2e88f23e._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ]
-  }
+  "pages": {}
 }
 
 
@@ -32881,9 +32826,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "528903e52d9587b25e3fd54c3c8e2f83",
-    "previewModeSigningKey": "0eb10cd827901b2142cb738cd3c5fb88a127bab7ad03f38c10dc4b7afede2044",
-    "previewModeEncryptionKey": "824df84d63e3a04ce479d8a9374a9a5a6b85a9ca88bc5ec9fdf4c5778b6b677f"
+    "previewModeId": "2afb82ff58f201ffd413343d890cb2f5",
+    "previewModeSigningKey": "aab9ba38bb03c89d7d5b35197300eb22c23979e8ee78a9f090354f905ed4480c",
+    "previewModeEncryptionKey": "2856c90d7b007675c88498f66af7c81e276c678468b81d3ce98ae895c0733551"
   }
 }
 

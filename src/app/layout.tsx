@@ -3,9 +3,11 @@ import './globals.css'
 // Importez le provider et le composant de bannière
 import { NotificationProvider } from '../context/NotificationContext';
 import NotificationBanner from '../components/NotificationBanner';
+import CookieBanner from '@/components/CookieBanner';
+
 
 export const metadata: Metadata = {
-  title: 'PicknDrop Point',
+  title: 'PicknDrop Link',
   description: 'Application de gestion logistique pour dépôt,  et retrait de colis',
 }
 
@@ -24,6 +26,7 @@ export default function RootLayout({
           </main>
           {/* Affichez la bannière ici */}
           <NotificationBanner />
+          <CookieBanner />
         </NotificationProvider>
       </body>
     </html>
