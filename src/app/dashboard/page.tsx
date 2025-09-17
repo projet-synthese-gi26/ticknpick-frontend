@@ -21,13 +21,11 @@ import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
 import TrackPackageMin from './TrackMin';
-// --- CORRIGÉ DANS: src/app/dashboard/page.tsx ---
 
 // Pour plus de clarté, unifions les cas (majuscules)
 type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
 
-// Le profil de base, qui peut être n'importe quel type
-// L'interface UserProfile est maintenant unifiée et complète
+// L'interface UserProfile est maintenant unifiée et complète pour être compatible partout
 export interface UserProfile {
   id: string;
   account_type: AccountType;
@@ -35,8 +33,16 @@ export interface UserProfile {
   email?: string | null;
   name: string;
   role: string;
-
-  // -- Champs PRO ajoutés (optionnels) --
+  
+  // -- NOUVEAUX Champs de base ajoutés depuis Profil.tsx (optionnels) --
+  created_at?: string;
+  phone_number?: string | null;
+  birth_date?: string | null;
+  nationality?: string | null;
+  home_address?: string | null;
+  id_card_number?: string | null;
+  
+  // -- Champs PRO existants (optionnels) --
   identity_photo_url?: string | null;
   id_card_url?: string | null;
   tax_id?: string | null;
@@ -50,7 +56,7 @@ export interface UserProfile {
   business_name?: string;
   business_type?: string;
 
-  // -- Champs LIVREUR ajoutés (optionnels) --
+  // -- Champs LIVREUR existants (optionnels) --
   vehicle_type?: string | null;
   vehicle_brand?: string | null;
   vehicle_registration?: string | null;
@@ -61,11 +67,9 @@ export interface UserProfile {
   [key: string]: any;
 }
 
-// Le profil PRO, qui est un UserProfile mais avec un type de compte RESTREINT
+// Le profil PRO est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  account_type: 'FREELANCE' | 'AGENCY'; // On spécifie ici que c'est forcément l'un de ces deux
-  business_name?: string;
-  business_type?: string;
+  account_type: 'FREELANCE' | 'AGENCY';
 }
 
 export interface RelayPointInfo {
