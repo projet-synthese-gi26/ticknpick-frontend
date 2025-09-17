@@ -298,7 +298,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                                                 Origine
                                             </p>
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                {shipment.sender_address || 'Adresse non renseignée'}
+                                                {'sender_address' in shipment ? shipment.sender_address || 'Adresse non renseignée' : 'Adresse non renseignée'}
                                             </p>
                                         </div>
                                         
@@ -307,7 +307,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                                                 Destination
                                             </p>
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                {shipment.recipient_address || 'Adresse non renseignée'}
+                                                {'recipient_address' in shipment ? shipment.recipient_address || 'Adresse non renseignée' : 'Adresse non renseignée'}
                                             </p>
                                         </div>
                                     </div>
