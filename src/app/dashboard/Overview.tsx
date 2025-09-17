@@ -125,15 +125,15 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
     
     const getStatusConfig = () => {
         switch (shipment.status) {
-            case 'delivered':
+            case 'RECU':
                 return {
                     icon: <CheckCircle className="h-5 w-5" />,
                     color: 'text-green-600 dark:text-green-400',
                     bgColor: 'bg-green-100 dark:bg-green-900/30',
                     borderColor: 'border-green-200 dark:border-green-800/50',
-                    label: 'Livré'
+                    label: 'Reçu'
                 };
-            case 'in_transit':
+            case 'EN_TRANSIT':
                 return {
                     icon: <Truck className="h-5 w-5" />,
                     color: 'text-blue-600 dark:text-blue-400',
@@ -141,13 +141,37 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                     borderColor: 'border-blue-200 dark:border-blue-800/50',
                     label: 'En transit'
                 };
-            case 'pending':
+            case 'AU_DEPART':
+                return {
+                    icon: <PlaneTakeoff className="h-5 w-5" />,
+                    color: 'text-purple-600 dark:text-purple-400',
+                    bgColor: 'bg-purple-100 dark:bg-purple-900/30',
+                    borderColor: 'border-purple-200 dark:border-purple-800/50',
+                    label: 'Au départ'
+                };
+            case 'EN_ATTENTE_DE_DEPOT':
                 return {
                     icon: <Clock className="h-5 w-5" />,
                     color: 'text-orange-600 dark:text-orange-400',
                     bgColor: 'bg-orange-100 dark:bg-orange-900/30',
                     borderColor: 'border-orange-200 dark:border-orange-800/50',
-                    label: 'En attente'
+                    label: 'En attente de dépôt'
+                };
+            case 'ARRIVE_AU_RELAIS':
+                return {
+                    icon: <MapPin className="h-5 w-5" />,
+                    color: 'text-teal-600 dark:text-teal-400',
+                    bgColor: 'bg-teal-100 dark:bg-teal-900/30',
+                    borderColor: 'border-teal-200 dark:border-teal-800/50',
+                    label: 'Arrivé au relais'
+                };
+            case 'ANNULE':
+                return {
+                    icon: <XCircle className="h-5 w-5" />,
+                    color: 'text-red-600 dark:text-red-400',
+                    bgColor: 'bg-red-100 dark:bg-red-900/30',
+                    borderColor: 'border-red-200 dark:border-red-800/50',
+                    label: 'Annulé'
                 };
             default:
                 return {
@@ -155,7 +179,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                     color: 'text-gray-600 dark:text-gray-400',
                     bgColor: 'bg-gray-100 dark:bg-gray-900/30',
                     borderColor: 'border-gray-200 dark:border-gray-800/50',
-                    label: 'Inconnu'
+                    label: 'Statut inconnu'
                 };
         }
     };
@@ -348,7 +372,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                                     Suivre le colis
                                 </motion.button>
                                 
-                                {shipment.status !== 'delivered' && (
+                                {shipment.status !== 'RECU' && shipment.status !== 'ANNULE' && (
                                     <motion.button
                                         className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
                                         whileHover={{ scale: 1.05 }}
