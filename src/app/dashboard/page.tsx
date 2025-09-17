@@ -69,7 +69,7 @@ export interface UserProfile {
 
 // Le profil PRO est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  account_type: 'FREELANCE' | 'AGENCY';
+  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
 }
 
 export interface RelayPointInfo {
