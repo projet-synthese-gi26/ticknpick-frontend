@@ -51,7 +51,6 @@ export interface RelayPointInfo {
   quartier: string;
 }
 
-/ Interface Shipment complète
 export interface Shipment {
   id: number;
   tracking_number: string;
