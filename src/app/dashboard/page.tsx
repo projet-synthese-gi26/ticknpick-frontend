@@ -27,13 +27,37 @@ import TrackPackageMin from './TrackMin';
 type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
 
 // Le profil de base, qui peut être n'importe quel type
+// L'interface UserProfile est maintenant unifiée et complète
 export interface UserProfile {
   id: string;
-  account_type: AccountType; // Utilise notre type unifié
+  account_type: AccountType;
   manager_name: string | null;
   email?: string | null;
-  name: string; // Ajouté pour la cohérence
-  role: string; // Ajouté pour la cohérence
+  name: string;
+  role: string;
+
+  // -- Champs PRO ajoutés (optionnels) --
+  identity_photo_url?: string | null;
+  id_card_url?: string | null;
+  tax_id?: string | null;
+  professional_experience?: string | null;
+  relay_point_name?: string | null;
+  relay_point_address?: string | null;
+  relay_point_gps?: string | null;
+  opening_hours?: string | null;
+  storage_capacity?: string | null;
+  service_card_details?: any;
+  business_name?: string;
+  business_type?: string;
+
+  // -- Champs LIVREUR ajoutés (optionnels) --
+  vehicle_type?: string | null;
+  vehicle_brand?: string | null;
+  vehicle_registration?: string | null;
+  vehicle_color?: string | null;
+  trunk_dimensions?: string | null;
+
+  // -- Permet toute autre propriété non explicitement définie --
   [key: string]: any;
 }
 

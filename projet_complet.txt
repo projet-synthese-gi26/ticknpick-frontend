@@ -8187,7 +8187,13 @@ export interface Shipment {
   tracking_number: string;
   status: 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE';
   sender_name: string;
+  sender_phone?: string;
+  sender_city?: string;
+  sender_address?: string;
   recipient_name: string;
+  recipient_phone?: string;
+  recipient_city?: string;
+  recipient_address?: string;
   shipping_cost: number;
   created_at: string;
   created_by_user: string;
@@ -8196,6 +8202,7 @@ export interface Shipment {
   description: string;
   weight: number;
   is_fragile: boolean;
+  service_type?: string; // Type de service (Standard, Express, etc.)
 }
 
 // Helper function to normalize profile data
@@ -11346,17 +11353,6 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                       onFocus={() => setFocusedField('trunk_dimensions')} 
                       onBlur={() => setFocusedField(null)}
                     />
-                    <AnimatedInputField 
-                      label="NIU" 
-                      name="niu" 
-                      value={deliveryData.niu} 
-                      onChange={handleChange} 
-                      readOnly={!isEditing} 
-                      icon={CreditCard} 
-                      focused={focusedField === 'niu'} 
-                      onFocus={() => setFocusedField('niu')} 
-                      onBlur={() => setFocusedField(null)}
-                    />
                   </>
                 );
               })()}
@@ -12391,15 +12387,15 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
     
     const getStatusConfig = () => {
         switch (shipment.status) {
-            case 'delivered':
+            case 'RECU':
                 return {
                     icon: <CheckCircle className="h-5 w-5" />,
                     color: 'text-green-600 dark:text-green-400',
                     bgColor: 'bg-green-100 dark:bg-green-900/30',
                     borderColor: 'border-green-200 dark:border-green-800/50',
-                    label: 'Livré'
+                    label: 'Reçu'
                 };
-            case 'in_transit':
+            case 'EN_TRANSIT':
                 return {
                     icon: <Truck className="h-5 w-5" />,
                     color: 'text-blue-600 dark:text-blue-400',
@@ -12407,13 +12403,37 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                     borderColor: 'border-blue-200 dark:border-blue-800/50',
                     label: 'En transit'
                 };
-            case 'pending':
+            case 'AU_DEPART':
+                return {
+                    icon: <PlaneTakeoff className="h-5 w-5" />,
+                    color: 'text-purple-600 dark:text-purple-400',
+                    bgColor: 'bg-purple-100 dark:bg-purple-900/30',
+                    borderColor: 'border-purple-200 dark:border-purple-800/50',
+                    label: 'Au départ'
+                };
+            case 'EN_ATTENTE_DE_DEPOT':
                 return {
                     icon: <Clock className="h-5 w-5" />,
                     color: 'text-orange-600 dark:text-orange-400',
                     bgColor: 'bg-orange-100 dark:bg-orange-900/30',
                     borderColor: 'border-orange-200 dark:border-orange-800/50',
-                    label: 'En attente'
+                    label: 'En attente de dépôt'
+                };
+            case 'ARRIVE_AU_RELAIS':
+                return {
+                    icon: <MapPin className="h-5 w-5" />,
+                    color: 'text-teal-600 dark:text-teal-400',
+                    bgColor: 'bg-teal-100 dark:bg-teal-900/30',
+                    borderColor: 'border-teal-200 dark:border-teal-800/50',
+                    label: 'Arrivé au relais'
+                };
+            case 'ANNULE':
+                return {
+                    icon: <XCircle className="h-5 w-5" />,
+                    color: 'text-red-600 dark:text-red-400',
+                    bgColor: 'bg-red-100 dark:bg-red-900/30',
+                    borderColor: 'border-red-200 dark:border-red-800/50',
+                    label: 'Annulé'
                 };
             default:
                 return {
@@ -12421,7 +12441,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                     color: 'text-gray-600 dark:text-gray-400',
                     bgColor: 'bg-gray-100 dark:bg-gray-900/30',
                     borderColor: 'border-gray-200 dark:border-gray-800/50',
-                    label: 'Inconnu'
+                    label: 'Statut inconnu'
                 };
         }
     };
@@ -12540,7 +12560,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                                                 Origine
                                             </p>
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                {shipment.sender_address || 'Adresse non renseignée'}
+                                                {'sender_address' in shipment ? shipment.sender_address || 'Adresse non renseignée' : 'Adresse non renseignée'}
                                             </p>
                                         </div>
                                         
@@ -12549,7 +12569,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                                                 Destination
                                             </p>
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                {shipment.recipient_address || 'Adresse non renseignée'}
+                                                {'recipient_address' in shipment ? shipment.recipient_address || 'Adresse non renseignée' : 'Adresse non renseignée'}
                                             </p>
                                         </div>
                                     </div>
@@ -12614,7 +12634,7 @@ const DetailedPackageCard = ({ shipment }: { shipment: Shipment }) => {
                                     Suivre le colis
                                 </motion.button>
                                 
-                                {shipment.status !== 'delivered' && (
+                                {shipment.status !== 'RECU' && shipment.status !== 'ANNULE' && (
                                     <motion.button
                                         className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
                                         whileHover={{ scale: 1.05 }}
@@ -14299,10 +14319,11 @@ interface TrackingInfo {
 }
 
 interface TrackPackageMinProps {
+  onClose: () => void;
   onOpenFullTracker?: () => void;
 }
 
-const TrackPackageMin: React.FC<TrackPackageMinProps> = ({ onOpenFullTracker }) => {
+const TrackPackageMin: React.FC<TrackPackageMinProps> = ({ onClose, onOpenFullTracker }) => {
   const [searchInput, setSearchInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [trackingInfo, setTrackingInfo] = useState<TrackingInfo | null>(null);
@@ -24798,14 +24819,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\react-loadable-ma
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
       "static/chunks/node_modules_lucide-react_dist_esm_icons_065ff4b3._.js",
       "static/chunks/src_app_emit-package_MapComponent_tsx_be0374e9._.js",
-      "static/chunks/src_app_emit-package_MapComponent_tsx_9703f22d._.js"
+      "static/chunks/src_app_emit-package_MapComponent_tsx_24daaeac._.js"
     ]
   },
   "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)": {
     "id": "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)",
     "files": [
       "static/chunks/node_modules_b088d178._.js",
-      "static/chunks/node_modules_react-leaflet_lib_index_232aa8b1.js"
+      "static/chunks/node_modules_react-leaflet_lib_index_b4a766b0.js"
     ]
   }
 }
@@ -24825,7 +24846,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\app-build-manifes
       "static/chunks/src_730d25e2._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
-      "static/chunks/_6a472c39._.js",
+      "static/chunks/_4b808001._.js",
       "static/chunks/src_app_dashboard_Overview_tsx_de648859._.js",
       "static/chunks/src_app_dashboard_Deliveries_tsx_ec6995e5._.js",
       "static/chunks/src_app_dashboard_Inventaire_tsx_eae47325._.js",
@@ -24837,7 +24858,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\app-build-manifes
       "static/chunks/src_app_emit-package_RelaisData_tsx_a16eb83e._.js",
       "static/chunks/src_lib_supabase_ts_17dda828._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_lucide-react_dist_esm_icons_9f2b71f7._.js",
+      "static/chunks/node_modules_lucide-react_dist_esm_icons_c09a7f44._.js",
       "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
       "static/chunks/node_modules_react-icons_md_index_mjs_78df2b41._.js",
       "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
@@ -25794,17 +25815,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 ================================================================================
 
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/home/page": "app/home/page.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js",
-  "/track-package/page": "app/track-package/page.js"
+  "version": 3,
+  "middleware": {},
+  "sortedMiddleware": [],
+  "functions": {}
 }
 
 
@@ -25816,14 +25834,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 ================================================================================
 
 {
-  "version": 3,
-  "middleware": {},
-  "sortedMiddleware": [],
-  "functions": {}
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
 }
 
 
@@ -25839,14 +25857,17 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 ================================================================================
 
 {
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
+  "/_not-found/page": "app/_not-found/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/home/page": "app/home/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/track-package/page": "app/track-package/page.js"
 }
 
 
@@ -26080,6 +26101,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --color-teal-500: #00baa7;
     --color-teal-600: #009588;
     --color-teal-700: #00776e;
+    --color-teal-800: #005f5a;
+    --color-teal-900: #0b4f4a;
     --color-cyan-50: #ecfeff;
     --color-cyan-100: #cefafe;
     --color-cyan-200: #a2f4fd;
@@ -26117,6 +26140,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --color-purple-50: #faf5ff;
     --color-purple-100: #f3e8ff;
     --color-purple-200: #e9d5ff;
+    --color-purple-300: #d9b3ff;
     --color-purple-400: #c07eff;
     --color-purple-500: #ac4bff;
     --color-purple-600: #9810fa;
@@ -26295,6 +26319,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-teal-500: color(display-p3 .266569 .721518 .655462);
       --color-teal-600: color(display-p3 .207114 .579584 .53668);
       --color-teal-700: color(display-p3 .174094 .461318 .433866);
+      --color-teal-800: color(display-p3 .1457 .367051 .350749);
+      --color-teal-900: color(display-p3 .135344 .303314 .290629);
       --color-cyan-50: color(display-p3 .938135 .993772 .998465);
       --color-cyan-100: color(display-p3 .843085 .97553 .992573);
       --color-cyan-200: color(display-p3 .707418 .947027 .984826);
@@ -26332,6 +26358,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-purple-50: color(display-p3 .977045 .961759 .996715);
       --color-purple-100: color(display-p3 .945034 .910569 .992972);
       --color-purple-200: color(display-p3 .901181 .835978 .992237);
+      --color-purple-300: color(display-p3 .829394 .703737 .996084);
       --color-purple-400: color(display-p3 .719919 .492497 .995173);
       --color-purple-500: color(display-p3 .629519 .30089 .990817);
       --color-purple-600: color(display-p3 .546729 .130167 .94439);
@@ -26440,6 +26467,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-teal-500: lab(67.3859% -49.0983 -2.63511);
       --color-teal-600: lab(55.0223% -41.0774 -3.90277);
       --color-teal-700: lab(44.4134% -33.1436 -4.22149);
+      --color-teal-800: lab(35.5975% -26.6648 -4.34487);
+      --color-teal-900: lab(29.506% -21.4706 -3.59886);
       --color-cyan-50: lab(98.3303% -5.97429 -2.62109);
       --color-cyan-100: lab(95.3146% -13.8285 -6.84733);
       --color-cyan-200: lab(91.0821% -24.0435 -12.8306);
@@ -26477,6 +26506,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-purple-50: lab(97.1626% 2.99937 -4.13398);
       --color-purple-100: lab(93.3333% 6.9744 -9.83434);
       --color-purple-200: lab(87.8405% 13.4282 -18.7159);
+      --color-purple-300: lab(78.3298% 26.2195 -34.9499);
       --color-purple-400: lab(63.6946% 47.6127 -59.2066);
       --color-purple-500: lab(52.0183% 66.11 -78.2316);
       --color-purple-600: lab(43.0295% 75.21 -86.5669);
@@ -30969,6 +30999,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     padding-left: calc(var(--spacing) * 4);
   }
 
+  .pl-5 {
+    padding-left: calc(var(--spacing) * 5);
+  }
+
   .pl-6 {
     padding-left: calc(var(--spacing) * 6);
   }
@@ -34302,6 +34336,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
+    .dark\:border-purple-800\/50 {
+      border-color: rgba(110, 17, 176, .5);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .dark\:border-purple-800\/50 {
+        border-color: color-mix(in oklab, var(--color-purple-800) 50%, transparent);
+      }
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
     .dark\:border-red-400 {
       border-color: var(--color-red-400);
     }
@@ -34328,6 +34374,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:border-red-800 {
       border-color: var(--color-red-800);
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .dark\:border-red-800\/50 {
+      border-color: rgba(159, 7, 18, .5);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .dark\:border-red-800\/50 {
+        border-color: color-mix(in oklab, var(--color-red-800) 50%, transparent);
+      }
     }
   }
 
@@ -34364,6 +34422,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:border-slate-800 {
       border-color: var(--color-slate-800);
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .dark\:border-teal-800\/50 {
+      border-color: rgba(0, 95, 90, .5);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .dark\:border-teal-800\/50 {
+        border-color: color-mix(in oklab, var(--color-teal-800) 50%, transparent);
+      }
     }
   }
 
@@ -34962,6 +35032,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
+    .dark\:bg-teal-900\/30 {
+      background-color: rgba(11, 79, 74, .3);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .dark\:bg-teal-900\/30 {
+        background-color: color-mix(in oklab, var(--color-teal-900) 30%, transparent);
+      }
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
     .dark\:bg-transparent {
       background-color: rgba(0, 0, 0, 0);
     }
@@ -34975,6 +35057,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .dark\:bg-yellow-900\/20 {
         background-color: color-mix(in oklab, var(--color-yellow-900) 20%, transparent);
+      }
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .dark\:bg-yellow-900\/30 {
+      background-color: rgba(115, 62, 10, .3);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .dark\:bg-yellow-900\/30 {
+        background-color: color-mix(in oklab, var(--color-yellow-900) 30%, transparent);
       }
     }
   }
@@ -35304,6 +35398,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
+    .dark\:text-purple-300 {
+      color: var(--color-purple-300);
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
     .dark\:text-purple-400 {
       color: var(--color-purple-400);
     }
@@ -35342,6 +35442,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:text-slate-400 {
       color: var(--color-slate-400);
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .dark\:text-teal-400 {
+      color: var(--color-teal-400);
     }
   }
 
@@ -40822,7 +40928,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_730d25e2._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
-      "static/chunks/_7f43cc7d._.js",
+      "static/chunks/_4b808001._.js",
       "static/chunks/src_app_dashboard_Overview_tsx_de648859._.js",
       "static/chunks/src_app_dashboard_Deliveries_tsx_ec6995e5._.js",
       "static/chunks/src_app_dashboard_Inventaire_tsx_eae47325._.js",
@@ -40832,9 +40938,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_app_expedition_4fbffed2._.js",
       "static/chunks/src_app_track-package_page_tsx_8a33fb1d._.js",
       "static/chunks/src_app_emit-package_RelaisData_tsx_a16eb83e._.js",
-      "static/chunks/src_484891c6._.js",
+      "static/chunks/src_lib_supabase_ts_17dda828._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_lucide-react_dist_esm_icons_9f2b71f7._.js",
+      "static/chunks/node_modules_lucide-react_dist_esm_icons_c09a7f44._.js",
       "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
       "static/chunks/node_modules_react-icons_md_index_mjs_78df2b41._.js",
       "static/chunks/node_modules_react-icons_lib_74ccc930._.js",
