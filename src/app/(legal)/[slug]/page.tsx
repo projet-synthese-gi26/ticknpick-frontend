@@ -5,20 +5,20 @@ import { FileText, Calendar } from 'lucide-react';
 import NavbarHome from '@/components/NavbarHome';
 import Footer from '@/components/FooterHome';
 
-// L'interface `Props` n'est plus nécessaire, nous allons typer directement.
-// type Props = {
-//   params: { slug: string };
-// };
-
 export function generateStaticParams() {
   return Object.keys(legalDocs).map((slug) => ({
     slug,
   }));
 }
 
-// CORRIGÉ : La signature de la page est mise à jour pour typer `params` explicitement.
-export default function LegalPage({ params }: { params: { slug: string } }) {
-  const { slug } = params;
+// FIXED: Updated to handle async params in Next.js 15
+export default async function LegalPage({ 
+  params 
+}: { 
+  params: Promise<{ slug: string }> 
+}) {
+  // Await the params Promise
+  const { slug } = await params;
   const doc = legalDocs[slug];
 
   if (!doc) {
