@@ -69,7 +69,7 @@ export interface UserProfile {
 
 // Le profil PRO est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+  account_type: 'FREELANCE' | 'AGENCY';
 }
 
 export interface RelayPointInfo {
@@ -109,6 +109,11 @@ const normalizeProfile = (profile: any): UserProfile => {
     name: profile.name || profile.manager_name || 'Utilisateur',
     role: profile.role || profile.account_type || 'user',
   };
+};
+
+// Type guard to check if a UserProfile is a ProProfile
+const isProProfile = (profile: UserProfile): profile is ProProfile => {
+  return profile.account_type === 'FREELANCE' || profile.account_type === 'AGENCY';
 };
 
 interface NavItem {
@@ -437,7 +442,7 @@ const DashboardSwitcher: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
+  const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
   
   
 
@@ -570,13 +575,13 @@ const DashboardSwitcher: React.FC = () => {
       case 'staff': 
         return accountType === 'agence' ? <PersonnelPage /> : null;
       case 'service-card':
-        return (userProfile.account_type === 'FREELANCE' || userProfile.account_type === 'AGENCY')
-          ? <ServiceCardPage profile={userProfile as ProProfile} />
-          : null;
-
-      case 'profile': return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
-      case 'settings': return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
-      default: return <OverviewDashboard profile={userProfile} />;
+        return isProProfile(userProfile) ? <ServiceCardPage profile={userProfile} /> : null;
+      case 'profile': 
+        return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      case 'settings': 
+        return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      default: 
+        return <OverviewDashboard profile={userProfile} />;
     }
   };
 
