@@ -8152,27 +8152,55 @@ import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
 import TrackPackageMin from './TrackMin';
-// --- CORRIGÉ DANS: src/app/dashboard/page.tsx ---
 
 // Pour plus de clarté, unifions les cas (majuscules)
 type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
 
-// Le profil de base, qui peut être n'importe quel type
+// L'interface UserProfile est maintenant unifiée et complète pour être compatible partout
 export interface UserProfile {
   id: string;
-  account_type: AccountType; // Utilise notre type unifié
+  account_type: AccountType;
   manager_name: string | null;
   email?: string | null;
-  name: string; // Ajouté pour la cohérence
-  role: string; // Ajouté pour la cohérence
+  name: string;
+  role: string;
+  
+  // -- NOUVEAUX Champs de base ajoutés depuis Profil.tsx (optionnels) --
+  created_at?: string;
+  phone_number?: string | null;
+  birth_date?: string | null;
+  nationality?: string | null;
+  home_address?: string | null;
+  id_card_number?: string | null;
+  
+  // -- Champs PRO existants (optionnels) --
+  identity_photo_url?: string | null;
+  id_card_url?: string | null;
+  tax_id?: string | null;
+  professional_experience?: string | null;
+  relay_point_name?: string | null;
+  relay_point_address?: string | null;
+  relay_point_gps?: string | null;
+  opening_hours?: string | null;
+  storage_capacity?: string | null;
+  service_card_details?: any;
+  business_name?: string;
+  business_type?: string;
+
+  // -- Champs LIVREUR existants (optionnels) --
+  vehicle_type?: string | null;
+  vehicle_brand?: string | null;
+  vehicle_registration?: string | null;
+  vehicle_color?: string | null;
+  trunk_dimensions?: string | null;
+
+  // -- Permet toute autre propriété non explicitement définie --
   [key: string]: any;
 }
 
-// Le profil PRO, qui est un UserProfile mais avec un type de compte RESTREINT
+// Le profil PRO est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  account_type: 'FREELANCE' | 'AGENCY'; // On spécifie ici que c'est forcément l'un de ces deux
-  business_name?: string;
-  business_type?: string;
+  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
 }
 
 export interface RelayPointInfo {
@@ -8672,14 +8700,13 @@ const DashboardSwitcher: React.FC = () => {
         return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
       case 'staff': 
         return accountType === 'agence' ? <PersonnelPage /> : null;
-      case 'service-card': 
-        //  <<< MODIFICATION LOGIQUE IMPORTANTE >>>
-        // On s'assure que le profil est compatible avant de rendre le composant.
-        if (accountType === 'FREELANCE' || accountType === 'AGENCY') {
-          return <ServiceCardPage profile={userProfile as ProProfile} />;
-        }
-        return null;
-      case 'profile': return <ProfilePage profile={userProfile} onUpdate={handleProfileUpdate} />;
+      case 'service-card':
+        return (userProfile.account_type === 'FREELANCE' || userProfile.account_type === 'AGENCY')
+          ? <ServiceCardPage profile={userProfile as ProProfile} />
+          : null;
+
+      case 'profile': 
+        return <ProfilePage profile={userProfile as any} onUpdate={handleProfileUpdate} />;
       case 'settings': return <SettingsPage profile={userProfile} onUpdate={handleProfileUpdate} />;
       default: return <OverviewDashboard profile={userProfile} />;
     }
@@ -10415,6 +10442,8 @@ import {
   Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, 
   AlertCircle, Car, Users, Star, Truck, Package, Shield, X, Check 
 } from 'lucide-react';
+import router from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 // Interfaces corrigées et unifiées
 interface BaseProfile {
@@ -10613,6 +10642,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [showAddRelay, setShowAddRelay] = useState(false);
+   const router = useRouter();
   const [newRelayData, setNewRelayData] = useState({ 
     name: '', 
     address: '', 
@@ -10976,6 +11006,25 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       case 'AGENCY': return 'Agence';
       default: return 'Profil';
     }
+  };
+
+    const handleStartUpgrade = (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
+    // Avertir l'utilisateur qu'il va être redirigé
+    if (!confirm(`Vous allez être redirigé vers le formulaire pour finaliser votre passage au compte ${newType}. Continuer ?`)) {
+      return;
+    }
+    
+    // 1. Préparer les données à pré-remplir
+    const upgradeRequest = {
+      targetType: newType,
+      profileData: formData // `formData` contient déjà l'état actuel du profil
+    };
+
+    // 2. Stocker dans localStorage
+    localStorage.setItem('upgrade_account_request', JSON.stringify(upgradeRequest));
+
+    // 3. Rediriger vers la page d'inscription
+    router.push('/register');
   };
 
   // Composant de champ d'entrée animé
@@ -11584,7 +11633,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                   </li>
                 </ul>
                 <button 
-                  onClick={() => upgradeAccount('FREELANCE')} 
+                  onClick={() => handleStartUpgrade('FREELANCE')}  
                   className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold py-3 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
                 >
                   Devenir Freelance PRO
@@ -14907,6 +14956,7 @@ export default function RegisterProPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pageMode, setPageMode] = useState<'register' | 'upgrade'>('register');
   const [accountType, setAccountType] = useState<'CLIENT' | 'FREELANCE' | 'AGENCY' | 'LIVREUR' | null>(null);
   const [formData, setFormData] = useState({
     // Identification
@@ -14964,6 +15014,53 @@ export default function RegisterProPage() {
     }
   }, [formData.country, formData.region]);
 
+    // NOUVEAU useEffect pour détecter le mode "mise à niveau"
+  useEffect(() => {
+    const upgradeRequestJSON = localStorage.getItem('upgrade_account_request');
+    if (upgradeRequestJSON) {
+      try {
+        const { targetType, profileData } = JSON.parse(upgradeRequestJSON);
+        
+        console.log("Mode mise à niveau détecté !", { targetType, profileData });
+
+        setPageMode('upgrade');
+        setAccountType(targetType);
+
+        // Pré-remplir le formulaire avec les données existantes
+        setFormData(prev => ({
+          ...prev,
+          // Identification
+          manager_name: profileData.manager_name || '',
+          email: profileData.email || '',
+          // Les mots de passe restent vides pour la sécurité
+          password: '', 
+          confirmPassword: '',
+          // Coordonnées
+          phone_number: profileData.phone_number || '',
+          birth_date: profileData.birth_date || '',
+          // Remplace nationality - à adapter si la logique est différente
+          country: profileData.country || 'cameroun',
+          region: profileData.region || '',
+          city: profileData.city || '',
+          home_address: profileData.home_address || '',
+          id_card_number: profileData.id_card_number || '',
+          niu: profileData.niu || '',
+        }));
+
+        // Passer directement à l'étape 2 car le type de compte est déjà choisi
+        setCurrentStep(2);
+        
+        // Supprimer l'instruction pour ne pas la réutiliser
+        localStorage.removeItem('upgrade_account_request');
+
+      } catch (e) {
+        console.error("Erreur lors de la préparation de la mise à niveau:", e);
+        localStorage.removeItem('upgrade_account_request'); // Nettoyer en cas d'erreur
+      }
+    }
+  }, []); // Le tableau vide [] assure que cela ne s'exécute qu'une fois au montage
+
+
   // Définir les étapes selon le type de compte
   const getStepsForAccountType = (type: string | null) => {
     switch(type) {
@@ -15017,7 +15114,21 @@ export default function RegisterProPage() {
     setCurrentStep(2);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    
+    // Si c'est une mise à niveau, on appelle le RPC
+    if (pageMode === 'upgrade') {
+      await handleUpgradeSubmit();
+    } else {
+      // Sinon, on exécute la logique d'inscription normale
+      await handleRegularSignUp();
+    }
+  };
+
+  const handleRegularSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
@@ -15119,6 +15230,45 @@ export default function RegisterProPage() {
       setError(err.message || 'Une erreur inattendue est survenue lors de l\'inscription.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleUpgradeSubmit = async () => {
+    console.log("Lancement de la mise à niveau...");
+    setIsLoading(true);
+    
+    try {
+      // Préparer les arguments pour la fonction RPC
+      const rpcParams = {
+        p_relay_point_name: formData.relay_point_name,
+        p_relay_point_address: formData.relay_point_address,
+        p_opening_hours: formData.opening_hours,
+        p_storage_capacity: formData.storage_capacity,
+        p_home_address_locality: formData.home_address_locality,
+        p_niu: formData.niu,
+        // Ajoutez tous les autres arguments que votre fonction RPC attend
+      };
+
+      console.log("Appel du RPC 'upgrade_client_to_freelance' avec:", rpcParams);
+
+      const { error: rpcError } = await supabase.rpc('upgrade_client_to_freelance', rpcParams);
+
+      if (rpcError) {
+        console.error("Erreur RPC:", rpcError);
+        throw rpcError;
+      }
+      
+      setSuccess("Votre compte a été mis à niveau avec succès ! Redirection en cours...");
+      
+      // Attendre un peu, puis rediriger vers le dashboard
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 3000);
+
+    } catch (err: any) {
+        setError(err.message || "Une erreur est survenue lors de la mise à niveau.");
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -24291,6 +24441,47 @@ export interface RetirantInfo {
 }
 
 
+// 1. Type unifié pour le type de compte
+export type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+
+// 2. L'interface UserProfile unifiée avec TOUS les champs possibles (en optionnel)
+export interface UserProfile {
+  id: string;
+  account_type: AccountType;
+  manager_name: string | null;
+  email?: string | null;
+  
+  // Champs de base
+  created_at?: string;
+  phone_number?: string | null;
+  birth_date?: string | null;
+  nationality?: string | null;
+  home_address?: string | null;
+  id_card_number?: string | null;
+
+  // Champs PRO
+  identity_photo_url?: string | null;
+  id_card_url?: string | null;
+  tax_id?: string | null;
+  professional_experience?: string | null;
+  relay_point_name?: string | null;
+  relay_point_address?: string | null;
+  service_card_details?: any;
+
+  // Champs LIVREUR
+  vehicle_type?: string | null;
+  vehicle_brand?: string | null;
+  // ...ajoutez ici d'autres champs si nécessaire
+  
+  [key: string]: any;
+}
+
+// 3. Le type ProProfile qui est une version spécifique de UserProfile
+export interface ProProfile extends UserProfile {
+  account_type: 'FREELANCE' | 'AGENCY';
+}
+
+
 ================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\page\app-paths-manifest.json
 ================================================================================
@@ -25815,6 +26006,29 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {},
+  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
+================================================================================
+
+{
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 ================================================================================
 
@@ -25834,40 +26048,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
-================================================================================
-
-{
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
-}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
-================================================================================
-
-{
-  "node": {},
-  "edge": {},
-  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 ================================================================================
 
 {
+  "/(legal)/[slug]/page": "app/(legal)/[slug]/page.js",
   "/_not-found/page": "app/_not-found/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
   "/home/page": "app/home/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js",
-  "/track-package/page": "app/track-package/page.js"
+  "/register/page": "app/register/page.js"
 }
 
 
@@ -26959,10 +27151,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     top: calc(var(--spacing) * 0);
   }
 
-  .-top-0\.5 {
-    top: calc(var(--spacing) * -.5);
-  }
-
   .-top-1 {
     top: calc(var(--spacing) * -1);
   }
@@ -27083,10 +27271,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     right: calc(var(--spacing) * 0);
   }
 
-  .-right-0\.5 {
-    right: calc(var(--spacing) * -.5);
-  }
-
   .-right-1 {
     right: calc(var(--spacing) * -1);
   }
@@ -27169,10 +27353,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-bottom-0 {
     bottom: calc(var(--spacing) * 0);
-  }
-
-  .-bottom-0\.5 {
-    bottom: calc(var(--spacing) * -.5);
   }
 
   .-bottom-1 {
@@ -27265,10 +27445,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .left-2 {
     left: calc(var(--spacing) * 2);
-  }
-
-  .left-2\.5 {
-    left: calc(var(--spacing) * 2.5);
   }
 
   .left-3 {
@@ -29148,16 +29324,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     }
   }
 
-  .bg-black\/80 {
-    background-color: rgba(0, 0, 0, .8);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-black\/80 {
-      background-color: color-mix(in oklab, var(--color-black) 80%, transparent);
-    }
-  }
-
   .bg-blue-50 {
     background-color: var(--color-blue-50);
   }
@@ -29362,16 +29528,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .bg-orange-50 {
     background-color: var(--color-orange-50);
-  }
-
-  .bg-orange-50\/30 {
-    background-color: rgba(255, 247, 237, .3);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-orange-50\/30 {
-      background-color: color-mix(in oklab, var(--color-orange-50) 30%, transparent);
-    }
   }
 
   .bg-orange-50\/50 {
@@ -32429,18 +32585,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:border-orange-500\/50:hover {
-      border-color: rgba(254, 110, 0, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:border-orange-500\/50:hover {
-        border-color: color-mix(in oklab, var(--color-orange-500) 50%, transparent);
-      }
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:border-purple-400:hover {
       border-color: var(--color-purple-400);
     }
@@ -32580,18 +32724,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:bg-orange-50\/50:hover {
         background-color: color-mix(in oklab, var(--color-orange-50) 50%, transparent);
-      }
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:bg-orange-50\/80:hover {
-      background-color: rgba(255, 247, 237, .8);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:bg-orange-50\/80:hover {
-        background-color: color-mix(in oklab, var(--color-orange-50) 80%, transparent);
       }
     }
   }
@@ -32879,12 +33011,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:text-orange-200:hover {
       color: var(--color-orange-200);
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:text-orange-500:hover {
-      color: var(--color-orange-500);
     }
   }
 
@@ -33653,12 +33779,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 48rem) {
-    .md\:col-span-3 {
-      grid-column: span 3 / span 3;
-    }
-  }
-
-  @media (min-width: 48rem) {
     .md\:mr-80 {
       margin-right: calc(var(--spacing) * 80);
     }
@@ -33673,12 +33793,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 48rem) {
     .md\:flex {
       display: flex;
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .md\:grid {
-      display: grid;
     }
   }
 
@@ -33743,26 +33857,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 48rem) {
-    .md\:grid-cols-12 {
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 48rem) {
     .md\:flex-row {
       flex-direction: row;
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .md\:items-center {
-      align-items: center;
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .md\:justify-between {
-      justify-content: space-between;
     }
   }
 
@@ -33787,12 +33883,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 48rem) {
     .md\:p-8 {
       padding: calc(var(--spacing) * 8);
-    }
-  }
-
-  @media (min-width: 48rem) {
-    .md\:px-6 {
-      padding-inline: calc(var(--spacing) * 6);
     }
   }
 
@@ -33947,12 +34037,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 64rem) {
-    .lg\:w-56 {
-      width: calc(var(--spacing) * 56);
-    }
-  }
-
-  @media (min-width: 64rem) {
     .lg\:w-80 {
       width: calc(var(--spacing) * 80);
     }
@@ -34004,12 +34088,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 64rem) {
     .lg\:grid-cols-5 {
       grid-template-columns: repeat(5, minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .lg\:grid-cols-12 {
-      grid-template-columns: repeat(12, minmax(0, 1fr));
     }
   }
 
@@ -34114,20 +34192,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 80rem) {
-    .xl\:grid-cols-2 {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 80rem) {
     .xl\:grid-cols-3 {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :where(.dark\:divide-gray-800 > :not(:last-child)) {
-      border-color: var(--color-gray-800);
     }
   }
 
@@ -34222,12 +34288,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:border-gray-800 {
-      border-color: var(--color-gray-800);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:border-gray-800\/50 {
       border-color: rgba(30, 41, 57, .5);
     }
@@ -34284,18 +34344,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:border-orange-700 {
       border-color: var(--color-orange-700);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:border-orange-700\/50 {
-      border-color: rgba(197, 60, 0, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:border-orange-700\/50 {
-        border-color: color-mix(in oklab, var(--color-orange-700) 50%, transparent);
-      }
     }
   }
 
@@ -34438,12 +34486,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:border-yellow-800 {
-      border-color: var(--color-yellow-800);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:border-t-orange-400 {
       border-top-color: var(--color-orange-400);
     }
@@ -34474,18 +34516,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:bg-blue-900\/20 {
-      background-color: rgba(28, 57, 142, .2);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-blue-900\/20 {
-        background-color: color-mix(in oklab, var(--color-blue-900) 20%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:bg-blue-900\/30 {
       background-color: rgba(28, 57, 142, .3);
     }
@@ -34498,18 +34528,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:bg-blue-900\/50 {
-      background-color: rgba(28, 57, 142, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-blue-900\/50 {
-        background-color: color-mix(in oklab, var(--color-blue-900) 50%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:bg-blue-950\/30 {
       background-color: rgba(22, 36, 86, .3);
     }
@@ -34517,30 +34535,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .dark\:bg-blue-950\/30 {
         background-color: color-mix(in oklab, var(--color-blue-950) 30%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-cyan-900\/20 {
-      background-color: rgba(16, 78, 100, .2);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-cyan-900\/20 {
-        background-color: color-mix(in oklab, var(--color-cyan-900) 20%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-cyan-900\/50 {
-      background-color: rgba(16, 78, 100, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-cyan-900\/50 {
-        background-color: color-mix(in oklab, var(--color-cyan-900) 50%, transparent);
       }
     }
   }
@@ -34660,18 +34654,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:bg-gray-800\/90 {
-      background-color: rgba(30, 41, 57, .9);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-gray-800\/90 {
-        background-color: color-mix(in oklab, var(--color-gray-800) 90%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:bg-gray-900 {
       background-color: var(--color-gray-900);
     }
@@ -34685,18 +34667,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .dark\:bg-gray-900\/30 {
         background-color: color-mix(in oklab, var(--color-gray-900) 30%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-gray-900\/50 {
-      background-color: rgba(16, 24, 40, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-gray-900\/50 {
-        background-color: color-mix(in oklab, var(--color-gray-900) 50%, transparent);
       }
     }
   }
@@ -34757,18 +34727,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .dark\:bg-green-900\/30 {
         background-color: color-mix(in oklab, var(--color-green-900) 30%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-green-900\/50 {
-      background-color: rgba(13, 84, 43, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-green-900\/50 {
-        background-color: color-mix(in oklab, var(--color-green-900) 50%, transparent);
       }
     }
   }
@@ -34942,18 +34900,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:bg-red-900\/50 {
-      background-color: rgba(130, 24, 26, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-red-900\/50 {
-        background-color: color-mix(in oklab, var(--color-red-900) 50%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:bg-red-950\/30 {
       background-color: rgba(70, 8, 9, .3);
     }
@@ -35050,30 +34996,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:bg-yellow-900\/20 {
-      background-color: rgba(115, 62, 10, .2);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-yellow-900\/20 {
-        background-color: color-mix(in oklab, var(--color-yellow-900) 20%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-yellow-900\/30 {
-      background-color: rgba(115, 62, 10, .3);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-yellow-900\/30 {
-        background-color: color-mix(in oklab, var(--color-yellow-900) 30%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:bg-yellow-900\/40 {
       background-color: rgba(115, 62, 10, .4);
     }
@@ -35081,18 +35003,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .dark\:bg-yellow-900\/40 {
         background-color: color-mix(in oklab, var(--color-yellow-900) 40%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-yellow-900\/50 {
-      background-color: rgba(115, 62, 10, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-yellow-900\/50 {
-        background-color: color-mix(in oklab, var(--color-yellow-900) 50%, transparent);
       }
     }
   }
@@ -35398,12 +35308,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:text-purple-300 {
-      color: var(--color-purple-300);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:text-purple-400 {
       color: var(--color-purple-400);
     }
@@ -35460,12 +35364,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:text-yellow-300 {
       color: var(--color-yellow-300);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:text-yellow-400 {
-      color: var(--color-yellow-400);
     }
   }
 
@@ -35636,20 +35534,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   @media (prefers-color-scheme: dark) {
     @media (hover: hover) {
-      .dark\:hover\:border-orange-500\/50:hover {
-        border-color: rgba(254, 110, 0, .5);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:border-orange-500\/50:hover {
-          border-color: color-mix(in oklab, var(--color-orange-500) 50%, transparent);
-        }
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
       .dark\:hover\:border-orange-600:hover {
         border-color: var(--color-orange-600);
       }
@@ -35674,20 +35558,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @media (hover: hover) {
       .dark\:hover\:border-orange-700:hover {
         border-color: var(--color-orange-700);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:border-orange-800\/50:hover {
-        border-color: rgba(159, 45, 0, .5);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:border-orange-800\/50:hover {
-          border-color: color-mix(in oklab, var(--color-orange-800) 50%, transparent);
-        }
       }
     }
   }
@@ -35753,20 +35623,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       @supports (color: color-mix(in lab, red, red)) {
         .dark\:hover\:bg-gray-700\/50:hover {
           background-color: color-mix(in oklab, var(--color-gray-700) 50%, transparent);
-        }
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:bg-gray-700\/60:hover {
-        background-color: rgba(54, 65, 83, .6);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:bg-gray-700\/60:hover {
-          background-color: color-mix(in oklab, var(--color-gray-700) 60%, transparent);
         }
       }
     }
@@ -35908,14 +35764,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @media (hover: hover) {
       .dark\:hover\:text-gray-100:hover {
         color: var(--color-gray-100);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:text-gray-200:hover {
-        color: var(--color-gray-200);
       }
     }
   }
@@ -40903,6 +40751,26 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
 
 {
   "pages": {
+    "/(legal)/[slug]/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
+      "static/chunks/_2d35e63d._.js",
+      "static/chunks/src_app_(legal)_[slug]_page_tsx_02f6a851._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ],
     "/_not-found/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
@@ -41024,7 +40892,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
     ],
-    "/track-package/page": [
+    "/register/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
       "static/chunks/src_app_globals_b805903d.css",
@@ -41033,9 +40901,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
       "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/src_670c36f3._.js",
-      "static/chunks/node_modules_3eeb4056._.js",
-      "static/chunks/src_app_track-package_page_tsx_02f6a851._.js",
+      "static/chunks/src_ac86f657._.js",
+      "static/chunks/node_modules_f53a599d._.js",
+      "static/chunks/src_app_register_page_tsx_02f6a851._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
       "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
@@ -41061,17 +40929,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\routes-manifest.json
 FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
 ================================================================================
 
-{
-  "version": 4,
-  "routes": {},
-  "dynamicRoutes": {},
-  "notFoundRoutes": [],
-  "preview": {
-    "previewModeId": "b2dbbe71e51a694f504b5772ccfcf261",
-    "previewModeSigningKey": "cd3527a7b46b0b171679ca249e53ef319e2963cc782008b077fe717dc1fece0e",
-    "previewModeEncryptionKey": "6b811056eee1ce307c6b98431d505976bc5ad825165d924df565908aac4fe92f"
-  }
-}
+{"version":4,"routes":{"/terms-of-use":{},"/privacy-policy":{},"/cookies-policy":{},"/legal-notice":{},"/fraud-policy":{}},"dynamicRoutes":{"/[slug]":{"fallback":null}},"notFoundRoutes":[],"preview":{"previewModeId":"e7f8168f2739014043e45553eb2e3027","previewModeSigningKey":"e3c7fce94cf08f34b6b2e59e0eba01161bc185efb904e205f316cfa2614db479","previewModeEncryptionKey":"63b47ca143441d6a97b7f8ec868942fc6d666913a1c1c23264b7bd820193c3e9"}}
 
 
 ================================================================================

@@ -148,6 +148,7 @@ export default function RegisterProPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pageMode, setPageMode] = useState<'register' | 'upgrade'>('register');
   const [accountType, setAccountType] = useState<'CLIENT' | 'FREELANCE' | 'AGENCY' | 'LIVREUR' | null>(null);
   const [formData, setFormData] = useState({
     // Identification
@@ -205,6 +206,53 @@ export default function RegisterProPage() {
     }
   }, [formData.country, formData.region]);
 
+    // NOUVEAU useEffect pour détecter le mode "mise à niveau"
+  useEffect(() => {
+    const upgradeRequestJSON = localStorage.getItem('upgrade_account_request');
+    if (upgradeRequestJSON) {
+      try {
+        const { targetType, profileData } = JSON.parse(upgradeRequestJSON);
+        
+        console.log("Mode mise à niveau détecté !", { targetType, profileData });
+
+        setPageMode('upgrade');
+        setAccountType(targetType);
+
+        // Pré-remplir le formulaire avec les données existantes
+        setFormData(prev => ({
+          ...prev,
+          // Identification
+          manager_name: profileData.manager_name || '',
+          email: profileData.email || '',
+          // Les mots de passe restent vides pour la sécurité
+          password: '', 
+          confirmPassword: '',
+          // Coordonnées
+          phone_number: profileData.phone_number || '',
+          birth_date: profileData.birth_date || '',
+          // Remplace nationality - à adapter si la logique est différente
+          country: profileData.country || 'cameroun',
+          region: profileData.region || '',
+          city: profileData.city || '',
+          home_address: profileData.home_address || '',
+          id_card_number: profileData.id_card_number || '',
+          niu: profileData.niu || '',
+        }));
+
+        // Passer directement à l'étape 2 car le type de compte est déjà choisi
+        setCurrentStep(2);
+        
+        // Supprimer l'instruction pour ne pas la réutiliser
+        localStorage.removeItem('upgrade_account_request');
+
+      } catch (e) {
+        console.error("Erreur lors de la préparation de la mise à niveau:", e);
+        localStorage.removeItem('upgrade_account_request'); // Nettoyer en cas d'erreur
+      }
+    }
+  }, []); // Le tableau vide [] assure que cela ne s'exécute qu'une fois au montage
+
+
   // Définir les étapes selon le type de compte
   const getStepsForAccountType = (type: string | null) => {
     switch(type) {
@@ -258,7 +306,21 @@ export default function RegisterProPage() {
     setCurrentStep(2);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    
+    // Si c'est une mise à niveau, on appelle le RPC
+    if (pageMode === 'upgrade') {
+      await handleUpgradeSubmit();
+    } else {
+      // Sinon, on exécute la logique d'inscription normale
+      await handleRegularSignUp();
+    }
+  };
+
+  const handleRegularSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
@@ -360,6 +422,45 @@ export default function RegisterProPage() {
       setError(err.message || 'Une erreur inattendue est survenue lors de l\'inscription.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleUpgradeSubmit = async () => {
+    console.log("Lancement de la mise à niveau...");
+    setIsLoading(true);
+    
+    try {
+      // Préparer les arguments pour la fonction RPC
+      const rpcParams = {
+        p_relay_point_name: formData.relay_point_name,
+        p_relay_point_address: formData.relay_point_address,
+        p_opening_hours: formData.opening_hours,
+        p_storage_capacity: formData.storage_capacity,
+        p_home_address_locality: formData.home_address_locality,
+        p_niu: formData.niu,
+        // Ajoutez tous les autres arguments que votre fonction RPC attend
+      };
+
+      console.log("Appel du RPC 'upgrade_client_to_freelance' avec:", rpcParams);
+
+      const { error: rpcError } = await supabase.rpc('upgrade_client_to_freelance', rpcParams);
+
+      if (rpcError) {
+        console.error("Erreur RPC:", rpcError);
+        throw rpcError;
+      }
+      
+      setSuccess("Votre compte a été mis à niveau avec succès ! Redirection en cours...");
+      
+      // Attendre un peu, puis rediriger vers le dashboard
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 3000);
+
+    } catch (err: any) {
+        setError(err.message || "Une erreur est survenue lors de la mise à niveau.");
+    } finally {
+        setIsLoading(false);
     }
   };
 

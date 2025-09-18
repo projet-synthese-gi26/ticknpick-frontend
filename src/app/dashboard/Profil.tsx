@@ -9,6 +9,8 @@ import {
   Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, 
   AlertCircle, Car, Users, Star, Truck, Package, Shield, X, Check 
 } from 'lucide-react';
+import router from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 // Interfaces corrigées et unifiées
 interface BaseProfile {
@@ -207,6 +209,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [showAddRelay, setShowAddRelay] = useState(false);
+   const router = useRouter();
   const [newRelayData, setNewRelayData] = useState({ 
     name: '', 
     address: '', 
@@ -570,6 +573,25 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       case 'AGENCY': return 'Agence';
       default: return 'Profil';
     }
+  };
+
+    const handleStartUpgrade = (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
+    // Avertir l'utilisateur qu'il va être redirigé
+    if (!confirm(`Vous allez être redirigé vers le formulaire pour finaliser votre passage au compte ${newType}. Continuer ?`)) {
+      return;
+    }
+    
+    // 1. Préparer les données à pré-remplir
+    const upgradeRequest = {
+      targetType: newType,
+      profileData: formData // `formData` contient déjà l'état actuel du profil
+    };
+
+    // 2. Stocker dans localStorage
+    localStorage.setItem('upgrade_account_request', JSON.stringify(upgradeRequest));
+
+    // 3. Rediriger vers la page d'inscription
+    router.push('/register');
   };
 
   // Composant de champ d'entrée animé
@@ -1178,7 +1200,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                   </li>
                 </ul>
                 <button 
-                  onClick={() => upgradeAccount('FREELANCE')} 
+                  onClick={() => handleStartUpgrade('FREELANCE')}  
                   className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold py-3 px-4 rounded-xl hover:scale-105 transform transition-all duration-300 shadow-lg"
                 >
                   Devenir Freelance PRO
