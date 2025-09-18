@@ -306,7 +306,7 @@ export default function RegisterProPage() {
     setCurrentStep(2);
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
@@ -316,7 +316,7 @@ export default function RegisterProPage() {
       await handleUpgradeSubmit();
     } else {
       // Sinon, on exécute la logique d'inscription normale
-      await handleRegularSignUp();
+      await handleRegularSignUp(e);
     }
   };
 
