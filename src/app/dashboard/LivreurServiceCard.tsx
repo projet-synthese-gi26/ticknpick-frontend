@@ -121,9 +121,9 @@ export default function LivreurServiceCardPage({ profile }: { profile: UserProfi
       }
     };
 
-    const handleInputChange = (field: keyof Omit<ServiceCardData, 'special_services' | 'operating_zones' | 'specific_attributes'>, value: string | number) => {
-        setCardData(prev => prev ? { ...prev, [field]: value } : null);
-    };
+const handleInputChange = (field: keyof ServiceCardData, value: any) => {
+    setCardData(prev => prev ? { ...prev, [field]: value } : null);
+};
     
     if (isLoading || !cardData) {
         return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 text-orange-500 animate-spin" /></div>;
