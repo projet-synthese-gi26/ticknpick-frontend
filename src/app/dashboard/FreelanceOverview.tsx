@@ -312,7 +312,7 @@ export default function FreelanceOverview({
         <StatCard
           icon={DollarSign}
           title="Chiffre d'Affaires"
-          value={`${(stats?.totalRevenue ?? 0).toLocaleString('fr-FR')} FCFA`}
+          value={`${(stats?.totalEarnings ?? 0).toLocaleString('fr-FR')} FCFA`}
           description="Revenus générés par les expéditions"
           colorClass="border-green-500"
           trend={{ value: 8.3, isPositive: true }}
