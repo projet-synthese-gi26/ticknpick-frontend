@@ -65,7 +65,7 @@ interface DepotColisProps {
   onSuccess: () => void;
 }
 
-export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
+const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
