@@ -8,7 +8,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 // --- Icônes (importations existantes et nouvelles)
 import {
   Home, Package, User, LogOut, Menu, X, Users, Settings, Briefcase, Truck,
-  ArrowRightLeft, DollarSign, Bell, Search, Sun, Moon
+  ArrowRightLeft, DollarSign, Bell, Search, Sun, Moon,
+  CreditCard,
+  HandCoins
 } from 'lucide-react';
 
 // --- Import des composants pour chaque onglet ---
@@ -21,6 +23,10 @@ import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
 import TrackPackageMin from './TrackMin';
+import FreelanceOverview from './FreelanceOverview'; 
+import CreditPage from './Credit';
+import LivreurOverview from './LivreurOverview';
+import LivreurServiceCardPage from './LivreurServiceCard'; 
 
 // Pour plus de clarté, unifions les cas (majuscules)
 type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
@@ -437,7 +443,7 @@ const DashboardSwitcher: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
+  const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
   
   
 
@@ -498,6 +504,8 @@ const DashboardSwitcher: React.FC = () => {
         return [
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
           { id: 'deliveries', label: 'Mes Livraisons', icon: Truck, badge: 7 },
+          { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
+          { id: 'service-card', label: 'Carte de Service', icon: User },
           { id: 'profile', label: 'Mon Profil', icon: User },
           { id: 'settings', label: 'Paramètres', icon: Settings },
         ];
@@ -506,6 +514,8 @@ const DashboardSwitcher: React.FC = () => {
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
           { id: 'inventory', label: 'Inventaire Agence', icon: Package },
           { id: 'staff', label: 'Personnel', icon: Users },
+          { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
+          { id: 'service-card', label: 'Carte de Service', icon: User },
           { id: 'profile', label: 'Profil Agence', icon: Briefcase },
           { id: 'settings', label: 'Paramètres', icon: Settings },
         ];
@@ -514,6 +524,7 @@ const DashboardSwitcher: React.FC = () => {
         return [
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
           { id: 'inventory', label: 'Inventaire', icon: Package },
+          { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
           { id: 'profile', label: 'Profil Pro', icon: Briefcase },
           { id: 'service-card', label: 'Carte de Service', icon: User },
           { id: 'settings', label: 'Paramètres', icon: Settings },
@@ -559,20 +570,39 @@ const DashboardSwitcher: React.FC = () => {
     const accountType = userProfile.account_type.toLowerCase();
     
     switch(activeTab) {
-      case 'overview': 
+      // --- AJOUT 2: LOGIQUE DE ROUTAGE SPÉCIFIQUE ---
+      case 'overview':
+        // Si l'utilisateur est un freelance, afficher la nouvelle vue
+        if (userProfile.account_type === 'FREELANCE') {
+          return <FreelanceOverview profile={userProfile} setActiveTab={setActiveTab} />;
+        }
+
+        if (userProfile.account_type === 'LIVREUR') {
+          return <LivreurOverview profile={userProfile} setActiveTab={setActiveTab} />;
+        }
+        // Sinon, afficher la vue générique pour les autres
         return <OverviewDashboard profile={userProfile} />;
+
       case 'packages': 
         return accountType === 'client' ? <ClientPackagesPage profile={userProfile} /> : null;
       case 'deliveries': 
-        return accountType === 'livreur' ? <DeliveryPage profile={userProfile} /> : null;
+        return accountType === 'livreur' ? <DeliveryPage profile={userProfile as any} /> : null;
       case 'inventory': 
-        return ['freelance', 'agence'].includes(accountType) ? <InventoryPage /> : null;
+        return ['freelance', 'agence'].includes(accountType) ?  <InventoryPage profile={userProfile} /> : null;
       case 'staff': 
         return accountType === 'agence' ? <PersonnelPage /> : null;
       case 'service-card':
+        if (userProfile.account_type === 'LIVREUR') {
+          return <LivreurServiceCardPage profile={userProfile} />;
+        }
         return (userProfile.account_type === 'FREELANCE' || userProfile.account_type === 'AGENCY')
           ? <ServiceCardPage profile={userProfile as ProProfile} />
           : null;
+
+      case 'credit':
+      return ['freelance', 'agence', 'livreur'].includes(accountType) 
+        ? <CreditPage profile={userProfile as any} onUpdate={handleProfileUpdate} /> 
+        : null;
 
       case 'profile': 
         return <ProfilePage profile={userProfile as any} onUpdate={handleProfileUpdate} />;

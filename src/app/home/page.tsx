@@ -131,7 +131,7 @@ export default function HomePage() {
       welcomeMessage: "dans le système de gestion de votre point relais.",
       mainIcon: <MapPinHouse className='text-white h-12 w-12' />,
       services: [
-        { title: "Dépôt de colis", description: "Enregistrez un nouveau colis à expédier.", href: "/emit-package", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-500" },
+        { title: "Dépôt de colis", description: "Enregistrez un nouveau colis à expédier.", href: "/depot", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-500" },
         { title: "Retrait de colis", description: "Finalisez le retrait d'un colis arrivé.", href: "/withdraw-package", icon: <PackageOpen className="h-8 w-8 text-white" />, color: "from-amber-400 to-amber-500" },
         { title: "Mon Compte", description: "Consultez les statistiques de votre point relais.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-orange-500 to-amber-600" },
       ]

@@ -36,10 +36,14 @@ import {
   AlertCircle,
   Info,
   Route,
+  ArrowLeftIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import NavbarHome from '@/components/NavbarHome';
 import { supabase } from '@/lib/supabase'; 
+import Footer from '@/components/FooterHome';
+import router from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 interface TrackingInfo {
   trackingNumber: string;
@@ -94,7 +98,7 @@ const TrackPackagePage: React.FC = () => {
   });
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
-
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -433,6 +437,13 @@ const TrackPackagePage: React.FC = () => {
         className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-12 lg:py-16 relative z-20"
       >
         <div className="mb-8 text-center">
+          <button
+            onClick={() => router.push('/home')}
+            className="mb-4 flex items-center mx-auto text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+          >
+            <ArrowLeftIcon className="w-4 h-4 mr-2" />
+            Retour à l'accueil
+          </button>
           <div className="flex flex-col items-center">
             <motion.div 
               initial={{ scale: 0, rotate: -180 }} 
@@ -1057,6 +1068,7 @@ const TrackPackagePage: React.FC = () => {
           )}
         </AnimatePresence>
       </motion.main>
+      <Footer />
     </div>
   );
 };

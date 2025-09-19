@@ -7,10 +7,12 @@ import 'leaflet/dist/leaflet.css';
 import { 
   Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, 
   Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, 
-  AlertCircle, Car, Users, Star, Truck, Package, Shield, X, Check 
+  AlertCircle, Car, Users, Star, Truck, Package, Shield, X, Check, 
+  Home
 } from 'lucide-react';
 import router from 'next/navigation';
 import { useRouter } from 'next/navigation';
+
 
 // Interfaces corrigées et unifiées
 interface BaseProfile {
@@ -204,6 +206,7 @@ interface ProfilePageProps {
 
 export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingRelayPoint, setIsEditingRelayPoint] = useState(false); 
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isLoading, setIsLoading] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
@@ -251,6 +254,33 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       fetchRelayPoints();
     }
   }, [profile.account_type, profile.id]);
+
+    // NOUVELLE LOGIQUE : Pré-remplir les coordonnées GPS à l'initialisation et à chaque fois qu'on entre en mode édition
+  useEffect(() => {
+    // 1. Logique de géolocalisation initiale
+    if (!currentLocation) {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+                    setCurrentLocation(coords);
+                    // Si le champ GPS est vide, on le met à jour
+                    if (!(formData as ProProfile).relay_point_gps) {
+                        setFormData(prev => ({...prev, relay_point_gps: `${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}`}));
+                    }
+                },
+                () => setCurrentLocation([3.8480, 11.5021]) // Yaoundé
+            );
+        } else {
+            setCurrentLocation([3.8480, 11.5021]); // Yaoundé
+        }
+    }
+
+    // 2. Pré-remplir à chaque activation de l'édition si le champ est vide
+    if (isEditingRelayPoint && !(formData as ProProfile).relay_point_gps && currentLocation) {
+      setFormData(prev => ({...prev, relay_point_gps: `${currentLocation[0].toFixed(6)}, ${currentLocation[1].toFixed(6)}`}));
+    }
+  }, [isEditingRelayPoint, currentLocation, formData]);
 
   const fetchRelayPoints = async () => {
     try {
@@ -475,6 +505,84 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     } catch (error: any) {
       console.error('Erreur lors de l\'ajout du point relais:', error);
       showToast('Erreur lors de l\'ajout du point relais : ' + error.message, 'error');
+    }
+  };
+
+
+    // Fonction handleSaveRelayPoint MISE À JOUR ET SÉCURISÉE
+  const handleSaveRelayPoint = async () => {
+    // CORRECTION : On caste une seule fois au début pour la clarté
+    const proData = formData as ProProfile;
+    if (!(proData.account_type === 'FREELANCE' || proData.account_type === 'AGENCY')) return;
+
+    setIsLoading(true);
+    showToast('Sauvegarde en cours...', 'info');
+
+    try {
+      const { relay_point_name, relay_point_address, relay_point_gps, opening_hours, storage_capacity } = proData;
+
+      // CORRECTION : Validation sur les données de `formData` et non d'une variable locale
+      if (!relay_point_name || !relay_point_address || !relay_point_gps) {
+        throw new Error("Le nom, l'adresse et les coordonnées GPS sont requis.");
+      }
+      
+      const gpsParts = relay_point_gps.split(',');
+      if (gpsParts.length !== 2 || isNaN(parseFloat(gpsParts[0])) || isNaN(parseFloat(gpsParts[1]))) {
+        throw new Error("Format GPS invalide. Utilisez 'latitude,longitude'.");
+      }
+      
+      const lat = parseFloat(gpsParts[0].trim());
+      const lng = parseFloat(gpsParts[1].trim());
+
+      const relayPointPayload = {
+        name: relay_point_name,
+        address: relay_point_address,
+        quartier: relay_point_address, 
+        lat,
+        lng,
+        hours: opening_hours,
+        type: 'agence' as const, 
+        agency_id: profile.id
+      };
+
+      const { data: existingRelay, error: checkError } = await supabase
+        .from('relay_points')
+        .select('id')
+        .eq('agency_id', profile.id)
+        .maybeSingle();
+      
+      if (checkError) throw checkError;
+
+      if (existingRelay) {
+        const { error: updateError } = await supabase.from('relay_points').update(relayPointPayload).eq('agency_id', profile.id);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase.from('relay_points').insert(relayPointPayload);
+        if (insertError) throw insertError;
+      }
+
+      // NOUVELLE LOGIQUE : Mettre à jour `profiles_pro` APRÈS avoir géré `relay_points`
+      const { error: profileUpdateError } = await supabase
+        .from('profiles_pro')
+        .update({
+          relay_point_name,
+          relay_point_address,
+          relay_point_gps,
+          opening_hours,
+          storage_capacity
+        })
+        .eq('id', profile.id);
+        
+      if (profileUpdateError) throw profileUpdateError;
+
+      showToast('Point relais mis à jour avec succès !', 'success');
+      setIsEditingRelayPoint(false);
+      onUpdate();
+
+    } catch (error: any) {
+      showToast(error.message, 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -976,13 +1084,49 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
           </div>
         )}
 
-        {/* Section Point Relais pour PRO */}
+        {/* Section Point Relais pour PRO - VERSION CORRIGÉE */}
         {(profile.account_type === 'FREELANCE' || profile.account_type === 'AGENCY') && (
-          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 hover:shadow-2xl transition-all duration-300">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <Building className="w-6 h-6 text-orange-500" />
-              {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
-            </h3>
+          <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100">
+            <div className="flex items-center justify-between mb-6">
+              {/* Titre et boutons d'édition */}
+               <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <Building className="w-6 h-6 text-orange-500" />
+                    {profile.account_type === 'AGENCY' ? 'Point Relais Principal' : 'Mon Point Relais'}
+                </h3>
+                {/* Les boutons d'édition sont maintenant ici */}
+                <div>
+                  {!isEditingRelayPoint ? (
+                      <button
+                          onClick={() => setIsEditingRelayPoint(true)}
+                          className="flex items-center gap-2 font-semibold py-2 px-4 rounded-lg text-orange-600 bg-orange-100 hover:bg-orange-200 transition-all text-sm"
+                      >
+                          <Edit className="w-4 h-4" />
+                          Modifier
+                      </button>
+                  ) : (
+                      <div className="flex gap-2">
+                          <button
+                              onClick={handleSaveRelayPoint}
+                              disabled={isLoading}
+                              className="flex items-center gap-2 font-semibold py-2 px-4 rounded-lg text-white bg-green-500 hover:bg-green-600 transition-all text-sm"
+                          >
+                              {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4" />}
+                              Sauvegarder
+                          </button>
+                          <button
+                              onClick={() => {
+                                  setIsEditingRelayPoint(false);
+                                  setFormData(profile); // Annuler les changements
+                              }}
+                              className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                          >
+                              <X className="w-4 h-4" />
+                          </button>
+                      </div>
+                  )}
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
               <div className="space-y-6">
                 {(() => {
@@ -994,7 +1138,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                         name="relay_point_name" 
                         value={proData.relay_point_name} 
                         onChange={handleChange} 
-                        readOnly={!isEditing} 
+                        readOnly={!isEditingRelayPoint} // CORRECTION FINALE ICI
                         icon={Building} 
                         focused={focusedField === 'relay_point_name'} 
                         onFocus={() => setFocusedField('relay_point_name')} 
@@ -1005,10 +1149,21 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                         name="relay_point_address" 
                         value={proData.relay_point_address} 
                         onChange={handleChange} 
-                        readOnly={!isEditing} 
+                        readOnly={!isEditingRelayPoint} // CORRECTION FINALE ICI
                         icon={MapPin} 
                         focused={focusedField === 'relay_point_address'} 
                         onFocus={() => setFocusedField('relay_point_address')} 
+                        onBlur={() => setFocusedField(null)} 
+                      />
+                       <AnimatedInputField
+                        label="Coordonnées GPS (lat,lng)"
+                        name="relay_point_gps"
+                        value={proData.relay_point_gps}
+                        onChange={handleChange}
+                        readOnly={!isEditingRelayPoint} // CORRECTION FINALE ICI
+                        icon={Globe}
+                        focused={focusedField === 'relay_point_gps'}
+                        onFocus={() => setFocusedField('relay_point_gps')}
                         onBlur={() => setFocusedField(null)} 
                       />
                       <AnimatedInputField 
@@ -1016,37 +1171,54 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
                         name="opening_hours" 
                         value={proData.opening_hours} 
                         onChange={handleChange} 
-                        readOnly={!isEditing} 
+                        readOnly={!isEditingRelayPoint} // CORRECTION FINALE ICI
                         icon={Calendar} 
                         focused={focusedField === 'opening_hours'} 
                         onFocus={() => setFocusedField('opening_hours')} 
                         onBlur={() => setFocusedField(null)} 
                       />
+                       <AnimatedInputField
+                          label="Capacité de Stockage"
+                          name="storage_capacity"
+                          value={proData.storage_capacity}
+                          onChange={handleChange}
+                          readOnly={!isEditingRelayPoint} // CORRECTION FINALE ICI
+                          icon={Package}
+                          focused={focusedField === 'storage_capacity'}
+                          onFocus={() => setFocusedField('storage_capacity')}
+                          onBlur={() => setFocusedField(null)} 
+                          isSelect
+                          options={[
+                              {value: "Petit", label: "Petit (< 50 colis)"},
+                              {value: "Moyen", label: "Moyen (50-200 colis)"},
+                              {value: "Grand", label: "Grand (> 200 colis)"}
+                          ]}
+                        />
                     </>
                   );
                 })()}
-                {currentLocation && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 bg-orange-50 p-3 rounded-lg">
-                    <MapPin className="w-4 h-4 text-orange-500" />
-                    <span>Position: {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}</span>
-                  </div>
-                )}
-              </div>
-              <div className="h-80 rounded-2xl overflow-hidden shadow-lg border-2 border-orange-100 hover:border-orange-300 transition-all duration-300">
-                {currentLocation ? (
-                  <ProfileMap position={currentLocation} />
-                ) : (
-                  <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50">
-                    <div className="text-center">
-                      <MapPin className="w-12 h-12 text-orange-400 mx-auto mb-2" />
-                      <p className="text-gray-500">Localisation en cours...</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+        {currentLocation && (
+          <div className="flex items-center gap-2 text-sm text-gray-600 bg-orange-50 p-3 rounded-lg">
+            <MapPin className="w-4 h-4 text-orange-500" />
+            <span>Position: {currentLocation[0].toFixed(4)}, {currentLocation[1].toFixed(4)}</span>
+          </div>
+        )}
+      </div>
+      <div className="h-80 rounded-2xl overflow-hidden shadow-lg border-2 border-orange-100 hover:border-orange-300 transition-all duration-300">
+        {currentLocation ? (
+          <ProfileMap position={currentLocation} />
+        ) : (
+          <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-50 to-amber-50">
+            <div className="text-center">
+              <MapPin className="w-12 h-12 text-orange-400 mx-auto mb-2" />
+              <p className="text-gray-500">Localisation en cours...</p>
             </div>
           </div>
         )}
+      </div>
+    </div>
+  </div>
+)}
 
         {/* Section Points Relais Multiples pour Agences */}
         {profile.account_type === 'AGENCY' && (

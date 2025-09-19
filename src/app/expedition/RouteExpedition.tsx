@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { supabase } from '@/lib/supabase';
 
 // Réutiliser vos données de points relais
 import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER } from '../emit-package/RelaisData';
@@ -69,6 +70,7 @@ const haversineDistance = ([lat1, lon1]: [number, number], [lat2, lon2]: [number
 
 export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectionStepProps) {
   const [selectionMode, setSelectionMode] = useState<'origin' | 'destination'>('origin');
+  const [allRelayPoints, setAllRelayPoints] = useState<PointRelais[]>([]);
   const [routeData, setRouteData] = useState<RouteData>({
     departurePointId: null,
     arrivalPointId: null,
@@ -77,27 +79,37 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
     distanceKm: 0
   });
   const [travelPrice, setTravelPrice] = useState(0);
+  const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [filteredPoints, setFilteredPoints] = useState(yaoundePointsRelais);
+  const [filteredPoints, setFilteredPoints] = useState<PointRelais[]>([]); 
   const [mapRef, setMapRef] = useState<any>(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null);
   
   // Ajout d'un flag pour éviter les re-renders multiples
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Filtrage des points relais selon la recherche
+  // --- CHANGEMENT N°3 : Remplacer l'ancien `useEffect` par un appel à Supabase ---
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredPoints(yaoundePointsRelais);
-    } else {
-      const filtered = yaoundePointsRelais.filter(point =>
-        point.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        point.quartier.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredPoints(filtered);
-    }
-  }, [searchQuery]);
+    const fetchRelayPoints = async () => {
+        setIsLoadingPoints(true);
+        const { data, error } = await supabase
+            .from('relay_points')
+            .select('*');
+
+        if (error) {
+            console.error("Erreur lors de la récupération des points relais:", error);
+            // Vous pourriez gérer l'erreur ici, par exemple en affichant un message.
+        } else {
+            setAllRelayPoints(data as PointRelais[]);
+            setFilteredPoints(data as PointRelais[]); // Initialise les points filtrés avec tous les points
+        }
+        setIsLoadingPoints(false);
+    };
+
+    fetchRelayPoints();
+  }, []); // Le tableau de dépendances est vide pour n'exécuter qu'une seule fois au montage
+
 
   // Ajouter les marqueurs sur la carte
   useEffect(() => {
@@ -194,19 +206,14 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
       });
 
       // Gérer les clics sur les points
-      const handlePointClick = (e: any) => {
-        const features = mapRef.queryRenderedFeatures(e.point, {
-          layers: ['points-relais']
-        });
-
+    const handlePointClick = (e: any) => {
+        const features = mapRef.queryRenderedFeatures(e.point, { layers: ['points-relais'] });
         if (features.length > 0) {
-          const pointId = features[0].properties.id;
-          const point = yaoundePointsRelais.find(p => p.id === pointId);
-          if (point) {
-            handlePointSelect(point);
-          }
+            const pointId = features[0].properties.id;
+            const point = allRelayPoints.find(p => p.id === pointId); // Cherche dans les données de la DB
+            if (point) handlePointSelect(point);
         }
-      };
+    };
 
       mapRef.on('click', 'points-relais', handlePointClick);
 
@@ -232,7 +239,7 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
     } catch (error) {
       console.error('Erreur lors de l\'ajout des couches de la carte:', error);
     }
-  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId, isInitialized]);
+  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId, isInitialized, isLoadingPoints, allRelayPoints]);
 
   // Dessiner l'itinéraire
   useEffect(() => {
@@ -251,14 +258,14 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
       return;
     }
 
-    const originPoint = yaoundePointsRelais.find(p => p.id === routeData.departurePointId);
-    const destinationPoint = yaoundePointsRelais.find(p => p.id === routeData.arrivalPointId);
+    const originPoint = allRelayPoints.find(p => p.id === routeData.departurePointId);
+    const destinationPoint = allRelayPoints.find(p => p.id === routeData.arrivalPointId);
 
     if (originPoint && destinationPoint) {
       // Utiliser l'API de routing (exemple avec OSRM ou MapBox)
       fetchRoute(originPoint, destinationPoint);
     }
-  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId]);
+  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId, allRelayPoints]);
 
   const fetchRoute = async (origin: PointRelais, destination: PointRelais) => {
     try {
@@ -407,7 +414,7 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
         return;
       }
       
-      const originPoint = yaoundePointsRelais.find(p => p.id === routeData.departurePointId);
+      const originPoint = allRelayPoints.find(p => p.id === routeData.departurePointId);
       if (originPoint) {
         const distance = haversineDistance(
           [originPoint.lat, originPoint.lng],

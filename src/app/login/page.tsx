@@ -148,7 +148,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   PicknDrop
                 </span>
                 <span className="block text-4xl font-bold text-orange-600 mt-2">
-                  Point
+                  Link
                 </span>
               </h1>
               <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed">

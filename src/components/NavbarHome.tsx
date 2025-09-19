@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Package, Menu, X } from 'lucide-react';
+import { Package, Menu, X, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function NavbarHome() {
@@ -68,16 +68,28 @@ export default function NavbarHome() {
               Retrouver mon colis
             </Link>
             <Link 
+              href="/pricing" 
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
+            >
+              Grille tarifaire
+            </Link>
+           <Link 
+              href="/marketplace" 
+              className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
+            >
+              Marketplace
+            </Link>
+            <Link 
               href="#how-it-works" 
               className="text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors"
             >
-              Comment ça marche
+              Aide
             </Link>
             <Link 
               href="/login" 
               className="bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 font-bold px-5 py-2 rounded-full hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
             >
-              Espace PRO
+              Mon compte PicknDrop
             </Link>
           </nav>
 
@@ -123,12 +135,33 @@ export default function NavbarHome() {
               >
                 Comment ça marche
               </Link>
+                <Link 
+                href="/pricing" 
+                onClick={() => setIsOpen(false)} 
+                className="text-gray-700 dark:text-gray-300 font-semibold text-lg hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                Tarif
+              </Link>
+              <Link 
+                href="/track-package" 
+                onClick={() => setIsOpen(false)} 
+                className="text-gray-700 dark:text-gray-300 font-semibold text-lg hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                Retrouver mon colis
+              </Link>
+              <Link 
+                href="/marketplace" 
+                onClick={() => setIsOpen(false)} 
+                className="text-gray-700 dark:text-gray-300 font-semibold text-lg hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                Marketplace
+              </Link>
               <Link 
                 href="/login" 
                 onClick={() => setIsOpen(false)} 
                 className="bg-orange-500 dark:bg-orange-600 hover:bg-orange-600 dark:hover:bg-orange-700 text-white font-bold w-full text-center py-3 rounded-full mt-2 transition-colors"
               >
-                Devenir PRO
+                Mon compte PicknDrop
               </Link>
             </div>
           </motion.div>
