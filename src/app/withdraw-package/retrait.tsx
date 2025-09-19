@@ -109,7 +109,7 @@ const handleSearchPackage = async (value?: string) => {
             isInsured: shipment.is_insured,
             declaredValue: String(shipment.declared_value || ''),
             status: statusMap[shipment.status],
-            isPaid: shipment.is_paid_at_departure || shipment.amount_paid != null,
+            is_paid_at_departure: shipment.is_paid_at_departure, // <-- Ligne corrigée
             shippingCost: String(shipment.shipping_cost),
         };
         setPackageInfo(formattedPackage);
