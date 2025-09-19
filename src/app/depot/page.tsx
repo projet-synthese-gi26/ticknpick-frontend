@@ -65,7 +65,7 @@ interface DepotColisProps {
   onSuccess: () => void;
 }
 
-const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
+export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -845,5 +845,3 @@ const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
     </div>
   );
 };
-
-export default DepotColis;
