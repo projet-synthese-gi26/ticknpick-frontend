@@ -516,7 +516,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     if (!(proData.account_type === 'FREELANCE' || proData.account_type === 'AGENCY')) return;
 
     setIsLoading(true);
-    showToast('Sauvegarde en cours...', 'info');
+    showToast('Sauvegarde en cours...', 'warning');
 
     try {
       const { relay_point_name, relay_point_address, relay_point_gps, opening_hours, storage_capacity } = proData;
