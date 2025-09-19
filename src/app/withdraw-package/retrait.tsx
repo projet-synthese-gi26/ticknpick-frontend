@@ -48,7 +48,7 @@ const cardVariants: Variants = {
 };
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "PicknDrop Link";
 
-export const WithdrawPackagePage({ onClose, onSuccess }: WithdrawPackageProps) {
+export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps) => {
   const [searchInput, setSearchInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [packageInfo, setPackageInfo] = useState<PackageInfo | null>(null);
