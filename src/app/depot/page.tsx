@@ -65,7 +65,7 @@ interface DepotColisProps {
   onSuccess: () => void;
 }
 
-const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
+export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -243,7 +243,7 @@ const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
         // await supabase.from('deposit_logs').insert({ shipment_id: selectedShipment.id, ...userInfo });
 
         await generateBordereau();
-        onSuccess();
+        onSuccess?.();
         
         // Réinitialisation après succès
         setSelectedShipment(null);

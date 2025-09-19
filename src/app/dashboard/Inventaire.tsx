@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { UserProfile } from './page';
 import { motion, AnimatePresence } from 'framer-motion';
-import DepotColis from '../depot/page';
+import { DepotColis } from '../depot/page';
 import WithdrawPackagePage from '../withdraw-package/page';
 
 // --- TYPES ---
