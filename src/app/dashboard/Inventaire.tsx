@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import type { UserProfile } from './page';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DepotColis } from '../depot/depot';
-import WithdrawPackagePage from '../withdraw-package/retrait';
+import { WithdrawPackagePage } from '../withdraw-package/retrait';
 
 // --- TYPES ---
 type ParcelStatus = 'En attente de dépôt' | 'En stock' | 'Retiré' | 'En transit' | 'Au départ';

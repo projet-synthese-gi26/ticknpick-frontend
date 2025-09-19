@@ -424,7 +424,7 @@ export default function DeliveryPage({ profile }: { profile: UserProfile }) {
   const completedDeliveries = shipments.filter(shipment => shipment.status === 'LIVRE' || shipment.status === 'RECU');
 
   const filteredShipments = (() => {
-    let targetShipments = [];
+    let targetShipments: Shipment[] = [];
     switch (activeTab) {
       case 'active':
         targetShipments = myDeliveries;
