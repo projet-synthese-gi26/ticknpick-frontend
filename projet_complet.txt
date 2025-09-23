@@ -27036,6 +27036,2288 @@ export default function MarketplacePage() {
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\page.tsx
+================================================================================
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { Loader2 } from 'lucide-react';
+
+import Sidebar, { SuperAdminProfile } from './Sidebar';
+import Overview from './Overview';
+import UserManagement from './UserManagement';
+import OperationsManagement from './OperationManagement';
+import FinanceManagement from './FinanceManagement';
+
+export default function SuperAdminDashboardPage() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isLoading, setIsLoading] = useState(true); // Set to true initially
+  const [profile, setProfile] = useState<SuperAdminProfile | null>(null);
+
+  useEffect(() => {
+    // Set profile and then set loading to false
+    setProfile({
+      name: 'Super Admin PicknDrop',
+      email: 'superadmin@pickndrop.com',
+      avatarUrl: '/avatars/default.png'
+    });
+    setIsLoading(false);
+  }, []);
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return <Overview />;
+      case 'users':
+        return <UserManagement />;
+      case 'operations':
+        return <OperationsManagement />;
+      case 'finance':
+        return <FinanceManagement />;
+      default:
+        return <Overview />;
+    }
+  };
+
+  // Show loading spinner while profile is being set
+  if (isLoading || !profile) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex">
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        profile={profile}
+      />
+      <main className="flex-1 lg:ml-64 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          {renderContent()}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\Overview.tsx
+================================================================================
+
+// src/app/superadmin/Overview.tsx
+
+'use client';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { motion } from 'framer-motion';
+import { DollarSign, Package, Users, UserPlus, BarChart, Clock, List, User, Loader2 } from 'lucide-react';
+import { Bar, Line, Pie } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  ChartData,
+  ChartOptions
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale, LinearScale, BarElement, PointElement, LineElement,
+  ArcElement, Title, Tooltip, Legend
+);
+
+// Interfaces pour les données
+interface Stats {
+  totalShipments: number;
+  totalRevenue: number;
+  totalUsers: number;
+  newSignups: number;
+}
+interface Activity {
+  type: 'shipment' | 'user' | 'withdrawal';
+  description: string;
+  timestamp: string;
+}
+
+// Sous-composant StatCard
+const StatCard = ({ title, value, icon: Icon }: { title: string; value: string | number; icon: React.ElementType }) => (
+  <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex items-center space-x-4">
+    <div className="bg-orange-100 p-3 rounded-full">
+      <Icon className="h-6 w-6 text-orange-600" />
+    </div>
+    <div>
+      <p className="text-sm font-medium text-gray-500">{title}</p>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  </div>
+);
+
+export default function Overview() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statusChartData, setStatusChartData] = useState<ChartData<'pie'> | null>(null);
+  const [revenueChartData, setRevenueChartData] = useState<ChartData<'line'> | null>(null);
+  const [activityFeed, setActivityFeed] = useState<Activity[]>([]);
+  const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month'>('today');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Définir la plage de dates pour les KPIs
+        const now = new Date();
+        let startDate: Date;
+
+        if (timeframe === 'today') {
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+        } else if (timeframe === 'week') {
+            startDate = new Date(now.setDate(now.getDate() - now.getDay()));
+            startDate.setHours(0, 0, 0, 0);
+        } else { // month
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        }
+
+        const startDateISO = startDate.toISOString();
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+        // Requêtes parallèles pour les KPIs
+        const [
+          shipmentsRes,
+          revenueRes,
+          profilesCount,
+          profilesProCount,
+          newProfilesCount,
+          newProfilesProCount,
+          statusData,
+          revenueData,
+          latestShipments,
+          latestUsers
+        ] = await Promise.all([
+          supabase.from('shipments').select('shipping_cost', { count: 'exact', head: false }).gte('created_at', startDateISO),
+          supabase.rpc('get_daily_revenue_last_30_days'),
+          supabase.from('profiles').select('id', { count: 'exact' }),
+          supabase.from('profiles_pro').select('id', { count: 'exact' }),
+          supabase.from('profiles').select('id', { count: 'exact' }).gte('created_at', twentyFourHoursAgo),
+          supabase.from('profiles_pro').select('id', { count: 'exact' }).gte('created_at', twentyFourHoursAgo),
+          supabase.rpc('get_shipment_status_counts'),
+          supabase.rpc('get_daily_revenue_last_30_days'),
+          supabase.from('shipments').select('tracking_number, recipient_name, created_at').order('created_at', { ascending: false }).limit(3),
+          supabase.from('profiles_pro').select('manager_name, account_type, created_at').order('created_at', { ascending: false }).limit(2)
+        ]);
+
+        // KPIs
+        const totalRevenue = shipmentsRes.data?.reduce((sum, item) => sum + (item.shipping_cost || 0), 0) || 0;
+        setStats({
+          totalShipments: shipmentsRes.count ?? 0,
+          totalRevenue: totalRevenue,
+          totalUsers: (profilesCount.count ?? 0) + (profilesProCount.count ?? 0),
+          newSignups: (newProfilesCount.count ?? 0) + (newProfilesProCount.count ?? 0)
+        });
+
+        // Graphique de statut
+        if (statusData.data) {
+          const labels = statusData.data.map((item: any) => item.status);
+          const data = statusData.data.map((item: any) => item.count);
+          setStatusChartData({
+            labels,
+            datasets: [{
+              label: 'Nombre de colis',
+              data,
+              backgroundColor: ['#FDBA74', '#60A5FA', '#818CF8', '#A78BFA', '#34D399'],
+            }]
+          });
+        }
+        
+        // Graphique de revenus
+        if (revenueData.data) {
+          const labels = revenueData.data.map((d: any) => new Date(d.day).toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' }));
+          const data = revenueData.data.map((d: any) => d.total_revenue);
+          setRevenueChartData({
+            labels,
+            datasets: [{
+              label: 'Revenus journaliers (FCFA)',
+              data,
+              borderColor: '#F97316',
+              backgroundColor: 'rgba(249, 115, 22, 0.1)',
+              fill: true,
+              tension: 0.3
+            }]
+          });
+        }
+
+        // Flux d'activité
+        const activities: Activity[] = [];
+        latestShipments.data?.forEach(s => activities.push({
+            type: 'shipment',
+            description: `Colis ${s.tracking_number} créé pour ${s.recipient_name}.`,
+            timestamp: s.created_at
+        }));
+        latestUsers.data?.forEach(u => activities.push({
+            type: 'user',
+            description: `Nouvel utilisateur ${u.account_type}: ${u.manager_name}.`,
+            timestamp: u.created_at
+        }));
+        
+        setActivityFeed(activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+
+      } catch (error) {
+        console.error("Erreur de chargement de la vue d'ensemble:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [timeframe]);
+  
+  if (isLoading) {
+    return <div className="text-center p-8"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>;
+  }
+
+  const chartOptions: ChartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+          legend: { position: 'bottom' as const }
+      }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-gray-800">Vue d'ensemble</h1>
+        <div className="flex space-x-1 bg-gray-200 p-1 rounded-lg">
+          {(['today', 'week', 'month'] as const).map(tf => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${
+                timeframe === tf ? 'bg-white shadow' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {tf === 'today' ? "Auj." : tf === 'week' ? 'Semaine' : 'Mois'}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Colis Expédiés" value={stats?.totalShipments ?? 0} icon={Package} />
+        <StatCard title="Revenus Générés" value={`${(stats?.totalRevenue ?? 0).toLocaleString()} FCFA`} icon={DollarSign} />
+        <StatCard title="Utilisateurs Totaux" value={stats?.totalUsers ?? 0} icon={Users} />
+        <StatCard title="Nouveaux Inscrits (24h)" value={stats?.newSignups ?? 0} icon={UserPlus} />
+      </div>
+
+      {/* Graphiques */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <h2 className="font-bold text-lg mb-4">Revenus des 30 derniers jours</h2>
+          <div className="h-72">
+            {revenueChartData && <Line data={revenueChartData} options={chartOptions as any} />}
+          </div>
+        </div>
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <h2 className="font-bold text-lg mb-4">Répartition des Colis par Statut</h2>
+          <div className="h-72">
+            {statusChartData && <Pie data={statusChartData} options={chartOptions as any} />}
+          </div>
+        </div>
+      </div>
+
+      {/* Flux d'activité */}
+      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <h2 className="font-bold text-lg mb-4">Flux d'Activité Récent</h2>
+          <div className="space-y-4">
+              {activityFeed.map((activity, index) => (
+                  <div key={index} className="flex items-start space-x-3 pb-2 border-b last:border-b-0">
+                      <div className="bg-gray-100 p-2 rounded-full mt-1">
+                          {activity.type === 'shipment' && <Package className="w-4 h-4 text-gray-600" />}
+                          {activity.type === 'user' && <User className="w-4 h-4 text-gray-600" />}
+                      </div>
+                      <div>
+                          <p className="text-sm text-gray-800">{activity.description}</p>
+                          <p className="text-xs text-gray-500">{new Date(activity.timestamp).toLocaleString('fr-FR')}</p>
+                      </div>
+                  </div>
+              ))}
+          </div>
+      </div>
+    </motion.div>
+  );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\Sidebar.tsx
+================================================================================
+
+// src/app/superadmin/Sidebar.tsx
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { 
+  LayoutDashboard, 
+  Users, 
+  Package, 
+  DollarSign,
+  LogOut,
+  ShieldCheck,
+  Loader2
+} from 'lucide-react';
+
+export interface SuperAdminProfile {
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+const navigationItems: NavItem[] = [
+  { id: 'overview', label: "Vue d'ensemble", icon: LayoutDashboard },
+  { id: 'users', label: "Gestion Utilisateurs", icon: Users },
+  { id: 'operations', label: "Opérations", icon: Package },
+  { id: 'finance', label: "Finances", icon: DollarSign },
+];
+
+interface SidebarProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  profile: SuperAdminProfile;
+}
+
+export default function Sidebar({ activeTab, setActiveTab, profile }: SidebarProps) {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
+  };
+
+    // CORRECTION: Ajout d'une protection. Si le profil n'est pas encore là, on affiche un état de chargement léger.
+  if (!profile) {
+      return (
+        <aside className="fixed top-0 left-0 z-40 w-64 h-screen bg-white shadow-xl flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+        </aside>
+      );
+  }
+
+  return (
+    <aside className="fixed top-0 left-0 z-40 w-64 h-screen bg-white shadow-xl flex flex-col transition-transform -translate-x-full lg:translate-x-0">
+      {/* Header Sidebar */}
+      <div className="p-4 border-b flex items-center gap-3">
+        <Link href="/home" className="flex items-center space-x-2 group">
+          <div className="bg-orange-500 p-2 rounded-lg">
+              <Package className="w-6 h-6 text-white" />
+          </div>
+          <span className="text-xl font-bold text-gray-800">PicknDrop</span>
+        </Link>
+      </div>
+
+      <div className="flex flex-col flex-1">
+        {/* Navigation */}
+        <nav className="flex-1 px-2 py-4">
+          {navigationItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex items-center w-full px-4 py-3 rounded-lg text-sm font-semibold transition-colors duration-200 ${
+                activeTab === item.id 
+                  ? 'bg-orange-100 text-orange-700' 
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <item.icon className="h-5 w-5 mr-3" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        
+        {/* Footer Sidebar */}
+        <div className="p-4 border-t">
+            <div className="p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-200 rounded-full flex items-center justify-center ring-2 ring-white">
+                        <ShieldCheck className="h-5 w-5 text-orange-600"/>
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-gray-900">{profile.name}</p>
+                        <p className="text-xs text-gray-500">{profile.email}</p>
+                    </div>
+                </div>
+            </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full px-4 py-3 mt-4 rounded-lg text-sm font-semibold text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
+            <LogOut className="h-5 w-5 mr-3" />
+            Déconnexion
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\UserManagement.tsx
+================================================================================
+
+// src/app/superadmin/UserManagement.tsx
+
+'use client';
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Users, Search, Filter, Loader2, MoreVertical, X, Eye, Edit, UserX, UserCheck, AlertCircle, Inbox, CheckCircle, ShieldQuestion } from 'lucide-react';
+
+// Interfaces pour typer nos données
+interface User {
+    id: string;
+    manager_name: string;
+    email: string;
+    account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+    phone_number: string;
+    created_at: string;
+    status: 'ACTIVE' | 'SUSPENDED';
+    validation_status?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Ajouté
+    // Inclure les champs de documents pour la validation
+    id_card_urls?: { front: string; back: string } | null;
+    niu_document_url?: string | null;
+    driving_license_front_url?: string | null;
+}
+
+const ITEMS_PER_PAGE = 10;
+
+// Sous-composant : UserDetailsModal
+const UserDetailsModal = ({ user, onClose }: { user: User; onClose: () => void }) => (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4">{user.manager_name}</h3>
+            <p><strong>ID:</strong> {user.id}</p>
+            <p><strong>Email:</strong> {user.email}</p>
+            <p><strong>Téléphone:</strong> {user.phone_number}</p>
+            <p><strong>Type:</strong> {user.account_type}</p>
+            <p><strong>Statut:</strong> {user.status}</p>
+            <p><strong>Inscrit le:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
+            {/* Ici on pourrait afficher les autres détails de profil */}
+            <button onClick={onClose} className="mt-4 bg-gray-200 px-4 py-2 rounded">Fermer</button>
+        </motion.div>
+    </motion.div>
+);
+
+// --- COMPOSANT PRINCIPAL ---
+export default function UserManagement() {
+    const [activeView, setActiveView] = useState<'all' | 'pending'>('all');
+    const [users, setUsers] = useState<User[]>([]);
+    const [pendingUsers, setPendingUsers] = useState<User[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterType, setFilterType] = useState('ALL');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalUsers, setTotalUsers] = useState(0);
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+    // Fonction pour récupérer les utilisateurs en attente de validation
+    const fetchPendingUsers = useCallback(async () => {
+        setIsLoading(true);
+        const { data, error } = await supabase.from('profiles_pro')
+            .select('*')
+            .eq('validation_status', 'PENDING');
+        if (error) setError("Erreur lors de la récupération des validations.");
+        else setPendingUsers(data as User[]);
+        setIsLoading(false);
+    }, []);
+
+    // Fonction pour récupérer les utilisateurs paginés via la fonction RPC
+    const fetchUsers = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+
+        const { data: countData, error: countError } = await supabase
+            .from('profiles')
+            .select('id', { count: 'exact' }); // Simplification pour le total
+        const { data: countProData, error: countProError } = await supabase
+            .from('profiles_pro')
+            .select('id', { count: 'exact' });
+        
+        if (countError || countProError) {
+             setError("Erreur de comptage des utilisateurs");
+        } else {
+             setTotalUsers((countData?.length || 0) + (countProData?.length || 0));
+        }
+
+        const { data, error } = await supabase.rpc('search_all_users', {
+            search_term: searchTerm,
+            filter_type: filterType,
+            page_limit: ITEMS_PER_PAGE,
+            page_offset: (currentPage - 1) * ITEMS_PER_PAGE
+        });
+
+        if (error) {
+            setError("Impossible de charger les utilisateurs.");
+            console.error(error);
+        } else {
+            setUsers(data as User[]);
+        }
+        setIsLoading(false);
+    }, [searchTerm, filterType, currentPage]);
+
+    useEffect(() => {
+        if (activeView === 'all') {
+            fetchUsers();
+        } else {
+            fetchPendingUsers();
+        }
+    }, [activeView, fetchUsers, fetchPendingUsers]);
+    
+    // Déclencher une nouvelle recherche avec un délai pour ne pas surcharger la DB
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setCurrentPage(1); // Revenir à la première page lors d'une nouvelle recherche
+            if (activeView === 'all') fetchUsers();
+        }, 500); // 500ms de délai
+        return () => clearTimeout(handler);
+    }, [searchTerm, filterType, fetchUsers, activeView]);
+
+    const handleUpdateUserStatus = async (user: User, newStatus: 'ACTIVE' | 'SUSPENDED') => {
+        const table = ['CLIENT', 'LIVREUR'].includes(user.account_type) ? 'profiles' : 'profiles_pro';
+        const { error } = await supabase.from(table).update({ status: newStatus }).eq('id', user.id);
+        if (error) alert("Erreur lors de la mise à jour du statut.");
+        else fetchUsers(); // Recharger les données
+    };
+
+    const handleValidation = async (userId: string, decision: 'APPROVED' | 'REJECTED') => {
+        const { error } = await supabase.from('profiles_pro').update({ validation_status: decision }).eq('id', userId);
+        if(error) alert(`Erreur lors de la ${decision === 'APPROVED' ? 'validation' : 'rejet'}.`);
+        else fetchPendingUsers();
+    };
+
+    const totalPages = Math.ceil(totalUsers / ITEMS_PER_PAGE);
+
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-gray-800">Gestion des Utilisateurs</h1>
+
+            <div className="flex border-b">
+                <button onClick={() => setActiveView('all')} className={`py-2 px-4 font-semibold ${activeView === 'all' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}>Tous les utilisateurs</button>
+                <button onClick={() => setActiveView('pending')} className={`py-2 px-4 font-semibold relative ${activeView === 'pending' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}>
+                    File de validation
+                    {pendingUsers.length > 0 && <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{pendingUsers.length}</span>}
+                </button>
+            </div>
+
+            <AnimatePresence mode="wait">
+                {activeView === 'all' ? (
+                    <motion.div key="all-users" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <div className="flex flex-col md:flex-row gap-4 mb-4">
+                            <input type="text" placeholder="Rechercher (nom, email...)" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-grow p-2 border rounded"/>
+                            <select value={filterType} onChange={e => setFilterType(e.target.value)} className="p-2 border rounded">
+                                <option value="ALL">Tous les types</option>
+                                <option value="CLIENT">Client</option>
+                                <option value="LIVREUR">Livreur</option>
+                                <option value="FREELANCE">Freelance</option>
+                                <option value="AGENCY">Agence</option>
+                            </select>
+                        </div>
+                        {isLoading && <Loader2 className="animate-spin mx-auto" />}
+                        {error && <p className="text-red-500">{error}</p>}
+                        
+                        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                           {/* Tableau des utilisateurs */}
+                           {/* (code du tableau ci-dessous) */}
+                           <table className="w-full text-sm text-left text-gray-500">
+                              <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                                  <tr>
+                                      <th className="px-6 py-3">Nom</th>
+                                      <th className="px-6 py-3">Type</th>
+                                      <th className="px-6 py-3">Inscription</th>
+                                      <th className="px-6 py-3">Statut</th>
+                                      <th className="px-6 py-3">Actions</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  {users.map(user => (
+                                      <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
+                                          <td className="px-6 py-4 font-medium text-gray-900">
+                                              {user.manager_name}<br/>
+                                              <span className="text-gray-400 font-normal">{user.email}</span>
+                                          </td>
+                                          <td className="px-6 py-4">{user.account_type}</td>
+                                          <td className="px-6 py-4">{new Date(user.created_at).toLocaleDateString()}</td>
+                                          <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded-full text-xs ${user.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{user.status}</span>
+                                          </td>
+                                          <td className="px-6 py-4 flex gap-2">
+                                              <button onClick={() => setSelectedUser(user)} className="text-blue-500"><Eye size={16} /></button>
+                                              <button className="text-green-500"><Edit size={16} /></button>
+                                              {user.status === 'ACTIVE' 
+                                                ? <button onClick={() => handleUpdateUserStatus(user, 'SUSPENDED')} className="text-red-500"><UserX size={16} /></button> 
+                                                : <button onClick={() => handleUpdateUserStatus(user, 'ACTIVE')} className="text-yellow-500"><UserCheck size={16} /></button>}
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                        </div>
+                        {/* Pagination */}
+                        <div className="flex justify-between items-center mt-4">
+                            <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1}>Précédent</button>
+                            <span>Page {currentPage} sur {totalPages}</span>
+                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages}>Suivant</button>
+                        </div>
+                    </motion.div>
+                ) : (
+                    <motion.div key="pending-users" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {/* Section pour la file de validation */}
+                         {isLoading && <Loader2 className="animate-spin mx-auto" />}
+                         {error && <p className="text-red-500">{error}</p>}
+                         {!isLoading && pendingUsers.length === 0 ? (
+                           <div className="text-center p-8 bg-white rounded-lg shadow">
+                             <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
+                             <h3 className="mt-2 text-sm font-medium text-gray-900">Tout est à jour !</h3>
+                             <p className="mt-1 text-sm text-gray-500">Aucun nouveau compte PRO n'est en attente de validation.</p>
+                           </div>
+                         ) : (
+                           <div className="space-y-4">
+                              {pendingUsers.map(user => (
+                                 <div key={user.id} className="bg-white shadow-md rounded-lg p-4 flex justify-between items-center">
+                                      <div>
+                                          <p className="font-bold">{user.manager_name} ({user.account_type})</p>
+                                          <p className="text-sm text-gray-500">{user.email}</p>
+                                          <div className="flex gap-4 mt-2">
+                                            {user.id_card_urls && <a href="#" className="text-blue-500 text-sm">Voir CNI</a>}
+                                            {user.niu_document_url && <a href={user.niu_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm">Voir NIU</a>}
+                                            {user.driving_license_front_url && <a href={user.driving_license_front_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm">Voir Permis</a>}
+                                          </div>
+                                      </div>
+                                      <div className="flex gap-2">
+                                          <button onClick={() => handleValidation(user.id, 'APPROVED')} className="bg-green-500 text-white px-3 py-1 rounded">Approuver</button>
+                                          <button onClick={() => handleValidation(user.id, 'REJECTED')} className="bg-red-500 text-white px-3 py-1 rounded">Rejeter</button>
+                                      </div>
+                                 </div>
+                              ))}
+                           </div>
+                         )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            
+            <AnimatePresence>
+              {selectedUser && <UserDetailsModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
+            </AnimatePresence>
+        </div>
+    );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\OperationManagement.tsx
+================================================================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import dynamic from 'next/dynamic';
+import { 
+    Package, Building, Search, Filter, Loader2, X, Eye, Edit, Ban, PlusCircle, 
+    Map, List, CheckCircle, ArrowLeft, ArrowRight, Calendar, User, Phone, 
+    MapPin, Truck, DollarSign
+} from 'lucide-react';
+
+import { supabase } from '@/lib/supabase';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// =============================================================================
+// TYPES & CONSTANTS
+// =============================================================================
+
+type ShipmentStatus = 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE';
+
+const ALL_STATUSES: ShipmentStatus[] = [
+    'EN_ATTENTE_DE_DEPOT', 
+    'AU_DEPART', 
+    'EN_TRANSIT', 
+    'ARRIVE_AU_RELAIS', 
+    'RECU', 
+    'ANNULE'
+];
+
+const ITEMS_PER_PAGE = 10;
+
+interface RelayPoint {
+    id: number;
+    name: string;
+    address: string | null;
+    quartier: string | null;
+    lat: number;
+    lng: number;
+    hours: string | null;
+    type: 'bureau' | 'commerce' | 'agence';
+    status: 'ACTIVE' | 'INACTIVE';
+}
+
+interface Shipment {
+    id: number;
+    tracking_number: string;
+    status: ShipmentStatus;
+    sender_name: string;
+    recipient_name: string;
+    departure_point_name: string;
+    arrival_point_name: string;
+    shipping_cost: number;
+    created_at: string;
+    total_count: number;
+}
+
+interface FullShipmentDetails {
+    id: number;
+    tracking_number: string;
+    status: ShipmentStatus;
+    created_at: string;
+    sender_name: string;
+    sender_phone: string;
+    recipient_name: string;
+    recipient_phone: string;
+    description: string | null;
+    weight: number | null;
+    is_fragile: boolean;
+    is_perishable: boolean;
+    is_insured: boolean;
+    declared_value: number | null;
+    shipping_cost: number;
+    is_paid_at_departure: boolean;
+    departure_point: { name: string } | null;
+    arrival_point: { name: string } | null;
+}
+
+interface Filters {
+    searchTerm: string;
+    status: string;
+    departure: string;
+    arrival: string;
+}
+
+interface Pagination {
+    currentPage: number;
+    totalPages: number;
+    totalCount: number;
+}
+
+// =============================================================================
+// LEAFLET MAP CONFIGURATION
+// =============================================================================
+
+// Dynamic imports for Leaflet to avoid SSR issues
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
+
+// Fix for default Leaflet icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+// =============================================================================
+// UTILITY COMPONENTS
+// =============================================================================
+
+const StatusBadge = ({ status }: { status: ShipmentStatus }) => {
+    const statusConfig = {
+        'EN_ATTENTE_DE_DEPOT': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+        'AU_DEPART': 'bg-blue-100 text-blue-800 border border-blue-200',
+        'EN_TRANSIT': 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+        'ARRIVE_AU_RELAIS': 'bg-purple-100 text-purple-800 border border-purple-200',
+        'RECU': 'bg-green-100 text-green-800 border border-green-200',
+        'ANNULE': 'bg-red-100 text-red-800 border border-red-200'
+    };
+
+    return (
+        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusConfig[status]}`}>
+            {status.replace(/_/g, ' ')}
+        </span>
+    );
+};
+
+const LoadingSpinner = ({ size = 'default' }: { size?: 'small' | 'default' | 'large' }) => {
+    const sizeClasses = {
+        small: 'h-4 w-4',
+        default: 'h-8 w-8',
+        large: 'h-12 w-12'
+    };
+
+    return (
+        <div className="flex justify-center items-center">
+            <Loader2 className={`animate-spin text-orange-500 ${sizeClasses[size]}`} />
+        </div>
+    );
+};
+
+// =============================================================================
+// SHIPMENT DETAILS MODAL
+// =============================================================================
+
+const DetailItem = ({ 
+    icon: Icon, 
+    label, 
+    value 
+}: { 
+    icon: React.ElementType; 
+    label: string; 
+    value: string | number | null | undefined | React.ReactNode;
+}) => (
+    <div className="flex items-start gap-3">
+        <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
+        <div>
+            <p className="text-gray-500 text-xs font-medium">{label}</p>
+            <p className="font-semibold text-gray-800">{value || 'N/A'}</p>
+        </div>
+    </div>
+);
+
+const ShipmentDetailsModal = ({ 
+    shipmentId, 
+    onClose 
+}: { 
+    shipmentId: number; 
+    onClose: () => void;
+}) => {
+    const [details, setDetails] = useState<FullShipmentDetails | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchDetails = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('shipments')
+                    .select('*, departure_point:departure_point_id(name), arrival_point:arrival_point_id(name)')
+                    .eq('id', shipmentId)
+                    .single();
+
+                if (error) throw error;
+                if (data) setDetails(data as FullShipmentDetails);
+            } catch (error) {
+                console.error('Error fetching shipment details:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDetails();
+    }, [shipmentId]);
+
+    const formatSpecificities = (details: FullShipmentDetails) => {
+        const specificities = [];
+        if (details.is_fragile) specificities.push('Fragile');
+        if (details.is_perishable) specificities.push('Périssable');
+        if (details.is_insured) specificities.push('Assuré');
+        return specificities.length > 0 ? specificities.join(', ') : 'Aucune';
+    };
+
+    return (
+        <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={onClose}
+        >
+            <motion.div 
+                initial={{ scale: 0.9 }} 
+                animate={{ scale: 1 }} 
+                exit={{ scale: 0.9 }}
+                className="bg-white rounded-lg shadow-xl w-full max-w-2xl"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex justify-between items-center p-4 border-b">
+                    <h3 className="text-lg font-bold">Détails du Colis</h3>
+                    <button 
+                        onClick={onClose} 
+                        className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-6 max-h-[70vh] overflow-y-auto">
+                    {loading ? (
+                        <LoadingSpinner />
+                    ) : !details ? (
+                        <p className="text-red-500 text-center">Impossible de charger les détails.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* General Information */}
+                            <div className="space-y-4">
+                                <h4 className="font-bold text-orange-600">Informations Générales</h4>
+                                <DetailItem icon={Package} label="N° de Suivi" value={details.tracking_number} />
+                                <DetailItem 
+                                    icon={Calendar} 
+                                    label="Créé le" 
+                                    value={new Date(details.created_at).toLocaleString('fr-FR')} 
+                                />
+                                <DetailItem 
+                                    icon={CheckCircle} 
+                                    label="Statut Actuel" 
+                                    value={<StatusBadge status={details.status} />} 
+                                />
+                                <DetailItem 
+                                    icon={DollarSign} 
+                                    label="Coût d'expédition" 
+                                    value={`${details.shipping_cost.toLocaleString()} FCFA`} 
+                                />
+                            </div>
+
+                            {/* Package Details */}
+                            <div className="space-y-4">
+                                <h4 className="font-bold text-orange-600">Détails du Colis</h4>
+                                <DetailItem icon={Edit} label="Description" value={details.description} />
+                                <DetailItem icon={Package} label="Poids" value={details.weight ? `${details.weight} kg` : null} />
+                                <DetailItem 
+                                    icon={Ban} 
+                                    label="Spécificités" 
+                                    value={formatSpecificities(details)} 
+                                />
+                                {details.is_insured && (
+                                    <DetailItem 
+                                        icon={DollarSign} 
+                                        label="Valeur Déclarée" 
+                                        value={`${details.declared_value?.toLocaleString()} FCFA`} 
+                                    />
+                                )}
+                            </div>
+
+                            {/* Sender Information */}
+                            <div className="space-y-4">
+                                <h4 className="font-bold text-orange-600">Expéditeur</h4>
+                                <DetailItem icon={User} label="Nom" value={details.sender_name} />
+                                <DetailItem icon={Phone} label="Téléphone" value={details.sender_phone} />
+                                <DetailItem 
+                                    icon={MapPin} 
+                                    label="Point de départ" 
+                                    value={details.departure_point?.name} 
+                                />
+                            </div>
+
+                            {/* Recipient Information */}
+                            <div className="space-y-4">
+                                <h4 className="font-bold text-orange-600">Destinataire</h4>
+                                <DetailItem icon={User} label="Nom" value={details.recipient_name} />
+                                <DetailItem icon={Phone} label="Téléphone" value={details.recipient_phone} />
+                                <DetailItem 
+                                    icon={MapPin} 
+                                    label="Point d'arrivée" 
+                                    value={details.arrival_point?.name} 
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 bg-gray-50 border-t flex justify-end">
+                    <button 
+                        onClick={onClose} 
+                        className="bg-gray-200 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-300 transition-colors"
+                    >
+                        Fermer
+                    </button>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+};
+
+// =============================================================================
+// STATUS UPDATE MODAL
+// =============================================================================
+
+const StatusUpdateModal = ({
+    shipment,
+    newStatus,
+    setNewStatus,
+    onUpdate,
+    onClose
+}: {
+    shipment: { id: number; tracking_number: string };
+    newStatus: ShipmentStatus | '';
+    setNewStatus: (status: ShipmentStatus | '') => void;
+    onUpdate: () => void;
+    onClose: () => void;
+}) => (
+    <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center"
+        onClick={onClose}
+    >
+        <motion.div 
+            initial={{ scale: 0.9 }} 
+            animate={{ scale: 1 }} 
+            exit={{ scale: 0.9 }}
+            className="bg-white p-6 rounded-lg w-full max-w-sm"
+            onClick={e => e.stopPropagation()}
+        >
+            <h3 className="font-bold text-lg mb-2">Modifier le statut de</h3>
+            <p className="font-mono text-orange-600 mb-4">{shipment.tracking_number}</p>
+            
+            <select 
+                value={newStatus} 
+                onChange={e => setNewStatus(e.target.value as ShipmentStatus)}
+                className="w-full p-2 border rounded-lg mb-4"
+            >
+                <option value="" disabled>Choisir un nouveau statut...</option>
+                {ALL_STATUSES.map(status => (
+                    <option key={status} value={status}>
+                        {status.replace(/_/g, ' ')}
+                    </option>
+                ))}
+            </select>
+            
+            <div className="flex justify-end gap-3">
+                <button 
+                    onClick={onClose} 
+                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                    Annuler
+                </button>
+                <button 
+                    onClick={onUpdate} 
+                    className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+                    disabled={!newStatus}
+                >
+                    Sauvegarder
+                </button>
+            </div>
+        </motion.div>
+    </motion.div>
+);
+
+// =============================================================================
+// SHIPMENTS MANAGER COMPONENT
+// =============================================================================
+
+const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) => {
+    const [shipments, setShipments] = useState<Shipment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [filters, setFilters] = useState<Filters>({ 
+        searchTerm: '', 
+        status: 'ALL', 
+        departure: 'ALL', 
+        arrival: 'ALL' 
+    });
+    const [pagination, setPagination] = useState<Pagination>({ 
+        currentPage: 1, 
+        totalPages: 1, 
+        totalCount: 0 
+    });
+    const [selectedShipmentId, setSelectedShipmentId] = useState<number | null>(null);
+    const [statusToUpdate, setStatusToUpdate] = useState<{ id: number; tracking_number: string } | null>(null);
+    const [newStatus, setNewStatus] = useState<ShipmentStatus | ''>('');
+
+    const fetchShipments = useCallback(async (page = pagination.currentPage) => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.rpc('search_all_shipments', {
+                search_term: filters.searchTerm,
+                filter_status: filters.status,
+                filter_departure: filters.departure === 'ALL' ? null : parseInt(filters.departure),
+                filter_arrival: filters.arrival === 'ALL' ? null : parseInt(filters.arrival),
+                start_date: new Date(0).toISOString(),
+                end_date: new Date().toISOString(),
+                page_limit: ITEMS_PER_PAGE,
+                page_offset: (page - 1) * ITEMS_PER_PAGE
+            });
+
+            if (error) throw error;
+            
+            if (data) {
+                setShipments(data);
+                const totalCount = data.length > 0 ? data[0].total_count : 0;
+                setPagination({ 
+                    currentPage: page, 
+                    totalPages: Math.ceil(totalCount / ITEMS_PER_PAGE), 
+                    totalCount 
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching shipments:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [filters]);
+
+    // Reset to first page when filters change
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            if (pagination.currentPage !== 1) {
+                setPagination(prev => ({ ...prev, currentPage: 1 }));
+            } else {
+                fetchShipments(1);
+            }
+        }, 500);
+        return () => clearTimeout(handler);
+    }, [filters.searchTerm, filters.status, filters.departure, filters.arrival]);
+
+    // Fetch when page changes
+    useEffect(() => {
+        fetchShipments(pagination.currentPage);
+    }, [pagination.currentPage]);
+
+    const handleUpdateStatus = async () => {
+        if (!statusToUpdate || !newStatus) return;
+        
+        try {
+            const { error } = await supabase
+                .from('shipments')
+                .update({ status: newStatus })
+                .eq('id', statusToUpdate.id);
+            
+            if (error) throw error;
+            
+            setStatusToUpdate(null);
+            setNewStatus('');
+            fetchShipments(pagination.currentPage);
+        } catch (error) {
+            console.error('Error updating status:', error);
+            alert("Erreur lors de la mise à jour du statut.");
+        }
+    };
+
+    const handleFilterChange = (key: keyof Filters, value: string) => {
+        setFilters(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handlePageChange = (direction: 'prev' | 'next') => {
+        setPagination(prev => ({
+            ...prev,
+            currentPage: direction === 'prev' ? prev.currentPage - 1 : prev.currentPage + 1
+        }));
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-lg border space-y-4">
+            <h2 className="text-xl font-bold text-gray-900">Gestion des Colis</h2>
+            
+            {/* Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <input 
+                    type="text" 
+                    placeholder="Rechercher par N°, nom..." 
+                    value={filters.searchTerm}
+                    onChange={e => handleFilterChange('searchTerm', e.target.value)}
+                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+                
+                <select 
+                    value={filters.status}
+                    onChange={e => handleFilterChange('status', e.target.value)}
+                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                    <option value="ALL">Tous les statuts</option>
+                    {ALL_STATUSES.map(status => (
+                        <option key={status} value={status}>
+                            {status.replace(/_/g, ' ')}
+                        </option>
+                    ))}
+                </select>
+                
+                <select 
+                    value={filters.departure}
+                    onChange={e => handleFilterChange('departure', e.target.value)}
+                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                    <option value="ALL">Tous les départs</option>
+                    {allRelayPoints.map(point => (
+                        <option key={point.id} value={point.id}>
+                            {point.name}
+                        </option>
+                    ))}
+                </select>
+                
+                <select 
+                    value={filters.arrival}
+                    onChange={e => handleFilterChange('arrival', e.target.value)}
+                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                    <option value="ALL">Toutes les arrivées</option>
+                    {allRelayPoints.map(point => (
+                        <option key={point.id} value={point.id}>
+                            {point.name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+                {loading ? (
+                    <div className="h-96 flex items-center justify-center">
+                        <LoadingSpinner size="large" />
+                    </div>
+                ) : shipments.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                        Aucun colis ne correspond à votre recherche.
+                    </div>
+                ) : (
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-600 uppercase">
+                            <tr>
+                                <th className="p-3 text-left">N° Suivi</th>
+                                <th className="p-3 text-left">Trajet</th>
+                                <th className="p-3 text-left">Statut</th>
+                                <th className="p-3 text-left">Coût</th>
+                                <th className="p-3 text-left">Date</th>
+                                <th className="p-3 text-left">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {shipments.map(shipment => (
+                                <tr key={shipment.id} className="border-b hover:bg-orange-50 transition-colors">
+                                    <td className="p-3 font-mono font-semibold">
+                                        {shipment.tracking_number}
+                                    </td>
+                                    <td className="p-3">
+                                        <div>
+                                            <strong>De:</strong> {shipment.departure_point_name}
+                                        </div>
+                                        <div>
+                                            <strong>À:</strong> {shipment.arrival_point_name}
+                                        </div>
+                                    </td>
+                                    <td className="p-3">
+                                        <StatusBadge status={shipment.status} />
+                                    </td>
+                                    <td className="p-3">
+                                        {shipment.shipping_cost.toLocaleString()} FCFA
+                                    </td>
+                                    <td className="p-3">
+                                        {new Date(shipment.created_at).toLocaleDateString('fr-FR')}
+                                    </td>
+                                    <td className="p-3">
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                onClick={() => setSelectedShipmentId(shipment.id)}
+                                                title="Voir Détails"
+                                                className="text-blue-600 hover:text-blue-800 transition-colors"
+                                            >
+                                                <Eye className="h-5 w-5" />
+                                            </button>
+                                            <button 
+                                                onClick={() => setStatusToUpdate({
+                                                    id: shipment.id, 
+                                                    tracking_number: shipment.tracking_number
+                                                })}
+                                                title="Modifier Statut"
+                                                className="text-green-600 hover:text-green-800 transition-colors"
+                                            >
+                                                <Edit className="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+                <div className="flex justify-between items-center mt-4 text-sm">
+                    <button 
+                        onClick={() => handlePageChange('prev')}
+                        disabled={pagination.currentPage <= 1}
+                        className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
+                    >
+                        <ArrowLeft size={16} /> Préc.
+                    </button>
+                    
+                    <span className="font-medium">
+                        Page {pagination.currentPage} / {pagination.totalPages} 
+                        ({pagination.totalCount} colis)
+                    </span>
+                    
+                    <button 
+                        onClick={() => handlePageChange('next')}
+                        disabled={pagination.currentPage >= pagination.totalPages}
+                        className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
+                    >
+                        Suiv. <ArrowRight size={16} />
+                    </button>
+                </div>
+            )}
+
+            {/* Modals */}
+            <AnimatePresence>
+                {selectedShipmentId && (
+                    <ShipmentDetailsModal 
+                        shipmentId={selectedShipmentId} 
+                        onClose={() => setSelectedShipmentId(null)} 
+                    />
+                )}
+                
+                {statusToUpdate && (
+                    <StatusUpdateModal
+                        shipment={statusToUpdate}
+                        newStatus={newStatus}
+                        setNewStatus={setNewStatus}
+                        onUpdate={handleUpdateStatus}
+                        onClose={() => {
+                            setStatusToUpdate(null);
+                            setNewStatus('');
+                        }}
+                    />
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// =============================================================================
+// RELAY POINTS MANAGER COMPONENT
+// =============================================================================
+
+const RelayPointsManager = () => {
+    const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentPoint, setCurrentPoint] = useState<Partial<RelayPoint> | null>(null);
+
+    const fetchPoints = async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('relay_points')
+                .select('*')
+                .order('name');
+            
+            if (error) throw error;
+            if (data) setRelayPoints(data as RelayPoint[]);
+        } catch (error) {
+            console.error('Error fetching relay points:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchPoints();
+    }, []);
+
+    const handleSavePoint = async () => {
+        if (!currentPoint?.name || !currentPoint.address || !currentPoint.lat || !currentPoint.lng) {
+            alert('Champs requis manquants.');
+            return;
+        }
+        
+        try {
+            const { error } = await supabase.from('relay_points').upsert(currentPoint);
+            
+            if (error) throw error;
+            
+            setIsModalOpen(false);
+            setCurrentPoint(null);
+            fetchPoints();
+        } catch (error) {
+            console.error('Error saving relay point:', error);
+            alert("Erreur de sauvegarde.");
+        }
+    };
+
+    const handleInputChange = (field: keyof RelayPoint, value: any) => {
+        setCurrentPoint(prev => ({ ...prev, [field]: value }));
+    };
+
+    if (loading) {
+        return <LoadingSpinner size="large" />;
+    }
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-lg border space-y-4">
+            <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-900">Gestion des Points Relais</h2>
+                
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-4">
+                    <div className="flex gap-1 bg-gray-200 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setViewMode('list')}
+                            className={`px-3 py-1 rounded-md transition-colors ${
+                                viewMode === 'list' ? 'bg-white shadow' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            <List className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('map')}
+                            className={`px-3 py-1 rounded-md transition-colors ${
+                                viewMode === 'map' ? 'bg-white shadow' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            <Map className="w-4 h-4" />
+                        </button>
+                    </div>
+                    
+                    <button 
+                        onClick={() => { 
+                            setCurrentPoint({ 
+                                type: 'bureau', 
+                                status: 'ACTIVE' 
+                            }); 
+                            setIsModalOpen(true); 
+                        }}
+                        className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-600 transition-colors"
+                    >
+                        <PlusCircle className="w-4 h-4" />
+                        Ajouter
+                    </button>
+                </div>
+            </div>
+
+            {/* Content based on view mode */}
+            {viewMode === 'list' ? (
+                <div className="overflow-x-auto">
+                    {relayPoints.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                            Aucun point relais enregistré.
+                        </div>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50 text-gray-600 uppercase">
+                                <tr>
+                                    <th className="p-3 text-left">Nom</th>
+                                    <th className="p-3 text-left">Adresse</th>
+                                    <th className="p-3 text-left">Quartier</th>
+                                    <th className="p-3 text-left">Type</th>
+                                    <th className="p-3 text-left">Statut</th>
+                                    <th className="p-3 text-left">Horaires</th>
+                                    <th className="p-3 text-left">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {relayPoints.map(point => (
+                                    <tr key={point.id} className="border-b hover:bg-orange-50 transition-colors">
+                                        <td className="p-3 font-semibold">{point.name}</td>
+                                        <td className="p-3">{point.address || 'N/A'}</td>
+                                        <td className="p-3">{point.quartier || 'N/A'}</td>
+                                        <td className="p-3">
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                                point.type === 'bureau' ? 'bg-blue-100 text-blue-800' :
+                                                point.type === 'commerce' ? 'bg-green-100 text-green-800' :
+                                                'bg-purple-100 text-purple-800'
+                                            }`}>
+                                                {point.type.charAt(0).toUpperCase() + point.type.slice(1)}
+                                            </span>
+                                        </td>
+                                        <td className="p-3">
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                                point.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                            }`}>
+                                                {point.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-3">{point.hours || 'N/A'}</td>
+                                        <td className="p-3">
+                                            <button 
+                                                onClick={() => { 
+                                                    setCurrentPoint(point); 
+                                                    setIsModalOpen(true); 
+                                                }}
+                                                title="Modifier"
+                                                className="text-blue-600 hover:text-blue-800 transition-colors"
+                                            >
+                                                <Edit className="h-5 w-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            ) : (
+                <div className="h-[600px] rounded-lg overflow-hidden shadow-lg">
+                    <MapContainer 
+                        center={[5.7, 10.2]} 
+                        zoom={6} 
+                        style={{ height: '100%', width: '100%' }}
+                    >
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        {relayPoints.map(point => (
+                            <Marker key={point.id} position={[point.lat, point.lng]}>
+                                <Popup>
+                                    <div className="space-y-1">
+                                        <h3 className="font-semibold">{point.name}</h3>
+                                        <p className="text-sm text-gray-600">{point.address}</p>
+                                        {point.quartier && (
+                                            <p className="text-sm text-gray-600">Quartier: {point.quartier}</p>
+                                        )}
+                                        <p className="text-sm">
+                                            <span className={`px-2 py-1 text-xs rounded ${
+                                                point.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                            }`}>
+                                                {point.status}
+                                            </span>
+                                        </p>
+                                    </div>
+                                </Popup>
+                            </Marker>
+                        ))}
+                    </MapContainer>
+                </div>
+            )}
+            
+            {/* Add/Edit Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                        <h3 className="font-bold text-lg mb-4">
+                            {currentPoint?.id ? 'Modifier' : 'Ajouter'} un point relais
+                        </h3>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Nom *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Nom du point relais" 
+                                    value={currentPoint?.name || ''} 
+                                    onChange={e => handleInputChange('name', e.target.value)}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Adresse *
+                                </label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Adresse complète" 
+                                    value={currentPoint?.address || ''} 
+                                    onChange={e => handleInputChange('address', e.target.value)}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Quartier
+                                </label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Quartier" 
+                                    value={currentPoint?.quartier || ''} 
+                                    onChange={e => handleInputChange('quartier', e.target.value)}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                />
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Latitude *
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        step="any"
+                                        placeholder="5.123456" 
+                                        value={currentPoint?.lat || ''} 
+                                        onChange={e => handleInputChange('lat', parseFloat(e.target.value) || 0)}
+                                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Longitude *
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        step="any"
+                                        placeholder="10.123456" 
+                                        value={currentPoint?.lng || ''} 
+                                        onChange={e => handleInputChange('lng', parseFloat(e.target.value) || 0)}
+                                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Type
+                                </label>
+                                <select 
+                                    value={currentPoint?.type || 'bureau'} 
+                                    onChange={e => handleInputChange('type', e.target.value as 'bureau' | 'commerce' | 'agence')}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                >
+                                    <option value="bureau">Bureau</option>
+                                    <option value="commerce">Commerce</option>
+                                    <option value="agence">Agence</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Statut
+                                </label>
+                                <select 
+                                    value={currentPoint?.status || 'ACTIVE'} 
+                                    onChange={e => handleInputChange('status', e.target.value as 'ACTIVE' | 'INACTIVE')}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                >
+                                    <option value="ACTIVE">Actif</option>
+                                    <option value="INACTIVE">Inactif</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Horaires
+                                </label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Ex: Lun-Ven: 8h-17h" 
+                                    value={currentPoint?.hours || ''} 
+                                    onChange={e => handleInputChange('hours', e.target.value)}
+                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button 
+                                onClick={() => {
+                                    setIsModalOpen(false);
+                                    setCurrentPoint(null);
+                                }}
+                                className="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                            >
+                                Annuler
+                            </button>
+                            <button 
+                                onClick={handleSavePoint}
+                                className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+                            >
+                                Sauvegarder
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// =============================================================================
+// MAIN OPERATIONS MANAGEMENT COMPONENT
+// =============================================================================
+
+export default function OperationsManagement() {
+    const [activeTab, setActiveTab] = useState<'shipments' | 'relays'>('shipments');
+    const [allRelayPoints, setAllRelayPoints] = useState<RelayPoint[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            setIsLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('relay_points')
+                    .select('*')
+                    .order('name');
+                
+                if (error) throw error;
+                if (data) setAllRelayPoints(data as RelayPoint[]);
+            } catch (error) {
+                console.error('Error fetching initial data:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchInitialData();
+    }, []);
+
+    const tabConfig = {
+        shipments: {
+            label: 'Gestion des Colis',
+            icon: Package,
+            component: <ShipmentsManager allRelayPoints={allRelayPoints} />
+        },
+        relays: {
+            label: 'Gestion des Points Relais',
+            icon: Building,
+            component: <RelayPointsManager />
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+                <Truck className="h-8 w-8 text-orange-600" />
+                <h1 className="text-3xl font-bold text-gray-800">Gestion des Opérations</h1>
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="flex border-b border-gray-200">
+                {Object.entries(tabConfig).map(([key, config]) => {
+                    const Icon = config.icon;
+                    return (
+                        <button
+                            key={key}
+                            onClick={() => setActiveTab(key as 'shipments' | 'relays')}
+                            className={`py-3 px-4 font-semibold flex items-center gap-2 transition-colors ${
+                                activeTab === key
+                                    ? 'border-b-2 border-orange-500 text-orange-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <Icon className="w-5 h-5" />
+                            {config.label}
+                        </button>
+                    );
+                })}
+            </div>
+            
+            {/* Tab Content */}
+            {isLoading ? (
+                <div className="flex justify-center p-12">
+                    <LoadingSpinner size="large" />
+                </div>
+            ) : (
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        {tabConfig[activeTab].component}
+                    </motion.div>
+                </AnimatePresence>
+            )}
+        </div>
+    );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\FinanceManagement.tsx
+================================================================================
+
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ChartData,
+  ChartOptions
+} from 'chart.js';
+import {
+  DollarSign,
+  Package,
+  Users,
+  Wallet,
+  TrendingUp,
+  Download,
+  Loader2,
+  Calendar
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+// Registrer les composants Chart.js
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+// ============================================================================
+// TYPES ET INTERFACES
+// ============================================================================
+
+interface KpiData {
+  revenue_today: number;
+  revenue_last_7_days: number;
+  revenue_last_30_days: number;
+  total_partner_earnings: number;
+}
+
+interface PartnerEarning {
+  agency_id: string;
+  manager_name: string;
+  account_type: string;
+  credit_balance: number;
+  total_earnings: number;
+  shipment_count: number;
+}
+
+interface LoadingState {
+  kpis: boolean;
+  revenue: boolean;
+  partners: boolean;
+}
+
+type TabType = 'revenue' | 'partners';
+
+// ============================================================================
+// COMPOSANTS UTILITAIRES
+// ============================================================================
+
+interface KpiCardProps {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  color: string;
+}
+
+const KpiCard: React.FC<KpiCardProps> = ({ title, value, icon: Icon, color }) => {
+  const colorClass = color.split('-')[1];
+  
+  return (
+    <div className={`p-6 bg-white rounded-xl shadow-lg border-l-4 ${color}`}>
+      <div className="flex items-center space-x-4">
+        <div className={`bg-${colorClass}-100 p-3 rounded-full`}>
+          <Icon className={`h-6 w-6 text-${colorClass}-600`} />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-2xl font-bold text-gray-900">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LoadingSpinner: React.FC = () => (
+  <div className="flex justify-center items-center py-8">
+    <Loader2 className="animate-spin h-8 w-8 text-orange-500" />
+  </div>
+);
+
+// ============================================================================
+// COMPOSANT PRINCIPAL
+// ============================================================================
+
+const FinanceManagement: React.FC = () => {
+  // États
+  const [activeTab, setActiveTab] = useState<TabType>('revenue');
+  const [kpis, setKpis] = useState<KpiData | null>(null);
+  const [revenueChartData, setRevenueChartData] = useState<ChartData<'line'> | null>(null);
+  const [partnersData, setPartnersData] = useState<PartnerEarning[]>([]);
+  const [loading, setLoading] = useState<LoadingState>({
+    kpis: true,
+    revenue: true,
+    partners: true
+  });
+
+  // ============================================================================
+  // FONCTIONS UTILITAIRES
+  // ============================================================================
+
+  const formatCurrency = (amount: number): string => {
+    return `${amount.toLocaleString()} FCFA`;
+  };
+
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  // ============================================================================
+  // FONCTIONS DE RÉCUPÉRATION DES DONNÉES
+  // ============================================================================
+
+  const fetchKpis = useCallback(async (): Promise<void> => {
+    try {
+      setLoading(prev => ({ ...prev, kpis: true }));
+      
+      const { data, error } = await supabase.rpc('get_finance_kpis');
+      
+      if (error) {
+        console.error('Erreur lors de la récupération des KPIs:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        setKpis(data[0]);
+      }
+    } catch (error) {
+      console.error('Erreur inattendue lors de la récupération des KPIs:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, kpis: false }));
+    }
+  }, []);
+
+  const fetchRevenueChart = useCallback(async (): Promise<void> => {
+    try {
+      setLoading(prev => ({ ...prev, revenue: true }));
+      
+      const { data, error } = await supabase.rpc('get_daily_revenue_last_30_days');
+      
+      if (error) {
+        console.error('Erreur lors de la récupération des revenus:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        const labels = data.map((item: any) => formatDate(item.day));
+        const values = data.map((item: any) => item.total_revenue);
+        
+        setRevenueChartData({
+          labels,
+          datasets: [{
+            label: 'Revenus journaliers (FCFA)',
+            data: values,
+            borderColor: '#F97316',
+            backgroundColor: 'rgba(249, 115, 22, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        });
+      }
+    } catch (error) {
+      console.error('Erreur inattendue lors de la récupération des revenus:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, revenue: false }));
+    }
+  }, []);
+
+  const fetchPartnersEarnings = useCallback(async (): Promise<void> => {
+    try {
+      setLoading(prev => ({ ...prev, partners: true }));
+      
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { data, error } = await supabase.rpc('get_partners_earnings_report', {
+        start_date: thirtyDaysAgo.toISOString(),
+        end_date: new Date().toISOString()
+      });
+      
+      if (error) {
+        console.error('Erreur lors de la récupération des gains partenaires:', error);
+        return;
+      }
+      
+      setPartnersData(data || []);
+    } catch (error) {
+      console.error('Erreur inattendue lors de la récupération des gains partenaires:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, partners: false }));
+    }
+  }, []);
+
+  // ============================================================================
+  // HANDLERS D'ÉVÉNEMENTS
+  // ============================================================================
+
+  const handleTabChange = (tab: TabType): void => {
+    setActiveTab(tab);
+  };
+
+  const handleExportData = (): void => {
+    // Logique d'exportation à implémenter
+    console.log('Export des données partenaires');
+  };
+
+  // ============================================================================
+  // EFFETS
+  // ============================================================================
+
+  useEffect(() => {
+    fetchKpis();
+    fetchRevenueChart();
+    fetchPartnersEarnings();
+  }, [fetchKpis, fetchRevenueChart, fetchPartnersEarnings]);
+
+  // ============================================================================
+  // CONFIGURATION DU GRAPHIQUE
+  // ============================================================================
+
+  const chartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: (value) => formatCurrency(Number(value))
+        }
+      }
+    }
+  };
+
+  // ============================================================================
+  // DONNÉES DES KPIs
+  // ============================================================================
+
+  const kpiCards = [
+    {
+      title: "Revenus Aujourd'hui",
+      value: formatCurrency(kpis?.revenue_today || 0),
+      icon: DollarSign,
+      color: "border-orange-500"
+    },
+    {
+      title: "Revenus (7 jours)",
+      value: formatCurrency(kpis?.revenue_last_7_days || 0),
+      icon: TrendingUp,
+      color: "border-orange-500"
+    },
+    {
+      title: "Revenus (30 jours)",
+      value: formatCurrency(kpis?.revenue_last_30_days || 0),
+      icon: Calendar,
+      color: "border-orange-500"
+    },
+    {
+      title: "Gains Partenaires Totaux",
+      value: formatCurrency(kpis?.total_partner_earnings || 0),
+      icon: Wallet,
+      color: "border-orange-500"
+    }
+  ];
+
+  const tableHeaders = [
+    "Partenaire",
+    "Type",
+    "Colis Traités",
+    "Gains Générés",
+    "Solde de Crédit"
+  ];
+
+  // ============================================================================
+  // RENDU
+  // ============================================================================
+
+  return (
+    <div className="space-y-6">
+      {/* En-tête */}
+      <h1 className="text-3xl font-bold text-gray-800">
+        Finances et Rapports
+      </h1>
+
+      {/* Section KPIs */}
+      <section className="space-y-4">
+        {loading.kpis ? (
+          <LoadingSpinner />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {kpiCards.map((kpi, index) => (
+              <KpiCard
+                key={index}
+                title={kpi.title}
+                value={kpi.value}
+                icon={kpi.icon}
+                color={kpi.color}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Navigation par onglets */}
+      <nav className="flex border-b border-gray-200">
+        <button
+          onClick={() => handleTabChange('revenue')}
+          className={`py-3 px-6 font-semibold transition-colors ${
+            activeTab === 'revenue'
+              ? 'border-b-2 border-orange-500 text-orange-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Rapport de Revenus
+        </button>
+        <button
+          onClick={() => handleTabChange('partners')}
+          className={`py-3 px-6 font-semibold transition-colors ${
+            activeTab === 'partners'
+              ? 'border-b-2 border-orange-500 text-orange-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Gains des Partenaires
+        </button>
+      </nav>
+
+      {/* Contenu des onglets */}
+      <AnimatePresence mode="wait">
+        {activeTab === 'revenue' && (
+          <motion.section
+            key="revenue"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-white p-6 rounded-xl shadow-lg border"
+          >
+            <h2 className="text-xl font-bold text-gray-800 mb-6">
+              Évolution des revenus sur les 30 derniers jours
+            </h2>
+            
+            <div className="h-96">
+              {loading.revenue ? (
+                <LoadingSpinner />
+              ) : revenueChartData ? (
+                <Line data={revenueChartData} options={chartOptions} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  Aucune donnée disponible
+                </div>
+              )}
+            </div>
+          </motion.section>
+        )}
+
+        {activeTab === 'partners' && (
+          <motion.section
+            key="partners"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-white p-6 rounded-xl shadow-lg border"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-800">
+                Gains des Partenaires (30 derniers jours)
+              </h2>
+              <button
+                onClick={handleExportData}
+                className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
+              >
+                <Download size={16} />
+                Exporter
+              </button>
+            </div>
+            
+            <div className="overflow-x-auto">
+              {loading.partners ? (
+                <LoadingSpinner />
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {tableHeaders.map((header) => (
+                        <th
+                          key={header}
+                          className="p-4 text-left font-semibold text-gray-600 uppercase tracking-wider"
+                        >
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {partnersData.length > 0 ? (
+                      partnersData.map((partner) => (
+                        <tr
+                          key={partner.agency_id}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="p-4 font-semibold text-gray-900">
+                            {partner.manager_name}
+                          </td>
+                          <td className="p-4 text-gray-600">
+                            {partner.account_type}
+                          </td>
+                          <td className="p-4 text-gray-600">
+                            {partner.shipment_count.toLocaleString()}
+                          </td>
+                          <td className="p-4 font-semibold text-green-600">
+                            {formatCurrency(partner.total_earnings)}
+                          </td>
+                          <td className="p-4 font-semibold text-blue-600">
+                            {formatCurrency(partner.credit_balance)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={tableHeaders.length}
+                          className="p-8 text-center text-gray-500"
+                        >
+                          Aucun partenaire trouvé
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default FinanceManagement;
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\globals.css
 ================================================================================
 
@@ -30416,6 +32698,115 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\marketplace\page\react-loadable-
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\app-build-manifest.json
+================================================================================
+
+{
+  "pages": {
+    "/superadmin/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
+      "static/chunks/node_modules_870c4b4e._.js",
+      "static/chunks/src_2cd5c6ef._.js",
+      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
+      "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
+      "static/chunks/node_modules_leaflet_dist_leaflet-src_e7e140e9.js",
+      "static/chunks/node_modules_026fd78d._.js",
+      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
+      "static/chunks/src_app_superadmin_page_tsx_02f6a851._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ]
+  }
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {}
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\next-font-manifest.json
+================================================================================
+
+{
+  "pages": {},
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\build-manifest.json
+================================================================================
+
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+    "static/chunks/node_modules_next_dist_445d8acf._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+    "static/chunks/_e69f0d32._.js",
+    "static/chunks/_01f48b92._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\app-paths-manifest.json
+================================================================================
+
+{
+  "/superadmin/page": "app/superadmin/page.js"
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\react-loadable-manifest.json
+================================================================================
+
+{
+  "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_6cbfb658._.js",
+      "static/chunks/node_modules_react-leaflet_lib_index_c857b6d8.js"
+    ]
+  }
+}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_app\pages-manifest.json
 ================================================================================
 
@@ -30560,14 +32951,24 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 ================================================================================
 
 {
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
+  "node": {},
+  "edge": {},
+  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+================================================================================
+
+{
+  "/_app": "pages/_app.js",
+  "/_document": "pages/_document.js",
+  "/_error": "pages/_error.js"
 }
 
 
@@ -30584,27 +32985,28 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 ================================================================================
 
-{}
+{
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}
 
 
 ================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 ================================================================================
 
-{}
-
-
-================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
-================================================================================
-
 {
-  "node": {},
-  "edge": {},
-  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
+  "/(legal)/[slug]/page": "app/(legal)/[slug]/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/superadmin/page": "app/superadmin/page.js"
 }
 
 
@@ -30873,8 +33275,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --color-blue-900: #1c398e;
     --color-blue-950: #162456;
     --color-indigo-50: #eef2ff;
+    --color-indigo-100: #e0e7ff;
+    --color-indigo-200: #c7d2ff;
     --color-indigo-500: #625fff;
     --color-indigo-600: #4f39f6;
+    --color-indigo-800: #372aac;
     --color-violet-500: #8d54ff;
     --color-violet-600: #7f22fe;
     --color-purple-50: #faf5ff;
@@ -31095,8 +33500,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-blue-900: color(display-p3 .136395 .219428 .537145);
       --color-blue-950: color(display-p3 .0993202 .141621 .323413);
       --color-indigo-50: color(display-p3 .936215 .948621 .995621);
+      --color-indigo-100: color(display-p3 .883035 .90499 .993138);
+      --color-indigo-200: color(display-p3 .786558 .821755 .988451);
       --color-indigo-500: color(display-p3 .380374 .372235 .971707);
       --color-indigo-600: color(display-p3 .297656 .227891 .929242);
+      --color-indigo-800: color(display-p3 .207204 .165242 .647584);
       --color-violet-500: color(display-p3 .523372 .329605 .990884);
       --color-violet-600: color(display-p3 .459951 .162666 .957985);
       --color-purple-50: color(display-p3 .977045 .961759 .996715);
@@ -31247,8 +33655,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --color-blue-900: lab(26.1542% 15.7545 -51.5504);
       --color-blue-950: lab(15.6723% 8.86233 -32.2945);
       --color-indigo-50: lab(95.4818% .411302 -6.78529);
+      --color-indigo-100: lab(91.6577% 1.04591 -12.7199);
+      --color-indigo-200: lab(84.4329% 3.18974 -23.9688);
       --color-indigo-500: lab(48.295% 38.3129 -81.9673);
       --color-indigo-600: lab(38.4009% 52.6132 -92.3857);
+      --color-indigo-800: lab(26.6645% 37.9804 -68.6402);
       --color-violet-500: lab(49.9355% 55.1777 -81.8963);
       --color-violet-600: lab(41.088% 68.9966 -91.995);
       --color-purple-50: lab(97.1626% 2.99937 -4.13398);
@@ -31748,10 +34159,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     top: calc(var(--spacing) * 0);
   }
 
-  .top-0\.5 {
-    top: calc(var(--spacing) * .5);
-  }
-
   .top-1 {
     top: calc(var(--spacing) * 1);
   }
@@ -31990,10 +34397,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .left-0 {
     left: calc(var(--spacing) * 0);
-  }
-
-  .left-0\.5 {
-    left: calc(var(--spacing) * .5);
   }
 
   .left-1 {
@@ -32509,6 +34912,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     height: 80vh;
   }
 
+  .h-\[600px\] {
+    height: 600px;
+  }
+
   .h-fit {
     height: -moz-fit-content;
     height: fit-content;
@@ -32542,6 +34949,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     max-height: calc(var(--spacing) * 96);
   }
 
+  .max-h-\[70vh\] {
+    max-height: 70vh;
+  }
+
   .max-h-\[80vh\] {
     max-height: 80vh;
   }
@@ -32552,6 +34963,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .max-h-\[95vh\] {
     max-height: 95vh;
+  }
+
+  .max-h-full {
+    max-height: 100%;
   }
 
   .max-h-screen {
@@ -32859,6 +35274,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-translate-x-8 {
     --tw-translate-x: calc(var(--spacing) * -8);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  .-translate-x-full {
+    --tw-translate-x: -100%;
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -33429,6 +35849,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-gray-100);
   }
 
+  :where(.divide-gray-200 > :not(:last-child)) {
+    border-color: var(--color-gray-200);
+  }
+
   .self-center {
     align-self: center;
   }
@@ -33529,6 +35953,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   .border-4 {
     border-style: var(--tw-border-style);
     border-width: 4px;
+  }
+
+  .border-500 {
+    border-style: var(--tw-border-style);
+    border-width: 500px;
   }
 
   .border-t {
@@ -33665,16 +36094,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-gray-200);
   }
 
-  .border-gray-200\/20 {
-    border-color: rgba(229, 231, 235, .2);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .border-gray-200\/20 {
-      border-color: color-mix(in oklab, var(--color-gray-200) 20%, transparent);
-    }
-  }
-
   .border-gray-200\/50 {
     border-color: rgba(229, 231, 235, .5);
   }
@@ -33723,6 +36142,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .border-green-500 {
     border-color: var(--color-green-500);
+  }
+
+  .border-indigo-200 {
+    border-color: var(--color-indigo-200);
   }
 
   .border-indigo-500 {
@@ -34205,6 +36628,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .bg-green-600 {
     background-color: var(--color-green-600);
+  }
+
+  .bg-indigo-100 {
+    background-color: var(--color-indigo-100);
   }
 
   .bg-orange-50 {
@@ -35052,6 +37479,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops);
   }
 
+  .via-orange-200 {
+    --tw-gradient-via: var(--color-orange-200);
+    --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-via-stops);
+  }
+
   .via-orange-200\/30 {
     --tw-gradient-via: rgba(255, 215, 168, .3);
   }
@@ -35529,6 +37962,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .to-violet-600 {
     --tw-gradient-to: var(--color-violet-600);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-white {
+    --tw-gradient-to: var(--color-white);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -36174,6 +38612,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     color: var(--color-indigo-600);
   }
 
+  .text-indigo-800 {
+    color: var(--color-indigo-800);
+  }
+
   .text-orange-100 {
     color: var(--color-orange-100);
   }
@@ -36775,6 +39217,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-ring-color: transparent;
   }
 
+  .ring-white {
+    --tw-ring-color: var(--color-white);
+  }
+
   .ring-offset-2 {
     --tw-ring-offset-width: 2px;
     --tw-ring-offset-shadow: var(--tw-ring-inset, ) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
@@ -37167,16 +39613,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     }
   }
 
-  @media (hover: hover) {
-    .group-hover\:shadow-orange-500\/25:is(:where(.group):hover *) {
-      --tw-shadow-color: rgba(254, 110, 0, .25);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .group-hover\:shadow-orange-500\/25:is(:where(.group):hover *) {
-        --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-orange-500) 25%, transparent) var(--tw-shadow-alpha), transparent);
-      }
-    }
+  .last\:border-b-0:last-child {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 0;
   }
 
   @media (hover: hover) {
@@ -37246,12 +39685,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:rotate-3:hover {
       rotate: 3deg;
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:rotate-12:hover {
-      rotate: 12deg;
     }
   }
 
@@ -37334,8 +39767,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:bg-blue-200:hover {
-      background-color: var(--color-blue-200);
+    .hover\:bg-blue-100:hover {
+      background-color: var(--color-blue-100);
     }
   }
 
@@ -37420,6 +39853,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       .hover\:bg-green-50\/50:hover {
         background-color: color-mix(in oklab, var(--color-green-50) 50%, transparent);
       }
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-green-100:hover {
+      background-color: var(--color-green-100);
     }
   }
 
@@ -37550,6 +39989,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:bg-white\/10:hover {
+      background-color: rgba(255, 255, 255, .1);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-white\/10:hover {
+        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);
+      }
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-white\/20:hover {
       background-color: rgba(255, 255, 255, .2);
     }
@@ -37582,6 +40033,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       .hover\:bg-white\/50:hover {
         background-color: color-mix(in oklab, var(--color-white) 50%, transparent);
       }
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-yellow-100:hover {
+      background-color: var(--color-yellow-100);
     }
   }
 
@@ -37698,31 +40155,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:to-orange-100\/50:hover {
-      --tw-gradient-to: rgba(255, 237, 213, .5);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:to-orange-100\/50:hover {
-        --tw-gradient-to: color-mix(in oklab, var(--color-orange-100) 50%, transparent);
-      }
-    }
-
-    .hover\:to-orange-100\/50:hover {
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:to-orange-700:hover {
       --tw-gradient-to: var(--color-orange-700);
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:to-red-600:hover {
-      --tw-gradient-to: var(--color-red-600);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
     }
   }
@@ -37736,6 +40170,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (hover: hover) {
     .hover\:text-blue-700:hover {
       color: var(--color-blue-700);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-blue-800:hover {
+      color: var(--color-blue-800);
     }
   }
 
@@ -37831,12 +40271,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:opacity-100:hover {
-      opacity: 1;
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:shadow-2xl:hover {
       --tw-shadow: 0 25px 50px -12px var(--tw-shadow-color, rgba(0, 0, 0, .25));
       box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -37879,18 +40313,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:shadow-emerald-500\/25:hover {
         --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-emerald-500) 25%, transparent) var(--tw-shadow-alpha), transparent);
-      }
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:shadow-orange-500\/25:hover {
-      --tw-shadow-color: rgba(254, 110, 0, .25);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:shadow-orange-500\/25:hover {
-        --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-orange-500) 25%, transparent) var(--tw-shadow-alpha), transparent);
       }
     }
   }
@@ -38108,6 +40530,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       --tw-scale-y: 100%;
       --tw-scale-z: 100%;
       scale: var(--tw-scale-x) var(--tw-scale-y);
+    }
+  }
+
+  @media (hover: hover) {
+    .disabled\:hover\:bg-gray-200:disabled:hover {
+      background-color: var(--color-gray-200);
     }
   }
 
@@ -38850,6 +41278,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 64rem) {
+    .lg\:ml-64 {
+      margin-left: calc(var(--spacing) * 64);
+    }
+  }
+
+  @media (min-width: 64rem) {
     .lg\:ml-72 {
       margin-left: calc(var(--spacing) * 72);
     }
@@ -39029,20 +41463,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 80rem) {
-    .xl\:gap-2 {
-      gap: calc(var(--spacing) * 2);
-    }
-  }
-
-  @media (min-width: 80rem) {
     .xl\:gap-6 {
       gap: calc(var(--spacing) * 6);
-    }
-  }
-
-  @media (min-width: 80rem) {
-    .xl\:gap-8 {
-      gap: calc(var(--spacing) * 8);
     }
   }
 
@@ -39053,20 +41475,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (min-width: 80rem) {
-    .xl\:px-6 {
-      padding-inline: calc(var(--spacing) * 6);
-    }
-  }
-
-  @media (min-width: 80rem) {
     .xl\:py-2 {
       padding-block: calc(var(--spacing) * 2);
-    }
-  }
-
-  @media (min-width: 80rem) {
-    .xl\:py-3 {
-      padding-block: calc(var(--spacing) * 3);
     }
   }
 
@@ -39151,18 +41561,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:border-gray-700 {
       border-color: var(--color-gray-700);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:border-gray-700\/20 {
-      border-color: rgba(54, 65, 83, .2);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:border-gray-700\/20 {
-        border-color: color-mix(in oklab, var(--color-gray-700) 20%, transparent);
-      }
     }
   }
 
@@ -39629,18 +42027,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:bg-gray-800\/95 {
-      background-color: rgba(30, 41, 57, .95);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-gray-800\/95 {
-        background-color: color-mix(in oklab, var(--color-gray-800) 95%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:bg-gray-900 {
       background-color: var(--color-gray-900);
     }
@@ -39678,18 +42064,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @supports (color: color-mix(in lab, red, red)) {
       .dark\:bg-gray-900\/80 {
         background-color: color-mix(in oklab, var(--color-gray-900) 80%, transparent);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:bg-gray-900\/90 {
-      background-color: rgba(16, 24, 40, .9);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:bg-gray-900\/90 {
-        background-color: color-mix(in oklab, var(--color-gray-900) 90%, transparent);
       }
     }
   }
@@ -40125,13 +42499,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:from-gray-100 {
-      --tw-gradient-from: var(--color-gray-100);
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:from-gray-700 {
       --tw-gradient-from: var(--color-gray-700);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -40162,22 +42529,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:from-orange-600 {
       --tw-gradient-from: var(--color-orange-600);
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:from-orange-900\/30 {
-      --tw-gradient-from: rgba(126, 42, 12, .3);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:from-orange-900\/30 {
-        --tw-gradient-from: color-mix(in oklab, var(--color-orange-900) 30%, transparent);
-      }
-    }
-
-    .dark\:from-orange-900\/30 {
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
     }
   }
@@ -40238,22 +42589,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:via-gray-200 {
-      --tw-gradient-via: var(--color-gray-200);
-      --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
-      --tw-gradient-stops: var(--tw-gradient-via-stops);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:via-orange-700 {
-      --tw-gradient-via: var(--color-orange-700);
-      --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
-      --tw-gradient-stops: var(--tw-gradient-via-stops);
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:to-amber-400 {
       --tw-gradient-to: var(--color-amber-400);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -40284,13 +42619,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (prefers-color-scheme: dark) {
-    .dark\:to-gray-100 {
-      --tw-gradient-to: var(--color-gray-100);
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
     .dark\:to-gray-600 {
       --tw-gradient-to: var(--color-gray-600);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -40307,29 +42635,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (prefers-color-scheme: dark) {
     .dark\:to-gray-800 {
       --tw-gradient-to: var(--color-gray-800);
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:to-orange-900\/20 {
-      --tw-gradient-to: rgba(126, 42, 12, .2);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .dark\:to-orange-900\/20 {
-        --tw-gradient-to: color-mix(in oklab, var(--color-orange-900) 20%, transparent);
-      }
-    }
-
-    .dark\:to-orange-900\/20 {
-      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .dark\:to-red-600 {
-      --tw-gradient-to: var(--color-red-600);
       --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
     }
   }
@@ -40756,14 +43061,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   @media (prefers-color-scheme: dark) {
     @media (hover: hover) {
-      .dark\:hover\:border-orange-600:hover {
-        border-color: var(--color-orange-600);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
       .dark\:hover\:border-orange-600\/50:hover {
         border-color: rgba(240, 81, 0, .5);
       }
@@ -40780,20 +43077,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     @media (hover: hover) {
       .dark\:hover\:border-orange-700:hover {
         border-color: var(--color-orange-700);
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:bg-blue-900\/50:hover {
-        background-color: rgba(28, 57, 142, .5);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:bg-blue-900\/50:hover {
-          background-color: color-mix(in oklab, var(--color-blue-900) 50%, transparent);
-        }
       }
     }
   }
@@ -40840,28 +43123,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
         .dark\:hover\:bg-gray-700\/30:hover {
           background-color: color-mix(in oklab, var(--color-gray-700) 30%, transparent);
         }
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:bg-gray-700\/50:hover {
-        background-color: rgba(54, 65, 83, .5);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:bg-gray-700\/50:hover {
-          background-color: color-mix(in oklab, var(--color-gray-700) 50%, transparent);
-        }
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:bg-gray-800:hover {
-        background-color: var(--color-gray-800);
       }
     }
   }
@@ -40994,42 +43255,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
         .dark\:hover\:bg-slate-800\/50:hover {
           background-color: color-mix(in oklab, var(--color-slate-800) 50%, transparent);
         }
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:from-orange-900\/20:hover {
-        --tw-gradient-from: rgba(126, 42, 12, .2);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:from-orange-900\/20:hover {
-          --tw-gradient-from: color-mix(in oklab, var(--color-orange-900) 20%, transparent);
-        }
-      }
-
-      .dark\:hover\:from-orange-900\/20:hover {
-        --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
-      }
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    @media (hover: hover) {
-      .dark\:hover\:to-orange-900\/10:hover {
-        --tw-gradient-to: rgba(126, 42, 12, .1);
-      }
-
-      @supports (color: color-mix(in lab, red, red)) {
-        .dark\:hover\:to-orange-900\/10:hover {
-          --tw-gradient-to: color-mix(in oklab, var(--color-orange-900) 10%, transparent);
-        }
-      }
-
-      .dark\:hover\:to-orange-900\/10:hover {
-        --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
       }
     }
   }
@@ -45998,9 +48223,7 @@ a.maplibregl-ctrl-logo.maplibregl-compact {
 FICHIER: D:\4GI\PO\pick-n-drop\.next\package.json
 ================================================================================
 
-{
-  "type": "commonjs"
-}
+{"type": "commonjs"}
 
 
 ================================================================================
@@ -46009,16 +48232,55 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
 
 {
   "pages": {
-    "/_app": []
+    "/_app": [
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
+      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
+      "static/chunks/node_modules_next_dist_shared_lib_492fcef6._.js",
+      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
+      "static/chunks/node_modules_next_dist_ad6392d3._.js",
+      "static/chunks/node_modules_next_app_95ea274f.js",
+      "static/chunks/[next]_entry_page-loader_ts_f9f6e84e._.js",
+      "static/chunks/node_modules_react-dom_82bb97c6._.js",
+      "static/chunks/node_modules_f2979c3a._.js",
+      "static/chunks/[root-of-the-server]__010dee56._.js",
+      "static/chunks/pages__app_5771e187._.js",
+      "static/chunks/pages__app_4b3c26ac._.js"
+    ],
+    "/_error": [
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
+      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
+      "static/chunks/node_modules_next_dist_shared_lib_3cbd5cc2._.js",
+      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
+      "static/chunks/node_modules_next_dist_7c4b9b2a._.js",
+      "static/chunks/node_modules_next_error_8c8bf619.js",
+      "static/chunks/[next]_entry_page-loader_ts_8ccf5f86._.js",
+      "static/chunks/node_modules_react-dom_82bb97c6._.js",
+      "static/chunks/node_modules_f2979c3a._.js",
+      "static/chunks/[root-of-the-server]__95ff7225._.js",
+      "static/chunks/pages__error_5771e187._.js",
+      "static/chunks/pages__error_50fcf3db._.js"
+    ]
   },
   "devFiles": [],
   "ampDevFiles": [],
-  "polyfillFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
   "lowPriorityFiles": [
     "static/development/_ssgManifest.js",
     "static/development/_buildManifest.js"
   ],
-  "rootMainFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+    "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+    "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+    "static/chunks/node_modules_next_dist_445d8acf._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+    "static/chunks/_e69f0d32._.js",
+    "static/chunks/_01f48b92._.js"
+  ],
   "ampFirstPages": []
 }
 
@@ -46028,7 +48290,114 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
 ================================================================================
 
 {
-  "pages": {}
+  "pages": {
+    "/(legal)/[slug]/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
+      "static/chunks/_7d8e713c._.js",
+      "static/chunks/src_app_(legal)_[slug]_page_tsx_02f6a851._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ],
+    "/_not-found/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ],
+    "/login/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
+      "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
+      "static/chunks/node_modules_34a78007._.js",
+      "static/chunks/src_1664adfa._.js",
+      "static/chunks/src_app_login_page_tsx_02f6a851._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ],
+    "/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
+      "static/chunks/src_ca573837._.js",
+      "static/chunks/node_modules_lucide-react_dist_esm_icons_d952124b._.js",
+      "static/chunks/src_app_page_tsx_02f6a851._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ],
+    "/superadmin/page": [
+      "static/chunks/node_modules_next_dist_01fcdebf._.js",
+      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
+      "static/chunks/src_app_globals_b805903d.css",
+      "static/chunks/node_modules_2d4cc483._.js",
+      "static/chunks/src_730d25e2._.js",
+      "static/chunks/src_app_layout_tsx_68b267f5._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
+      "static/chunks/node_modules_870c4b4e._.js",
+      "static/chunks/src_2cd5c6ef._.js",
+      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
+      "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
+      "static/chunks/node_modules_leaflet_dist_leaflet-src_e7e140e9.js",
+      "static/chunks/node_modules_026fd78d._.js",
+      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
+      "static/chunks/src_app_superadmin_page_tsx_02f6a851._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
+      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
+      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
+      "static/chunks/node_modules_next_dist_445d8acf._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
+      "static/chunks/_e69f0d32._.js",
+      "static/chunks/_01f48b92._.js"
+    ]
+  }
 }
 
 
@@ -46043,17 +48412,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\routes-manifest.json
 FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
 ================================================================================
 
-{
-  "version": 4,
-  "routes": {},
-  "dynamicRoutes": {},
-  "notFoundRoutes": [],
-  "preview": {
-    "previewModeId": "58451b51ea01992c43660453f459878d",
-    "previewModeSigningKey": "6d528143832f058e47455f116427d6e2b89510b5ef2ef5f16ffe30f0045309fe",
-    "previewModeEncryptionKey": "d65a3673f72dd8ebd05203ddd82e77da48de4f1a8a6be166888cd861cd6ef192"
-  }
-}
+{"version":4,"routes":{"/terms-of-use":{},"/privacy-policy":{},"/cookies-policy":{},"/legal-notice":{},"/fraud-policy":{}},"dynamicRoutes":{"/[slug]":{"fallback":null}},"notFoundRoutes":[],"preview":{"previewModeId":"58451b51ea01992c43660453f459878d","previewModeSigningKey":"6d528143832f058e47455f116427d6e2b89510b5ef2ef5f16ffe30f0045309fe","previewModeEncryptionKey":"d65a3673f72dd8ebd05203ddd82e77da48de4f1a8a6be166888cd861cd6ef192"}}
 
 
 ================================================================================
@@ -46062,7 +48421,34 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\fallback-build-manifest.json
 
 {
   "pages": {
-    "/_app": []
+    "/_app": [
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
+      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
+      "static/chunks/node_modules_next_dist_shared_lib_492fcef6._.js",
+      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
+      "static/chunks/node_modules_next_dist_ad6392d3._.js",
+      "static/chunks/node_modules_next_app_95ea274f.js",
+      "static/chunks/[next]_entry_page-loader_ts_f9f6e84e._.js",
+      "static/chunks/node_modules_react-dom_82bb97c6._.js",
+      "static/chunks/node_modules_f2979c3a._.js",
+      "static/chunks/[root-of-the-server]__010dee56._.js",
+      "static/chunks/pages__app_5771e187._.js",
+      "static/chunks/pages__app_4b3c26ac._.js"
+    ],
+    "/_error": [
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
+      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
+      "static/chunks/node_modules_next_dist_shared_lib_3cbd5cc2._.js",
+      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
+      "static/chunks/node_modules_next_dist_7c4b9b2a._.js",
+      "static/chunks/node_modules_next_error_8c8bf619.js",
+      "static/chunks/[next]_entry_page-loader_ts_8ccf5f86._.js",
+      "static/chunks/node_modules_react-dom_82bb97c6._.js",
+      "static/chunks/node_modules_f2979c3a._.js",
+      "static/chunks/[root-of-the-server]__95ff7225._.js",
+      "static/chunks/pages__error_5771e187._.js",
+      "static/chunks/pages__error_50fcf3db._.js"
+    ]
   },
   "devFiles": [],
   "ampDevFiles": [],

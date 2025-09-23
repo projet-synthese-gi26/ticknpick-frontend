@@ -4,17 +4,26 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
+import dynamic from 'next/dynamic'; // <-- 1. Importez 'dynamic'
 
 import Sidebar, { SuperAdminProfile } from './Sidebar';
-import Overview from './Overview';
 import UserManagement from './UserManagement';
 import OperationsManagement from './OperationManagement';
-import FinanceManagement from './FinanceManagement';
+
+// <-- 2. Importez dynamiquement les composants qui utilisent des bibliothèques client-side (chart.js) -->
+const Overview = dynamic(() => import('./Overview'), {
+  ssr: false, // On désactive le rendu côté serveur pour ce composant
+  loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
+});
+const FinanceManagement = dynamic(() => import('./FinanceManagement'), {
+  ssr: false, // On désactive aussi pour celui-ci
+  loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
+});
 
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
-  const [isLoading, setIsLoading] = useState(true); // Set to true initially
+  const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<SuperAdminProfile | null>(null);
 
   useEffect(() => {
