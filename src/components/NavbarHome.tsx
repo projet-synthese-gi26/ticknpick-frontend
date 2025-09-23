@@ -18,16 +18,32 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Types pour TypeScript
+type LanguageCode = 'FR' | 'EN' | 'DE' | 'ES' | 'AR' | 'MORE';
+
+interface Language {
+  code: LanguageCode;
+  name: string;
+  flag: string;
+}
+
+interface NavigationItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<any>;
+  id: string;
+}
+
 export default function NavbarHome() {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState('FR');
+  const [currentLanguage, setCurrentLanguage] = useState<LanguageCode>('FR');
 
   // Langues disponibles
-  const languages = [
+  const languages: Language[] = [
     { code: 'FR', name: 'Français', flag: '🇫🇷' },
     { code: 'EN', name: 'English', flag: '🇺🇸' },
     { code: 'DE', name: 'Deutsch', flag: '🇩🇪' },
@@ -37,7 +53,7 @@ export default function NavbarHome() {
   ];
 
   // Navigation items avec icônes
-  const navigationItems = [
+  const navigationItems: NavigationItem[] = [
     { href: '/', label: 'Accueil', icon: Home, id: 'home' },
     { href: '/expedition', label: 'Envoyer un colis', icon: Send, id: 'send' },
     { href: '/track-package', label: 'Retrouver mon colis', icon: Search, id: 'track' },
@@ -47,15 +63,14 @@ export default function NavbarHome() {
   ];
 
   // Fonction de traduction automatique
-  const translatePage = (langCode: string) => { 
+  const translatePage = (langCode: LanguageCode) => { 
     if (langCode === 'MORE') {
       // Ouvrir Google Translate pour plus d'options
       window.open('https://translate.google.com/translate?sl=auto&tl=auto&u=' + encodeURIComponent(window.location.href), '_blank');
       return;
     }
 
-
-    const langMap = {
+    const langMap: Record<Exclude<LanguageCode, 'MORE'>, string> = {
       'FR': 'fr',
       'EN': 'en',
       'DE': 'de',
@@ -63,7 +78,7 @@ export default function NavbarHome() {
       'AR': 'ar'
     };
 
-    const targetLang = langMap[langCode];
+    const targetLang = langMap[langCode as Exclude<LanguageCode, 'MORE'>];
     
     if (targetLang && targetLang !== 'fr') {
       // Utilise Google Translate pour traduire la page
@@ -75,19 +90,23 @@ export default function NavbarHome() {
     }
   };
 
-  const handleLanguageChange = (langCode, langName) => {
+  const handleLanguageChange = (langCode: LanguageCode, langName: string) => {
     setCurrentLanguage(langCode);
     setIsLanguageOpen(false);
     translatePage(langCode);
     
     // Sauvegarde la préférence
-    localStorage.setItem('preferredLanguage', langCode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preferredLanguage', langCode);
+    }
   };
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     // Récupération de la langue préférée
-    const savedLang = localStorage.getItem('preferredLanguage');
-    if (savedLang) {
+    const savedLang = localStorage.getItem('preferredLanguage') as LanguageCode | null;
+    if (savedLang && languages.some(lang => lang.code === savedLang)) {
       setCurrentLanguage(savedLang);
     }
 
@@ -111,8 +130,8 @@ export default function NavbarHome() {
     window.addEventListener('scroll', handleScroll);
 
     // Fermer le menu langue si on clique ailleurs
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.language-dropdown')) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!(event.target as Element)?.closest('.language-dropdown')) {
         setIsLanguageOpen(false);
       }
     };
@@ -125,12 +144,12 @@ export default function NavbarHome() {
     };
   }, []);
 
-  const handleTabClick = (id) => {
+  const handleTabClick = (id: string) => {
     setActiveTab(id);
     setIsOpen(false);
   };
 
-  const getCurrentLanguageData = () => {
+  const getCurrentLanguageData = (): Language => {
     return languages.find(lang => lang.code === currentLanguage) || languages[0];
   };
 
