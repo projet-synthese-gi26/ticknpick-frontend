@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Package, Building, Search, Filter, Loader2, X, Eye, Edit, Ban, PlusCircle, Map, List, CheckCircle, 
-    ArrowLeft, ArrowRight, Calendar, User, Phone, MapPin, Truck
+    ArrowLeft, ArrowRight, Calendar, User, Phone, MapPin, Truck,
+    DollarSign
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
