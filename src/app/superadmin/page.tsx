@@ -5,26 +5,26 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 
-import Sidebar,  { SuperAdminProfile }  from './Sidebar'; // Nous allons créer Sidebar.tsx
-import Overview from './Overview'; // Nous allons créer Overview.tsx
+import Sidebar, { SuperAdminProfile } from './Sidebar';
+import Overview from './Overview';
 import UserManagement from './UserManagement';
 import OperationsManagement from './OperationManagement';
-import FinanceManagement from './FinanceManagement'; // Le composant que vous avez fourni
-
+import FinanceManagement from './FinanceManagement';
 
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
-  const [isLoading, setIsLoading] = useState(false); // Pas de loading nécessaire
+  const [isLoading, setIsLoading] = useState(true); // Set to true initially
   const [profile, setProfile] = useState<SuperAdminProfile | null>(null);
 
   useEffect(() => {
-    // Définir directement le profil sans vérification de connexion
+    // Set profile and then set loading to false
     setProfile({
-      name: 'Super Admin PicknDrop', // Nom par défaut comme demandé
-      email: 'superadmin@pickndrop.com', // Email par défaut
-      avatarUrl: '/avatars/default.png' // Avatar par défaut
+      name: 'Super Admin PicknDrop',
+      email: 'superadmin@pickndrop.com',
+      avatarUrl: '/avatars/default.png'
     });
+    setIsLoading(false);
   }, []);
 
   const renderContent = () => {
@@ -34,13 +34,22 @@ export default function SuperAdminDashboardPage() {
       case 'users':
         return <UserManagement />;
       case 'operations':
-        return <OperationsManagement />
+        return <OperationsManagement />;
       case 'finance':
         return <FinanceManagement />;
       default:
         return <Overview />;
     }
   };
+
+  // Show loading spinner while profile is being set
+  if (isLoading || !profile) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
