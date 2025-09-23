@@ -10032,18 +10032,8 @@ const ProfileMap = ({ position }: { position: [number, number] }) => {
   );
 };
 
-// Composant de prévisualisation d'image amélioré
-const ProfileImagePreview = ({ 
-  src, 
-  alt, 
-  className, 
-  onError 
-}: { 
-  src: string; 
-  alt: string; 
-  className: string; 
-  onError?: () => void;
-}) => {
+// --- AMÉLIORATION 1 : Composant de prévisualisation d'image amélioré ---
+const ProfileImagePreview = ({ src, alt }: { src: string; alt: string; }) => {
   const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [currentSrc, setCurrentSrc] = useState(src);
 
@@ -10052,16 +10042,6 @@ const ProfileImagePreview = ({
     setImageState('loading');
   }, [src]);
 
-  const handleImageLoad = () => {
-    setImageState('loaded');
-  };
-
-  const handleImageError = () => {
-    setImageState('error');
-    setCurrentSrc('/avatars/default.png');
-    onError?.();
-  };
-
   return (
     <div className="relative w-full h-full">
       {imageState === 'loading' && (
@@ -10069,16 +10049,20 @@ const ProfileImagePreview = ({
           <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
         </div>
       )}
-      <img 
-        src={currentSrc} 
-        alt={alt} 
-        className={`${className} ${imageState === 'loaded' ? 'visible' : 'invisible'}`} 
-        onError={handleImageError} 
-        onLoad={handleImageLoad} 
+      <img
+        src={currentSrc}
+        alt={alt}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${imageState === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+        onError={() => {
+          setImageState('error');
+          setCurrentSrc('/avatars/default.png');
+        }}
+        onLoad={() => setImageState('loaded')}
       />
     </div>
   );
 };
+
 
 // Composant de notification Toast
 const Toast = ({ message, type, onClose }: { 
@@ -10223,22 +10207,12 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   }, []);
 
   // Gestion du téléchargement de photos améliorée
-  const handlePhotoUpload = async (file: File) => {
+    const handlePhotoUpload = async (file: File) => {
     if (!file) return;
-    
-    // Validation du type de fichier
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) { 
-      showToast('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.', 'error'); 
-      return; 
-    }
-    
-    // Validation de la taille (5MB max)
+    if (!allowedTypes.includes(file.type)) { showToast('Format de fichier non supporté.', 'error'); return; }
     const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) { 
-      showToast('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.', 'error'); 
-      return; 
-    }
+    if (file.size > maxSize) { showToast('Le fichier est trop volumineux (max 5MB).', 'error'); return; }
     
     setUploadingPhoto(true);
     
@@ -10247,56 +10221,41 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       const timestamp = Date.now();
       const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
       
-      // Supprimer l'ancienne photo si elle existe
       if ('identity_photo_url' in formData && formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
         try {
           const urlParts = formData.identity_photo_url.split('/');
-          const existingFileName = urlParts[urlParts.length - 1];
-          if (existingFileName) {
-            await supabase.storage
-              .from('profile-photos')
-              .remove([`${profile.id}/${existingFileName}`]);
+          const existingFileName = urlParts.pop();
+          const existingPath = urlParts.slice(urlParts.indexOf(profile.id)).join('/');
+          if (existingPath && existingFileName) {
+              await supabase.storage.from('profile-photos').remove([`${existingPath}/${existingFileName}`]);
           }
         } catch (deleteError) { 
-          console.warn('Erreur lors de la suppression de l\'ancienne photo:', deleteError); 
+          console.warn('Erreur de suppression ancienne photo:', deleteError); 
         }
       }
       
-      // Upload de la nouvelle photo
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('profile-photos')
-        .upload(fileName, file, { 
-          upsert: true, 
-          cacheControl: '3600',
-          contentType: file.type 
-        });
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('profile-photos').upload(fileName, file, { upsert: true });
+      if (uploadError) throw new Error(`Erreur d'upload: ${uploadError.message}`);
       
-      if (uploadError) throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
+      const { data: { publicUrl } } = supabase.storage.from('profile-photos').getPublicUrl(fileName);
+      if (!publicUrl) throw new Error("URL publique non obtenue");
       
-      // Obtenir l'URL publique
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl(fileName);
-      
-      if (!publicUrl) throw new Error('Impossible d\'obtenir l\'URL de la photo');
-      
-      // Mise à jour du formData (seulement pour les profils PRO)
       if ('identity_photo_url' in formData) {
-        setFormData(prev => ({ 
-          ...prev, 
-          identity_photo_url: `${publicUrl}?t=${timestamp}` // Cache busting
-        }));
+        const newUrlWithCacheBust = `${publicUrl}?t=${timestamp}`;
+        setFormData(prev => ({ ...prev, identity_photo_url: newUrlWithCacheBust }));
+        // Mettre à jour aussi dans la BDD
+        await supabase.from('profiles_pro').update({ identity_photo_url: newUrlWithCacheBust }).eq('id', profile.id);
+        onUpdate();
       }
-      
-      showToast('Photo téléchargée avec succès !', 'success');
+      showToast('Photo mise à jour !', 'success');
     } catch (error: any) {
-      console.error('Erreur lors du téléchargement:', error);
-      showToast(`Erreur: ${error.message || 'Erreur lors du téléchargement'}`, 'error');
+      showToast(error.message, 'error');
     } finally {
       setUploadingPhoto(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -10598,7 +10557,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     }
   };
 
-    const handleStartUpgrade = (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
+  const handleStartUpgrade = (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
     // Avertir l'utilisateur qu'il va être redirigé
     if (!confirm(`Vous allez être redirigé vers le formulaire pour finaliser votre passage au compte ${newType}. Continuer ?`)) {
       return;
@@ -10698,8 +10657,8 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     </div>
   );
 
+  // --- AMÉLIORATION 2 : Rendu de la section photo repensé ---
   const renderPhotoSection = () => {
-    // Seuls les profils PRO ont des photos
     if (profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR') {
       return (
         <div className="w-48 h-48 rounded-full bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center border-4 border-orange-200">
@@ -10707,46 +10666,48 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         </div>
       );
     }
-
     const proData = formData as ProProfile;
-    
     return (
-      <div className="relative group">
-        <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
+      <div className="relative group w-48 h-48">
+        <div className="w-full h-full rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
           <ProfileImagePreview 
-            src={proData.identity_photo_url || '/avatars/default.png'} 
-            alt="Photo de profil" 
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+            src={proData.identity_photo_url || '/avatars/default.png'}
+            alt="Photo de profil"
           />
-          {uploadingPhoto && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
-                <p className="text-white text-sm font-medium">Téléchargement...</p>
-              </div>
-            </div>
-          )}
         </div>
-        {isEditing && (
-          <>
-            <button 
-              onClick={() => fileInputRef.current?.click()} 
-              disabled={uploadingPhoto} 
-              className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed" 
-              title="Changer la photo de profil"
-            >
-              {uploadingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/jpeg,image/jpg,image/png,image/webp" 
-              onChange={handleFileInputChange} 
-              disabled={uploadingPhoto} 
-            />
-          </>
+        
+        {/* État de chargement de l'upload */}
+        {uploadingPhoto && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center rounded-full text-white">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+              <p className="text-sm font-medium">Envoi...</p>
+            </div>
+          </div>
         )}
+        
+        {/* Bouton de modification qui apparaît au survol */}
+        {isEditing && !uploadingPhoto && (
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            title="Changer la photo de profil"
+          >
+            <div className="text-center">
+                <Camera className="w-8 h-8 mx-auto" />
+                <p className="text-sm font-semibold mt-1">Modifier</p>
+            </div>
+          </button>
+        )}
+        
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          className="hidden" 
+          accept="image/jpeg,image/jpg,image/png,image/webp" 
+          onChange={handleFileInputChange} 
+          disabled={uploadingPhoto} 
+        />
       </div>
     );
   };
@@ -27864,16 +27825,32 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Types pour TypeScript
+type LanguageCode = 'FR' | 'EN' | 'DE' | 'ES' | 'AR' | 'MORE';
+
+interface Language {
+  code: LanguageCode;
+  name: string;
+  flag: string;
+}
+
+interface NavigationItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<any>;
+  id: string;
+}
+
 export default function NavbarHome() {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState('FR');
+  const [currentLanguage, setCurrentLanguage] = useState<LanguageCode>('FR');
 
   // Langues disponibles
-  const languages = [
+  const languages: Language[] = [
     { code: 'FR', name: 'Français', flag: '🇫🇷' },
     { code: 'EN', name: 'English', flag: '🇺🇸' },
     { code: 'DE', name: 'Deutsch', flag: '🇩🇪' },
@@ -27883,7 +27860,7 @@ export default function NavbarHome() {
   ];
 
   // Navigation items avec icônes
-  const navigationItems = [
+  const navigationItems: NavigationItem[] = [
     { href: '/', label: 'Accueil', icon: Home, id: 'home' },
     { href: '/expedition', label: 'Envoyer un colis', icon: Send, id: 'send' },
     { href: '/track-package', label: 'Retrouver mon colis', icon: Search, id: 'track' },
@@ -27893,14 +27870,14 @@ export default function NavbarHome() {
   ];
 
   // Fonction de traduction automatique
-  const translatePage = (langCode) => {
+  const translatePage = (langCode: LanguageCode) => { 
     if (langCode === 'MORE') {
       // Ouvrir Google Translate pour plus d'options
       window.open('https://translate.google.com/translate?sl=auto&tl=auto&u=' + encodeURIComponent(window.location.href), '_blank');
       return;
     }
 
-    const langMap = {
+    const langMap: Record<Exclude<LanguageCode, 'MORE'>, string> = {
       'FR': 'fr',
       'EN': 'en',
       'DE': 'de',
@@ -27908,7 +27885,7 @@ export default function NavbarHome() {
       'AR': 'ar'
     };
 
-    const targetLang = langMap[langCode];
+    const targetLang = langMap[langCode as Exclude<LanguageCode, 'MORE'>];
     
     if (targetLang && targetLang !== 'fr') {
       // Utilise Google Translate pour traduire la page
@@ -27920,19 +27897,23 @@ export default function NavbarHome() {
     }
   };
 
-  const handleLanguageChange = (langCode, langName) => {
+  const handleLanguageChange = (langCode: LanguageCode, langName: string) => {
     setCurrentLanguage(langCode);
     setIsLanguageOpen(false);
     translatePage(langCode);
     
     // Sauvegarde la préférence
-    localStorage.setItem('preferredLanguage', langCode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preferredLanguage', langCode);
+    }
   };
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     // Récupération de la langue préférée
-    const savedLang = localStorage.getItem('preferredLanguage');
-    if (savedLang) {
+    const savedLang = localStorage.getItem('preferredLanguage') as LanguageCode | null;
+    if (savedLang && languages.some(lang => lang.code === savedLang)) {
       setCurrentLanguage(savedLang);
     }
 
@@ -27956,8 +27937,8 @@ export default function NavbarHome() {
     window.addEventListener('scroll', handleScroll);
 
     // Fermer le menu langue si on clique ailleurs
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.language-dropdown')) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!(event.target as Element)?.closest('.language-dropdown')) {
         setIsLanguageOpen(false);
       }
     };
@@ -27970,12 +27951,12 @@ export default function NavbarHome() {
     };
   }, []);
 
-  const handleTabClick = (id) => {
+  const handleTabClick = (id: string) => {
     setActiveTab(id);
     setIsOpen(false);
   };
 
-  const getCurrentLanguageData = () => {
+  const getCurrentLanguageData = (): Language => {
     return languages.find(lang => lang.code === currentLanguage) || languages[0];
   };
 

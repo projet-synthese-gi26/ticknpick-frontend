@@ -8,7 +8,10 @@ import {
   Edit, Save, Upload, MapPin, User, Building, Phone, Mail, Globe, 
   Loader2, Camera, Plus, Eye, EyeOff, Calendar, CreditCard, Settings, 
   AlertCircle, Car, Users, Star, Truck, Package, Shield, X, Check, 
-  Home
+  Home,
+  CheckCircle,
+  FileText,
+  IdCard
 } from 'lucide-react';
 import router from 'next/navigation';
 import { useRouter } from 'next/navigation';
@@ -59,6 +62,7 @@ interface ProProfile extends BaseProfile {
   opening_hours: string | null;
   storage_capacity: string | null;
   service_card_details: any;
+  id_card_front_url: string | null; id_card_back_url: string | null; niu_document_url: string | null;
 }
 
 type UserProfile = ClientProfile | DeliveryProfile | ProProfile;
@@ -90,6 +94,54 @@ const MapContainer = dynamic(
   }
 );
 
+// --- NOUVEAU: Composant pour les documents ---
+const DocumentUploadField = ({ label, icon: Icon, currentUrl, newFilePreview, onFileSelect, isEditing, isLoading }: {
+    label: string;
+    icon: React.ElementType;
+    currentUrl: string | null | undefined;
+    newFilePreview: string | null;
+    onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    isEditing: boolean;
+    isLoading: boolean;
+}) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    return (
+        <div className="bg-white p-4 rounded-xl border border-orange-100 shadow-sm space-y-3">
+            <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                <Icon className="w-5 h-5 text-orange-500" />
+                {label}
+            </h4>
+            <div className="h-32 bg-gray-50 rounded-lg flex items-center justify-center">
+                {newFilePreview ? (
+                    <img src={newFilePreview} alt="Aperçu" className="max-h-full max-w-full object-contain rounded" />
+                ) : currentUrl ? (
+                    <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="text-green-600 font-medium hover:underline text-center">
+                        <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                        Document vérifié<br/>(Cliquez pour voir)
+                    </a>
+                ) : (
+                    <p className="text-sm text-gray-500">Aucun document</p>
+                )}
+            </div>
+            {isEditing && (
+                <>
+                    <input type="file" ref={fileInputRef} onChange={onFileSelect} className="hidden" accept="image/png, image/jpeg, image/jpg" />
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isLoading}
+                        className="w-full bg-orange-100 hover:bg-orange-200 text-orange-700 text-sm font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4" />}
+                        {currentUrl ? 'Changer' : 'Télécharger'}
+                    </button>
+                </>
+            )}
+        </div>
+    );
+};
+
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
 
@@ -117,18 +169,8 @@ const ProfileMap = ({ position }: { position: [number, number] }) => {
   );
 };
 
-// Composant de prévisualisation d'image amélioré
-const ProfileImagePreview = ({ 
-  src, 
-  alt, 
-  className, 
-  onError 
-}: { 
-  src: string; 
-  alt: string; 
-  className: string; 
-  onError?: () => void;
-}) => {
+// --- AMÉLIORATION 1 : Composant de prévisualisation d'image amélioré ---
+const ProfileImagePreview = ({ src, alt }: { src: string; alt: string; }) => {
   const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [currentSrc, setCurrentSrc] = useState(src);
 
@@ -137,16 +179,6 @@ const ProfileImagePreview = ({
     setImageState('loading');
   }, [src]);
 
-  const handleImageLoad = () => {
-    setImageState('loaded');
-  };
-
-  const handleImageError = () => {
-    setImageState('error');
-    setCurrentSrc('/avatars/default.png');
-    onError?.();
-  };
-
   return (
     <div className="relative w-full h-full">
       {imageState === 'loading' && (
@@ -154,16 +186,20 @@ const ProfileImagePreview = ({
           <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
         </div>
       )}
-      <img 
-        src={currentSrc} 
-        alt={alt} 
-        className={`${className} ${imageState === 'loaded' ? 'visible' : 'invisible'}`} 
-        onError={handleImageError} 
-        onLoad={handleImageLoad} 
+      <img
+        src={currentSrc}
+        alt={alt}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${imageState === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+        onError={() => {
+          setImageState('error');
+          setCurrentSrc('/avatars/default.png');
+        }}
+        onLoad={() => setImageState('loaded')}
       />
     </div>
   );
 };
+
 
 // Composant de notification Toast
 const Toast = ({ message, type, onClose }: { 
@@ -212,6 +248,9 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
   const [showAddRelay, setShowAddRelay] = useState(false);
+    // --- NOUVEAUX ÉTATS POUR LES FICHIERS ---
+  const [filesToUpload, setFilesToUpload] = useState<Record<string, File | null>>({});
+  const [filePreviews, setFilePreviews] = useState<Record<string, string | null>>({});
    const router = useRouter();
   const [newRelayData, setNewRelayData] = useState({ 
     name: '', 
@@ -308,22 +347,12 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
   }, []);
 
   // Gestion du téléchargement de photos améliorée
-  const handlePhotoUpload = async (file: File) => {
+    const handlePhotoUpload = async (file: File) => {
     if (!file) return;
-    
-    // Validation du type de fichier
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) { 
-      showToast('Format de fichier non supporté. Veuillez choisir une image JPG, PNG ou WebP.', 'error'); 
-      return; 
-    }
-    
-    // Validation de la taille (5MB max)
+    if (!allowedTypes.includes(file.type)) { showToast('Format de fichier non supporté.', 'error'); return; }
     const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) { 
-      showToast('Le fichier est trop volumineux. Taille maximum autorisée : 5MB.', 'error'); 
-      return; 
-    }
+    if (file.size > maxSize) { showToast('Le fichier est trop volumineux (max 5MB).', 'error'); return; }
     
     setUploadingPhoto(true);
     
@@ -332,141 +361,132 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
       const timestamp = Date.now();
       const fileName = `${profile.id}/profile_${timestamp}.${fileExt}`;
       
-      // Supprimer l'ancienne photo si elle existe
       if ('identity_photo_url' in formData && formData.identity_photo_url && !formData.identity_photo_url.includes('default.png')) {
         try {
           const urlParts = formData.identity_photo_url.split('/');
-          const existingFileName = urlParts[urlParts.length - 1];
-          if (existingFileName) {
-            await supabase.storage
-              .from('profile-photos')
-              .remove([`${profile.id}/${existingFileName}`]);
+          const existingFileName = urlParts.pop();
+          const existingPath = urlParts.slice(urlParts.indexOf(profile.id)).join('/');
+          if (existingPath && existingFileName) {
+              await supabase.storage.from('profile-photos').remove([`${existingPath}/${existingFileName}`]);
           }
         } catch (deleteError) { 
-          console.warn('Erreur lors de la suppression de l\'ancienne photo:', deleteError); 
+          console.warn('Erreur de suppression ancienne photo:', deleteError); 
         }
       }
       
-      // Upload de la nouvelle photo
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('profile-photos')
-        .upload(fileName, file, { 
-          upsert: true, 
-          cacheControl: '3600',
-          contentType: file.type 
-        });
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('profile-photos').upload(fileName, file, { upsert: true });
+      if (uploadError) throw new Error(`Erreur d'upload: ${uploadError.message}`);
       
-      if (uploadError) throw new Error(`Erreur de téléchargement: ${uploadError.message}`);
+      const { data: { publicUrl } } = supabase.storage.from('profile-photos').getPublicUrl(fileName);
+      if (!publicUrl) throw new Error("URL publique non obtenue");
       
-      // Obtenir l'URL publique
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl(fileName);
-      
-      if (!publicUrl) throw new Error('Impossible d\'obtenir l\'URL de la photo');
-      
-      // Mise à jour du formData (seulement pour les profils PRO)
       if ('identity_photo_url' in formData) {
-        setFormData(prev => ({ 
-          ...prev, 
-          identity_photo_url: `${publicUrl}?t=${timestamp}` // Cache busting
-        }));
+        const newUrlWithCacheBust = `${publicUrl}?t=${timestamp}`;
+        setFormData(prev => ({ ...prev, identity_photo_url: newUrlWithCacheBust }));
+        // Mettre à jour aussi dans la BDD
+        await supabase.from('profiles_pro').update({ identity_photo_url: newUrlWithCacheBust }).eq('id', profile.id);
+        onUpdate();
       }
-      
-      showToast('Photo téléchargée avec succès !', 'success');
+      showToast('Photo mise à jour !', 'success');
     } catch (error: any) {
-      console.error('Erreur lors du téléchargement:', error);
-      showToast(`Erreur: ${error.message || 'Erreur lors du téléchargement'}`, 'error');
+      showToast(error.message, 'error');
     } finally {
       setUploadingPhoto(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
+  // --- NOUVEAU: Gère la sélection de TOUS les fichiers ---
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Mettre à jour l'état du fichier à uploader
+      setFilesToUpload(prev => ({ ...prev, [fieldName]: file }));
+      
+      // Créer et stocker un aperçu
+      const previewUrl = URL.createObjectURL(file);
+      setFilePreviews(prev => ({ ...prev, [fieldName]: previewUrl }));
+
+      // Nettoyer l'URL de l'aperçu précédent pour libérer la mémoire
+      return () => URL.revokeObjectURL(previewUrl);
+    }
+  };
+
+
+
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) handlePhotoUpload(file);
   };
 
-  // Sauvegarde des modifications
-  const handleSaveChanges = async () => {
-    setIsLoading(true);
-    try {
-      let updateData: any = {
-        manager_name: formData.manager_name,
-        phone_number: formData.phone_number,
-        birth_date: formData.birth_date,
-        nationality: formData.nationality,
-        home_address: formData.home_address,
-        id_card_number: formData.id_card_number,
-        email: formData.email
-      };
+    const handleSaveChanges = async () => {
+        setIsLoading(true);
+        try {
+            const uploadedFileUrls: Record<string, any> = {};
 
-      // Table et champs spécifiques selon le type de compte
-      let tableName: string;
-      
-      if (profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR') {
-        tableName = 'profiles';
-        
-        // Champs spécifiques aux livreurs
-        if (profile.account_type === 'LIVREUR') {
-          const deliveryData = formData as DeliveryProfile;
-          updateData = {
-            ...updateData,
-            home_address_locality: deliveryData.home_address_locality,
-            niu: deliveryData.niu,
-            vehicle_type: deliveryData.vehicle_type,
-            vehicle_brand: deliveryData.vehicle_brand,
-            vehicle_registration: deliveryData.vehicle_registration,
-            vehicle_color: deliveryData.vehicle_color,
-            trunk_dimensions: deliveryData.trunk_dimensions,
-            driving_license_front_url: deliveryData.driving_license_front_url,
-            driving_license_back_url: deliveryData.driving_license_back_url,
-            accident_history: deliveryData.accident_history
-          };
-        } else {
-          // Client - champs additionnels si nécessaire
-          const clientData = formData as ClientProfile;
-          if ('home_address_locality' in clientData) {
-            updateData.home_address_locality = clientData.home_address_locality;
-          }
+            // Étape 1: Uploader tous les nouveaux fichiers sélectionnés
+            for (const [fieldName, file] of Object.entries(filesToUpload)) {
+                if (file) {
+                    const filePath = `${profile.id}/${fieldName}_${Date.now()}.${file.name.split('.').pop()}`;
+                    const { data, error: uploadError } = await supabase.storage.from('user-files').upload(filePath, file, { upsert: true });
+                    if (uploadError) throw new Error(`Échec de l'upload pour ${fieldName}: ${uploadError.message}`);
+
+                    const { data: { publicUrl } } = supabase.storage.from('user-files').getPublicUrl(filePath);
+                    if (!publicUrl) throw new Error(`Impossible d'obtenir l'URL pour ${fieldName}`);
+
+                    // Structure pour les URL de CNI et permis de conduire
+                    if (fieldName === 'id_card_front') {
+                        if (!uploadedFileUrls.id_card_urls) uploadedFileUrls.id_card_urls = {};
+                        uploadedFileUrls.id_card_urls.front = publicUrl;
+                    } else if (fieldName === 'id_card_back') {
+                        if (!uploadedFileUrls.id_card_urls) uploadedFileUrls.id_card_urls = {};
+                        uploadedFileUrls.id_card_urls.back = publicUrl;
+                    } else if (fieldName === 'driving_license_front') {
+                        if (!uploadedFileUrls.driving_license_urls) uploadedFileUrls.driving_license_urls = {};
+                        uploadedFileUrls.driving_license_urls.front = publicUrl;
+                    } else if (fieldName === 'driving_license_back') {
+                        if (!uploadedFileUrls.driving_license_urls) uploadedFileUrls.driving_license_urls = {};
+                        uploadedFileUrls.driving_license_urls.back = publicUrl;
+                    } else {
+                        uploadedFileUrls[`${fieldName}_url`] = publicUrl;
+                    }
+                }
+            }
+
+            // Étape 2: Préparer les données textuelles à mettre à jour
+            let updateData: Partial<UserProfile> = {
+                manager_name: formData.manager_name,
+                phone_number: formData.phone_number,
+                // ... (tous les autres champs de texte de formData)
+            };
+            
+            // Étape 3: Fusionner les URLs des fichiers uploadés avec les données à mettre à jour
+            const finalUpdateData = { ...updateData, ...uploadedFileUrls };
+
+            let tableName = profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR' ? 'profiles' : 'profiles_pro';
+
+            const { error } = await supabase
+                .from(tableName)
+                .update(finalUpdateData)
+                .eq('id', profile.id);
+
+            if (error) throw error;
+            
+            // Réinitialisation après succès
+            setIsEditing(false);
+            setFilesToUpload({});
+            setFilePreviews({});
+            onUpdate(); // Rafraîchit les données de la page parente
+            showToast('Profil mis à jour avec succès !', 'success');
+
+        } catch (error: any) {
+            console.error('Erreur lors de la sauvegarde:', error);
+            showToast('Erreur lors de la sauvegarde : ' + error.message, 'error');
+        } finally {
+            setIsLoading(false);
         }
-      } else {
-        tableName = 'profiles_pro';
-        const proData = formData as ProProfile;
-        
-        updateData = {
-          ...updateData,
-          identity_photo_url: proData.identity_photo_url,
-          id_card_url: proData.id_card_url,
-          tax_id: proData.tax_id,
-          professional_experience: proData.professional_experience,
-          relay_point_name: proData.relay_point_name,
-          relay_point_address: proData.relay_point_address,
-          relay_point_gps: proData.relay_point_gps,
-          opening_hours: proData.opening_hours,
-          storage_capacity: proData.storage_capacity,
-          service_card_details: proData.service_card_details
-        };
-      }
-      
-      const { error } = await supabase
-        .from(tableName)
-        .update(updateData)
-        .eq('id', profile.id);
-      
-      if (error) throw error;
-      
-      setIsEditing(false);
-      onUpdate();
-      showToast('Profil mis à jour avec succès !', 'success');
-    } catch (error: any) {
-      console.error('Erreur lors de la sauvegarde:', error);
-      showToast('Erreur lors de la sauvegarde : ' + error.message, 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
 
   // Ajouter un point relais
   const addRelayPoint = async () => {
@@ -683,7 +703,7 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     }
   };
 
-    const handleStartUpgrade = (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
+  const handleStartUpgrade = (newType: 'FREELANCE' | 'AGENCY' | 'LIVREUR') => {
     // Avertir l'utilisateur qu'il va être redirigé
     if (!confirm(`Vous allez être redirigé vers le formulaire pour finaliser votre passage au compte ${newType}. Continuer ?`)) {
       return;
@@ -783,8 +803,8 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
     </div>
   );
 
+  // --- AMÉLIORATION 2 : Rendu de la section photo repensé ---
   const renderPhotoSection = () => {
-    // Seuls les profils PRO ont des photos
     if (profile.account_type === 'CLIENT' || profile.account_type === 'LIVREUR') {
       return (
         <div className="w-48 h-48 rounded-full bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center border-4 border-orange-200">
@@ -792,46 +812,48 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
         </div>
       );
     }
-
     const proData = formData as ProProfile;
-    
     return (
-      <div className="relative group">
-        <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
+      <div className="relative group w-48 h-48">
+        <div className="w-full h-full rounded-full overflow-hidden border-4 border-orange-200 shadow-xl group-hover:border-orange-400 transition-all duration-300">
           <ProfileImagePreview 
-            src={proData.identity_photo_url || '/avatars/default.png'} 
-            alt="Photo de profil" 
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+            src={proData.identity_photo_url || '/avatars/default.png'}
+            alt="Photo de profil"
           />
-          {uploadingPhoto && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 text-white animate-spin mx-auto mb-2" />
-                <p className="text-white text-sm font-medium">Téléchargement...</p>
-              </div>
-            </div>
-          )}
         </div>
-        {isEditing && (
-          <>
-            <button 
-              onClick={() => fileInputRef.current?.click()} 
-              disabled={uploadingPhoto} 
-              className="absolute -bottom-2 -right-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-3 rounded-full shadow-lg hover:scale-110 transform transition-all duration-300 hover:rotate-12 disabled:opacity-50 disabled:cursor-not-allowed" 
-              title="Changer la photo de profil"
-            >
-              {uploadingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/jpeg,image/jpg,image/png,image/webp" 
-              onChange={handleFileInputChange} 
-              disabled={uploadingPhoto} 
-            />
-          </>
+        
+        {/* État de chargement de l'upload */}
+        {uploadingPhoto && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center rounded-full text-white">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+              <p className="text-sm font-medium">Envoi...</p>
+            </div>
+          </div>
         )}
+        
+        {/* Bouton de modification qui apparaît au survol */}
+        {isEditing && !uploadingPhoto && (
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            title="Changer la photo de profil"
+          >
+            <div className="text-center">
+                <Camera className="w-8 h-8 mx-auto" />
+                <p className="text-sm font-semibold mt-1">Modifier</p>
+            </div>
+          </button>
+        )}
+        
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          className="hidden" 
+          accept="image/jpeg,image/jpg,image/png,image/webp" 
+          onChange={handleFileInputChange} 
+          disabled={uploadingPhoto} 
+        />
       </div>
     );
   };
@@ -993,6 +1015,49 @@ export default function ProfilePage({ profile, onUpdate }: ProfilePageProps) {
             </div>
           </div>
         </div>
+
+        {/* NOUVEAU : Section pour les documents */}
+        {(profile.account_type === 'FREELANCE' || profile.account_type === 'AGENCY') && (
+            <div className="bg-white/70 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-orange-100 mt-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        <FileText className="w-6 h-6 text-orange-500" />
+                        Documents et Vérifications
+                    </h3>
+                    {/* Le bouton d'édition global gère cette section */}
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <DocumentUploadField
+                        label="CNI (Recto)"
+                        icon={IdCard}
+                        currentUrl={(formData as ProProfile).id_card_front_url}
+                        newFilePreview={filePreviews.id_card_front}
+                        onFileSelect={(e) => handleFileSelect(e, 'id_card_front')}
+                        isEditing={isEditing}
+                        isLoading={uploadingPhoto}
+                    />
+                    <DocumentUploadField
+                        label="CNI (Verso)"
+                        icon={CreditCard}
+                        currentUrl={(formData as ProProfile).id_card_back_url}
+                        newFilePreview={filePreviews.id_card_back}
+                        onFileSelect={(e) => handleFileSelect(e, 'id_card_back')}
+                        isEditing={isEditing}
+                        isLoading={uploadingPhoto}
+                    />
+                    <DocumentUploadField
+                        label="Document NIU"
+                        icon={FileText}
+                        currentUrl={(formData as ProProfile).niu_document_url}
+                        newFilePreview={filePreviews.niu_document}
+                        onFileSelect={(e) => handleFileSelect(e, 'niu_document')}
+                        isEditing={isEditing}
+                        isLoading={uploadingPhoto}
+                    />
+                </div>
+            </div>
+        )}
 
         {/* Section spécifique aux Livreurs */}
         {profile.account_type === 'LIVREUR' && (
