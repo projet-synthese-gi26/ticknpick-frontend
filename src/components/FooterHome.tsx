@@ -23,7 +23,7 @@ export default function Footer() {
               <li><Link href="/expedition" className="text-gray-400 hover:text-white transition-colors">Envoyer un colis</Link></li>
               <li><Link href="#how-it-works" className="text-gray-400 hover:text-white transition-colors">Comment ça marche</Link></li>
               <li><Link href="/login" className="text-gray-400 hover:text-white transition-colors">Espace PRO</Link></li>
-              <li><Link href="/tracking" className="text-gray-400 hover:text-white transition-colors">Suivre un colis</Link></li>
+              <li><Link href="/track-package" className="text-gray-400 hover:text-white transition-colors">Suivre un colis</Link></li>
             </ul>
           </div>
           {/* === NOUVELLE SECTION === */}
@@ -40,9 +40,9 @@ export default function Footer() {
           <div>
             <h3 className="font-bold text-lg mb-4">Suivez-nous</h3>
             <div className="flex gap-4">
-              <a href="#" className="text-gray-400 hover:text-white transition-colors"><Facebook className="w-6 h-6" /></a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors"><Twitter className="w-6 h-6" /></a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors"><Instagram className="w-6 h-6" /></a>
+              <a href="https://www.facebook.com/YowyobInc" className="text-gray-400 hover:text-white transition-colors"><Facebook className="w-6 h-6" /></a>
+              <a href="https://twitter.com/yowyob" className="text-gray-400 hover:text-white transition-colors"><Twitter className="w-6 h-6" /></a>
+              <a href="https://www.instagram.com/yowyob" className="text-gray-400 hover:text-white transition-colors"><Instagram className="w-6 h-6" /></a>
             </div>
           </div>
         </div>

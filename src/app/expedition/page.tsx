@@ -28,6 +28,10 @@ import RouteSelectionStep from './RouteExpedition';
 import SignatureStep from './SignatureStep';
 import PaymentStep from './PaymentStepExpedition';
 import NavbarHome from '@/components/NavbarHome';
+import { CheckCircleIcon, PrinterIcon } from '@heroicons/react/24/outline';
+import { UserPlusIcon } from 'lucide-react';
+import jsPDF from 'jspdf';
+import OriginalQRCode from 'qrcode';
 
 const EXPEDITION_FORM_STORAGE_KEY = 'expedition_form_in_progress';
 
@@ -199,6 +203,10 @@ export default function ShippingPage() {
     pricing: { basePrice: 0, travelPrice: 0, operatorFee: 0, totalPrice: 0 },
   });
 
+              // États pour l'écran de succès
+  const [trackingNumber] = useState(`PDL${Date.now().toString().slice(-7)}`);  
+
+
   useEffect(() => {
     if (formData.currentStep > 0 && formData.currentStep < 7) {
       try {
@@ -269,6 +277,153 @@ export default function ShippingPage() {
     window.location.reload();
   };
 
+  const generateBordereauPDF = async () => {
+              try {
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const margin = 15;
+                let y = 20;
+
+                // FONCTIONS UTILITAIRES
+                const addSectionTitle = (title: string) => {
+                  pdf.setFontSize(14);
+                  pdf.setFont('helvetica', 'bold');
+                  pdf.setTextColor(45, 55, 72); // Couleur sombre (slate-700)
+                  pdf.text(title, margin, y);
+                  y += 8;
+                  pdf.setLineWidth(0.2);
+                  pdf.line(margin, y - 3, pageWidth - margin, y - 3);
+                  pdf.setFont('helvetica', 'normal');
+                  pdf.setTextColor(0, 0, 0);
+                };
+                
+                const addField = (label: string, value: string | undefined | null) => {
+                  if (!value) return;
+                  pdf.setFontSize(9);
+                  pdf.setFont('helvetica', 'bold');
+                  pdf.text(label, margin, y);
+                  pdf.setFont('helvetica', 'normal');
+                  pdf.text(String(value), margin + 45, y);
+                  y += 6;
+                };
+
+                // 1. EN-TÊTE
+                pdf.setFontSize(22);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setTextColor(249, 115, 22); // Orange
+                pdf.text("PicknDrop Link", margin, y - 5);
+                
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'italic');
+                pdf.setTextColor(100, 116, 139); // slate-500
+                pdf.text('Votre solution de livraison de confiance', margin, y);
+
+                const qrDataURL = await OriginalQRCode.toDataURL(trackingNumber, { width: 110, margin: 1 });
+                const qrSize = 28;
+                pdf.addImage(qrDataURL, 'PNG', pageWidth - margin - qrSize, y - 12, qrSize, qrSize);
+
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setTextColor(0,0,0);
+                pdf.text(`Bordereau d'Expédition`, pageWidth - margin - 35, y - 5, { align: 'right' });
+                
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(`N°: ${trackingNumber}`, pageWidth - margin - 35, y, { align: 'right' });
+                pdf.text(`Date: ${new Date().toLocaleDateString('fr-CM')}`, pageWidth - margin - 35, y + 5, { align: 'right' });
+
+                y += qrSize - 5;
+                
+                // 2. EXPÉDITEUR & DESTINATAIRE
+                addSectionTitle('Intervenants');
+                const startYCols = y;
+                addField('Expéditeur:', formData.senderData.senderName);
+                addField('Téléphone:', formData.senderData.senderPhone);
+                addField('Point de Dépôt:', formData.routeData.departurePointName);
+                
+                y = startYCols; // Reset y pour la deuxième colonne
+                pdf.text('', pageWidth / 2, y); // Placeholder pour aligner
+                addField('Destinataire:', formData.recipientData.recipientName);
+                addField('Téléphone:', formData.recipientData.recipientPhone);
+                addField('Point de Retrait:', formData.routeData.arrivalPointName);
+                y = Math.max(y, startYCols + (3*6)); // S'assurer que 'y' est à la fin de la colonne la plus longue
+                y += 5;
+
+                // 3. DÉTAILS DU COLIS
+                addSectionTitle('Détails du Colis');
+                if (formData.packageData.photo) {
+                  pdf.setFont('helvetica', 'bold');
+                  pdf.text('Photo du Colis:', margin + 110, y - 6);
+                  pdf.addImage(formData.packageData.photo, 'JPEG', margin + 110, y, 35, 35); 
+                }
+                addField('Désignation:', formData.packageData.designation);
+                addField('Poids:', `${formData.packageData.weight} kg`);
+                let caracteristiques = [];
+                if (formData.packageData.isFragile) caracteristiques.push("Fragile");
+                if (formData.packageData.isPerishable) caracteristiques.push("Périssable");
+                if (formData.packageData.isInsured) caracteristiques.push(`Assuré (Valeur: ${Number(formData.packageData.declaredValue).toLocaleString('fr-FR')} FCFA)`);
+                if (caracteristiques.length > 0) addField('Spécificités:', caracteristiques.join(', '));
+                y += 5;
+                
+                // 4. RÉCAPITULATIF FINANCIER
+                addSectionTitle('Récapitulatif Financier');
+                addField('Coût de base:', `${formData.pricing.basePrice.toLocaleString('fr-FR')} FCFA`);
+                addField('Frais de trajet:', `${formData.pricing.travelPrice.toLocaleString('fr-FR')} FCFA`);
+                if(formData.pricing.operatorFee > 0) addField('Frais transaction:', `${formData.pricing.operatorFee.toLocaleString('fr-FR')} FCFA`);
+                pdf.setLineWidth(0.3);
+                pdf.line(margin, y, margin + 85, y);
+                y += 6;
+
+                pdf.setFont('helvetica', 'bold');
+                addField('Total:', `${formData.pricing.totalPrice.toLocaleString('fr-FR')} FCFA`);
+                pdf.setFont('helvetica', 'normal');
+                y += 10;
+                
+                // 5. SIGNATURE
+                addSectionTitle('Signature');
+                if (formData.signatureData.signatureUrl) {
+                  try {
+                    pdf.addImage(formData.signatureData.signatureUrl, 'PNG', margin, y, 50, 20);
+                  } catch(e) { 
+                    console.error("Erreur d'ajout de signature"); 
+                  }
+                } else {
+                  pdf.text('Pas de signature numérique.', margin, y);
+                }
+                pdf.line(margin, y + 25, margin + 60, y + 25);
+                pdf.text("Signature de l'agent", margin + 100, y + 28);
+                pdf.line(margin + 90, y + 25, margin + 150, y + 25);
+
+                // 6. PIED DE PAGE
+                const finalY = pdf.internal.pageSize.getHeight() - 15;
+                pdf.setLineWidth(0.5);
+                pdf.line(margin, finalY - 5, pageWidth - margin, finalY - 5);
+                pdf.setFontSize(8);
+                pdf.setTextColor(150, 150, 150);
+                pdf.text(`Document généré le ${new Date().toLocaleString('fr-CM')}. PicknDrop Link vous remercie.`, pageWidth / 2, finalY, { align: 'center' });
+
+                // SAUVEGARDE
+                pdf.save(`Bordereau_Expedition_${trackingNumber}.pdf`);
+              } catch (error) {
+                console.error("Erreur détaillée lors de la génération du PDF:", error);
+                alert("Une erreur est survenue lors de la génération du bordereau PDF.");
+              }
+            };
+const handleCreateAccount = () => {
+              // 1. Préparer les données de l'expéditeur pour le pré-remplissage
+              const prefillData = {
+                name: formData.senderData.senderName,
+                email: formData.senderData.senderEmail,
+                phone: formData.senderData.senderPhone,
+              };
+
+              // 2. Stocker les données dans localStorage pour que la page d'inscription puisse les lire
+              localStorage.setItem('registration_prefill', JSON.stringify(prefillData));
+
+              // 3. Rediriger vers la page d'inscription
+              router.push('/register');
+            };
+
   const renderCurrentStep = () => {
     switch (formData.currentStep) {
       case 1:
@@ -322,41 +477,78 @@ export default function ShippingPage() {
           onBack={() => setFormData(prev => ({ ...prev, currentStep: 5 }))}
           currentUser={user}
         />;
-      case 7:
-        return (
-          <motion.div 
-            className="text-center p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-orange-100 dark:border-orange-800/30"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
-          >
-            <motion.div
-              animate={{ 
-                scale: [1, 1.05, 1],
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <SolidCheckCircleIcon className="w-20 h-20 text-orange-500 dark:text-orange-400 mx-auto"/>
-            </motion.div>
-            <h2 className="text-2xl font-bold mt-4 text-gray-800 dark:text-gray-100">
-              Expédition Enregistrée !
-            </h2>
-            <p className="text-gray-600 dark:text-gray-300 mt-2 text-base max-w-md mx-auto">
-              Votre colis est maintenant en route. Le bordereau a été généré avec succès.
-            </p>
-            <div className="flex justify-center mt-6">
-              <motion.button 
-                onClick={resetFormAndStartOver} 
-                className="bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md transition-all duration-300 flex items-center space-x-2"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+          case 7:
+            return (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-gray-900 p-4"
               >
-                <DocumentTextIcon className="w-4 h-4" />
-                <span>Nouvelle expédition</span>
-              </motion.button>
-            </div>
-          </motion.div>
-        );
+                <div className="max-w-md w-full text-center space-y-6">
+                  <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl">
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto drop-shadow-lg"/>
+                    </motion.div>
+                    
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Expédition confirmée !</h2>
+                    <p className="text-gray-600 dark:text-gray-300 mb-6">Votre colis a été enregistré.</p>
+                    
+                    <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Numéro de suivi</p>
+                      <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{trackingNumber}</p>
+                    </div>
+
+                    {/* Bouton télécharger le bordereau */}
+                    <motion.button
+                      onClick={generateBordereauPDF}
+                      className="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors shadow-lg"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <PrinterIcon className="w-5 h-5 mr-2" />
+                      Télécharger le Bordereau
+                    </motion.button>
+                  </div>
+
+                  {/* Bloc d'incitation à l'inscription (seulement si pas connecté) */}
+                  {!user && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5 }}
+                      className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-xl border-2 border-dashed border-orange-300 dark:border-orange-600"
+                    >
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                          <StarIcon className="w-6 h-6 text-orange-400" />
+                          <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Devenez Client !</h3>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                          Créez votre compte pour suivre vos colis, voir votre historique et bénéficier d'offres exclusives. Vos informations sont déjà prêtes !
+                      </p>
+                      <motion.button
+                        onClick={handleCreateAccount}
+                        className="w-full flex items-center justify-center bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-all"
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <UserPlusIcon className="w-5 h-5 mr-2" />
+                        Créer mon compte en 1 clic
+                      </motion.button>
+                    </motion.div>
+                  )}
+
+                  <button 
+                    onClick={resetFormAndStartOver}
+                    className="text-gray-500 hover:text-orange-600 text-sm font-medium mt-4"
+                  >
+                    Effectuer une autre expédition
+                  </button>
+                </div>
+              </motion.div>
+            );
       default:
         return null;
     }

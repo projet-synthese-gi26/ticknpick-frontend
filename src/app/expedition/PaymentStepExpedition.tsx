@@ -19,15 +19,18 @@ import {
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; 
 import { supabase } from '@/lib/supabase';
-import { PhoneIcon, PlusIcon } from 'lucide-react';
+import { PhoneIcon, PlusIcon, StarIcon, UserPlusIcon } from 'lucide-react';
 import { ProcessingAnimation } from './demo';
+import { useRouter } from 'next/navigation';
 
 interface FinalData {
   senderName: string;
   senderPhone: string;
+  senderEmail: string;
   recipientName: string;
   recipientPhone: string;
   recipientEmail: string;
+  photo: string | null; // NOUVEAU: La photo du colis est maintenant disponible
   designation: string;
   weight: string;
   isFragile: boolean;
@@ -86,6 +89,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
   const [trackingNumber, setTrackingNumber] = useState('');
   const [mobileOperator, setMobileOperator] = useState<'orange' | 'mtn'>('orange');
   const [mobilePhone, setMobilePhone] = useState('');
+  const router = useRouter(); 
 
   const operatorFee = selectedMethod === 'mobile' ? PAYMENT_OPERATOR_FEE : 0;
   const totalPrice = allData.basePrice + allData.travelPrice + operatorFee;
@@ -104,6 +108,21 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
       return validateMobilePhone(mobilePhone);
     }
     return true;
+  };
+
+  const handleCreateAccount = () => {
+    // 1. Préparer les données de l'expéditeur pour le pré-remplissage
+    const prefillData = {
+      name: allData.senderName,
+      email: allData.senderEmail,
+      phone: allData.senderPhone,
+    };
+
+    // 2. Stocker les données dans localStorage pour que la page d'inscription puisse les lire
+    localStorage.setItem('registration_prefill', JSON.stringify(prefillData));
+
+    // 3. Rediriger vers la page d'inscription
+    router.push('/register');
   };
 
   const generateBordereauPDF = async () => {
@@ -180,6 +199,11 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
 
       // 3. DÉTAILS DU COLIS
       addSectionTitle('Détails du Colis');
+      if (allData.photo) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Photo du Colis:', margin + 110, y - 6);
+        pdf.addImage(allData.photo, 'JPEG', margin + 110, y, 35, 35); 
+      }
       addField('Désignation:', allData.designation);
       addField('Poids:', `${allData.weight} kg`);
       let caracteristiques = [];
@@ -390,267 +414,81 @@ const handleSubmit = async () => {
     return <ProcessingAnimation />
   }
 
-// VARIANTE 1: Layout horizontal pour desktop, vertical pour mobile
-if (paymentSuccess) {
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-gray-900 p-4"
-    >
-      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl text-center">
-        <motion.div
-          animate={{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, 5, -5, 0]
-          }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto drop-shadow-lg"/>
-        </motion.div>
-        
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Expédition confirmée !</h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
-          Votre colis a été enregistré avec le numéro de suivi suivant.
-        </p>
-        
-        <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Numéro de suivi</p>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{trackingNumber}</p>
-        </div>
-
-        {/* VARIANTE 1: Bouton PDF principal + actions secondaires */}
-        <div className="space-y-4">
-          {/* Bouton principal pour télécharger le PDF */}
-          <motion.button
-            onClick={generateBordereauPDF}
-            className="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl transition-colors shadow-lg"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <PrinterIcon className="w-6 h-6 mr-3" />
-            Télécharger le Bordereau PDF
-          </motion.button>
-
-          {/* Actions secondaires en ligne */}
-          <div className="flex gap-3">
-            <motion.button 
-              onClick={() => window.location.reload()}
-              className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold py-3 px-4 rounded-2xl transition-colors flex items-center justify-center"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+    // --- MODIFIÉ : L'écran de succès inclut le bloc d'incitation et le bouton PDF ---
+  if (paymentSuccess) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-gray-900 p-4"
+      >
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl">
+            <motion.div
+              animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <PlusIcon className="w-4 h-4 mr-2" />
-              Nouvelle expédition
-            </motion.button>
+              <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto drop-shadow-lg"/>
+            </motion.div>
             
-            <motion.button 
-              onClick={() => navigator.share({ text: `Suivi de colis: ${trackingNumber}` })}
-              className="flex-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-400 font-semibold py-3 px-4 rounded-2xl transition-colors flex items-center justify-center"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <ShareIcon className="w-4 h-4 mr-2" />
-              Partager
-            </motion.button>
-          </div>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Expédition confirmée !</h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-6">Votre colis a été enregistré.</p>
+            
+            <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Numéro de suivi</p>
+              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{trackingNumber}</p>
+            </div>
 
-          {/* Lien vers le suivi */}
-          <button 
-            onClick={() => window.open(`/suivi/${trackingNumber}`, '_blank')}
-            className="w-full text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 font-medium py-2 transition-colors flex items-center justify-center"
-          >
-            <ClockIcon className="w-4 h-4 mr-2" />
-            Suivre mon colis en ligne
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// VARIANTE 2: Layout avec menu dropdown pour plus d'actions
-if (paymentSuccess) {
-  const [showActions, setShowActions] = useState(false);
-  
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-gray-900 p-4"
-    >
-      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl text-center">
-        {/* Icône et message de succès */}
-        <motion.div
-          animate={{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, 5, -5, 0]
-          }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto drop-shadow-lg"/>
-        </motion.div>
-        
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Expédition confirmée !</h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
-          Votre colis a été enregistré avec succès.
-        </p>
-        
-        {/* Numéro de suivi */}
-        <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Numéro de suivi</p>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{trackingNumber}</p>
-        </div>
-
-        {/* Actions principales */}
-        <div className="space-y-3">
-          {/* Nouvelle expédition - Action principale */}
-          <motion.button 
-            onClick={() => window.location.reload()}
-            className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl transition-colors shadow-lg flex items-center justify-center"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <PlusIcon className="w-5 h-5 mr-2" />
-            Nouvelle expédition
-          </motion.button>
-
-          {/* Actions secondaires */}
-          <div className="flex gap-3">
+            {/* --- NOUVEAU BOUTON : Télécharger le bordereau --- */}
             <motion.button
               onClick={generateBordereauPDF}
-              className="flex-1 border-2 border-orange-200 hover:border-orange-300 hover:bg-orange-50 dark:border-orange-700 dark:hover:border-orange-600 dark:hover:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-semibold py-3 px-4 rounded-2xl transition-colors flex items-center justify-center"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors shadow-lg"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              <DocumentTextIcon className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Télécharger PDF</span>
-              <span className="sm:hidden">PDF</span>
-            </motion.button>
-
-            <motion.button 
-              onClick={() => setShowActions(!showActions)}
-              className="border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-700/50 text-gray-600 dark:text-gray-300 font-semibold py-3 px-4 rounded-2xl transition-colors flex items-center justify-center"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <EllipsisHorizontalIcon className="w-5 h-5" />
+              <PrinterIcon className="w-5 h-5 mr-2" />
+              Télécharger le Bordereau
             </motion.button>
           </div>
 
-          {/* Menu dropdown des actions supplémentaires */}
-          <AnimatePresence>
-            {showActions && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
+          {/* --- NOUVEAU BLOC : Incitation à l'inscription --- */}
+          {/* S'affiche uniquement si l'utilisateur n'est pas déjà connecté */}
+          {!currentUser && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-xl border-2 border-dashed border-orange-300 dark:border-orange-600"
+            >
+              <div className="flex items-center justify-center gap-2 mb-3">
+                  <StarIcon className="w-6 h-6 text-orange-400" />
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Devenez Client !</h3>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                  Créez votre compte pour suivre vos colis, voir votre historique et bénéficier d'offres exclusives. Vos informations sont déjà prêtes !
+              </p>
+              <motion.button
+                onClick={handleCreateAccount}
+                className="w-full flex items-center justify-center bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-all"
+                whileHover={{ scale: 1.05, y: -2 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 space-y-2">
-                  <button 
-                    onClick={() => navigator.share({ text: `Suivi: ${trackingNumber}` })}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white dark:hover:bg-gray-600 transition-colors flex items-center"
-                  >
-                    <ShareIcon className="w-4 h-4 mr-3" />
-                    Partager le suivi
-                  </button>
-                  
-                  <button 
-                    onClick={() => window.open(`/suivi/${trackingNumber}`, '_blank')}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white dark:hover:bg-gray-600 transition-colors flex items-center"
-                  >
-                    <ClockIcon className="w-4 h-4 mr-3" />
-                    Suivre en ligne
-                  </button>
-                  
-                  <button 
-                    onClick={() => console.log('Imprimer étiquette')}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white dark:hover:bg-gray-600 transition-colors flex items-center"
-                  >
-                    <PrinterIcon className="w-4 h-4 mr-3" />
-                    Imprimer étiquette
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <UserPlusIcon className="w-5 h-5 mr-2" />
+                Créer mon compte en 1 clic
+              </motion.button>
+            </motion.div>
+          )}
+
+          <button 
+            onClick={() => window.location.reload()}
+            className="text-gray-500 hover:text-orange-600 text-sm font-medium mt-4"
+          >
+            Effectuer une autre expédition
+          </button>
         </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// VARIANTE 3: Layout avec boutons flottants (style moderne)
-if (paymentSuccess) {
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-gray-900 p-4 relative"
-    >
-      {/* Boutons d'action flottants */}
-      <div className="fixed bottom-8 right-8 flex flex-col gap-3 z-50">
-        <motion.button
-          onClick={generateBordereauPDF}
-          className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-colors"
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          title="Télécharger PDF"
-        >
-          <DocumentTextIcon className="w-6 h-6" />
-        </motion.button>
-        
-        <motion.button 
-          onClick={() => navigator.share({ text: `Suivi: ${trackingNumber}` })}
-          className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-full shadow-lg transition-colors"
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          title="Partager"
-        >
-          <ShareIcon className="w-6 h-6" />
-        </motion.button>
-      </div>
-
-      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl text-center">
-        {/* Contenu principal identique */}
-        <motion.div
-          animate={{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, 5, -5, 0]
-          }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto drop-shadow-lg"/>
-        </motion.div>
-        
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Expédition confirmée !</h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
-          Votre colis a été enregistré avec succès.
-        </p>
-        
-        <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Numéro de suivi</p>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{trackingNumber}</p>
-        </div>
-
-        {/* Action principale uniquement */}
-        <motion.button 
-          onClick={() => window.location.reload()}
-          className="w-full bg-orange-600 hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl transition-colors shadow-lg"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          Nouvelle expédition
-        </motion.button>
-        
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-          Utilisez les boutons flottants pour plus d'actions
-        </p>
-      </div>
-    </motion.div>
-  );
-}
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div 
