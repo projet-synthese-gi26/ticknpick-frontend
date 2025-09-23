@@ -47,12 +47,13 @@ export default function NavbarHome() {
   ];
 
   // Fonction de traduction automatique
-  const translatePage = (langCode) => {
+  const translatePage = (langCode: string) => { 
     if (langCode === 'MORE') {
       // Ouvrir Google Translate pour plus d'options
       window.open('https://translate.google.com/translate?sl=auto&tl=auto&u=' + encodeURIComponent(window.location.href), '_blank');
       return;
     }
+
 
     const langMap = {
       'FR': 'fr',
