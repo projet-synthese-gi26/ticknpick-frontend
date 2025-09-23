@@ -4,21 +4,31 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
-import dynamic from 'next/dynamic'; // <-- 1. Importez 'dynamic'
+import dynamic from 'next/dynamic'; // Importez 'dynamic'
 
 import Sidebar, { SuperAdminProfile } from './Sidebar';
 import UserManagement from './UserManagement';
-import OperationsManagement from './OperationManagement';
 
-// <-- 2. Importez dynamiquement les composants qui utilisent des bibliothèques client-side (chart.js) -->
+// --- Les 3 composants utilisant des bibliothèques client-side sont maintenant dynamiques ---
+
+// Pour chart.js
 const Overview = dynamic(() => import('./Overview'), {
-  ssr: false, // On désactive le rendu côté serveur pour ce composant
+  ssr: false,
   loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
 });
+
+// Pour chart.js
 const FinanceManagement = dynamic(() => import('./FinanceManagement'), {
-  ssr: false, // On désactive aussi pour celui-ci
+  ssr: false,
   loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
 });
+
+// NOUVELLE CORRECTION : Pour leaflet
+const OperationsManagement = dynamic(() => import('./OperationManagement'), {
+  ssr: false,
+  loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
+});
+
 
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
@@ -27,7 +37,7 @@ export default function SuperAdminDashboardPage() {
   const [profile, setProfile] = useState<SuperAdminProfile | null>(null);
 
   useEffect(() => {
-    // Set profile and then set loading to false
+    // Simuler le chargement du profil
     setProfile({
       name: 'Super Admin PicknDrop',
       email: 'superadmin@pickndrop.com',
@@ -51,7 +61,6 @@ export default function SuperAdminDashboardPage() {
     }
   };
 
-  // Show loading spinner while profile is being set
   if (isLoading || !profile) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
