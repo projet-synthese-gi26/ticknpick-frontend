@@ -18,14 +18,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Types pour TypeScript
-type LanguageCode = 'FR' | 'EN' | 'DE' | 'ES' | 'AR' | 'MORE';
-
-interface Language {
-  code: LanguageCode;
-  name: string;
-  flag: string;
-}
 
 interface NavigationItem {
   href: string;
@@ -62,96 +54,11 @@ export default function NavbarHome() {
     { href: '#how-it-works', label: 'Aide', icon: HelpCircle, id: 'help' },
   ];
 
-  // Fonction de traduction automatique
-  const translatePage = (langCode: LanguageCode) => { 
-    if (langCode === 'MORE') {
-      // Ouvrir Google Translate pour plus d'options
-      window.open('https://translate.google.com/translate?sl=auto&tl=auto&u=' + encodeURIComponent(window.location.href), '_blank');
-      return;
-    }
-
-    const langMap: Record<Exclude<LanguageCode, 'MORE'>, string> = {
-      'FR': 'fr',
-      'EN': 'en',
-      'DE': 'de',
-      'ES': 'es',
-      'AR': 'ar'
-    };
-
-    const targetLang = langMap[langCode as Exclude<LanguageCode, 'MORE'>];
-    
-    if (targetLang && targetLang !== 'fr') {
-      // Utilise Google Translate pour traduire la page
-      const googleTranslateUrl = `https://translate.google.com/translate?sl=fr&tl=${targetLang}&u=${encodeURIComponent(window.location.href)}`;
-      window.location.href = googleTranslateUrl;
-    } else if (targetLang === 'fr') {
-      // Retour à la version française originale
-      window.location.reload();
-    }
-  };
-
-  const handleLanguageChange = (langCode: LanguageCode, langName: string) => {
-    setCurrentLanguage(langCode);
-    setIsLanguageOpen(false);
-    translatePage(langCode);
-    
-    // Sauvegarde la préférence
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('preferredLanguage', langCode);
-    }
-  };
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // Récupération de la langue préférée
-    const savedLang = localStorage.getItem('preferredLanguage') as LanguageCode | null;
-    if (savedLang && languages.some(lang => lang.code === savedLang)) {
-      setCurrentLanguage(savedLang);
-    }
-
-    // Détection du mode sombre du système
-    const checkDarkMode = () => {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setIsDarkMode(isDark);
-      if (isDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    };
-
-    checkDarkMode();
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', checkDarkMode);
-
-    const handleScroll = () => setIsScrolled(window.scrollY > 10);
-    window.addEventListener('scroll', handleScroll);
-
-    // Fermer le menu langue si on clique ailleurs
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!(event.target as Element)?.closest('.language-dropdown')) {
-        setIsLanguageOpen(false);
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-
-    return () => {
-      mediaQuery.removeEventListener('change', checkDarkMode);
-      window.removeEventListener('scroll', handleScroll);
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, []);
-
   const handleTabClick = (id: string) => {
     setActiveTab(id);
     setIsOpen(false);
   };
 
-  const getCurrentLanguageData = (): Language => {
-    return languages.find(lang => lang.code === currentLanguage) || languages[0];
-  };
 
   return (
     <>
@@ -198,43 +105,6 @@ export default function NavbarHome() {
                 <span className="hidden xl:inline">Aide</span>
               </Link>
 
-              {/* Language Selector */}
-              <div className="relative language-dropdown">
-                <button
-                  onClick={() => setIsLanguageOpen(!isLanguageOpen)}
-                  className="flex items-center gap-2 text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
-                >
-                  <Globe className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  <span className="hidden xl:inline">{getCurrentLanguageData().flag} {getCurrentLanguageData().code}</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${isLanguageOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                <AnimatePresence>
-                  {isLanguageOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 py-2"
-                    >
-                      {languages.map((lang) => (
-                        <button
-                          key={lang.code}
-                          onClick={() => handleLanguageChange(lang.code, lang.name)}
-                          className={`w-full text-left px-4 py-2 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors flex items-center gap-3 ${
-                            currentLanguage === lang.code ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          <span className="text-lg">{lang.flag}</span>
-                          <span className="font-medium">{lang.name}</span>
-                          {currentLanguage === lang.code && <span className="ml-auto text-orange-500">✓</span>}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
               {/* Account Button */}
               <Link 
                 href="/login" 
@@ -247,43 +117,6 @@ export default function NavbarHome() {
 
             {/* Mobile Menu Button */}
             <div className="lg:hidden flex items-center gap-2">
-              {/* Mobile Language Selector */}
-              <div className="relative language-dropdown">
-                <button
-                  onClick={() => setIsLanguageOpen(!isLanguageOpen)}
-                  className="flex items-center gap-1 text-gray-700 dark:text-gray-300 hover:text-orange-200 dark:hover:text-orange-400 transition-colors p-2"
-                >
-                  <Globe className="w-5 h-5" />
-                  <span className="text-sm">{getCurrentLanguageData().flag}</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${isLanguageOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                <AnimatePresence>
-                  {isLanguageOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 py-2"
-                    >
-                      {languages.map((lang) => (
-                        <button
-                          key={lang.code}
-                          onClick={() => handleLanguageChange(lang.code, lang.name)}
-                          className={`w-full text-left px-3 py-2 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors flex items-center gap-2 text-sm ${
-                            currentLanguage === lang.code ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'text-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          <span>{lang.flag}</span>
-                          <span className="font-medium">{lang.name}</span>
-                          {currentLanguage === lang.code && <span className="ml-auto text-orange-500 text-xs">✓</span>}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
               {/* Menu Button */}
               <button 
                 onClick={() => setIsOpen(!isOpen)} 

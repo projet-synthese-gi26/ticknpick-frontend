@@ -53,7 +53,7 @@ export default function HomePage() {
             }
 
             console.log('✅ Session trouvée, ID utilisateur:', session.user.id);
-            console.log('📧 Email utilisateur:', session.user.email);
+            console.log('📧  Email utilisateur:', session.user.email);
 
             // --- FIX : Même logique que dans page.tsx - essayer 'profiles' d'abord ---
             console.log('👤 Récupération du profil depuis profiles...');

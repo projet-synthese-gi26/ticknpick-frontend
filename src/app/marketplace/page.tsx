@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Search, Filter, Star, User, Phone, MapPin, Award, Package, Eye, X, Loader2, MessageCircle, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import NavbarHome from '@/components/NavbarHome';
 
 // --- TYPE FINAL REPRÉSENTANT UNE LIGNE DE NOTRE VUE SQL ---
 interface MarketplaceService {
@@ -221,6 +222,7 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      
       {/* Overlay pour mobile */}
       {selectedCard && (
         <div 
@@ -231,14 +233,14 @@ export default function MarketplacePage() {
 
       {/* Container principal avec transition */}
       <div className={`min-h-screen transition-all duration-300 ${selectedCard ? 'lg:mr-96' : ''}`}>
+        <NavbarHome />
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="bg-white border-b border-gray-200 sticky top-8 z-30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">PicknDrop Link</h1>
-                  <p className="text-gray-600 mt-1">Marketplace des services de livraison</p>
+                  <h1 className="text-3xl font-bold text-gray-900">Marketplace des services de livraison</h1>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-500">{filteredCards.length} service(s) disponible(s)</p>

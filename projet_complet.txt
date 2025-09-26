@@ -513,7 +513,7 @@ export default function HomePage() {
             }
 
             console.log('✅ Session trouvée, ID utilisateur:', session.user.id);
-            console.log('📧 Email utilisateur:', session.user.email);
+            console.log('📧  Email utilisateur:', session.user.email);
 
             // --- FIX : Même logique que dans page.tsx - essayer 'profiles' d'abord ---
             console.log('👤 Récupération du profil depuis profiles...');
@@ -26408,6 +26408,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Search, Filter, Star, User, Phone, MapPin, Award, Package, Eye, X, Loader2, MessageCircle, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import NavbarHome from '@/components/NavbarHome';
 
 // --- TYPE FINAL REPRÉSENTANT UNE LIGNE DE NOTRE VUE SQL ---
 interface MarketplaceService {
@@ -26626,6 +26627,7 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      
       {/* Overlay pour mobile */}
       {selectedCard && (
         <div 
@@ -26636,14 +26638,14 @@ export default function MarketplacePage() {
 
       {/* Container principal avec transition */}
       <div className={`min-h-screen transition-all duration-300 ${selectedCard ? 'lg:mr-96' : ''}`}>
+        <NavbarHome />
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="bg-white border-b border-gray-200 sticky top-8 z-30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="py-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">PicknDrop Link</h1>
-                  <p className="text-gray-600 mt-1">Marketplace des services de livraison</p>
+                  <h1 className="text-3xl font-bold text-gray-900">Marketplace des services de livraison</h1>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-500">{filteredCards.length} service(s) disponible(s)</p>
@@ -27045,21 +27047,40 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
+import dynamic from 'next/dynamic'; // Importez 'dynamic'
 
 import Sidebar, { SuperAdminProfile } from './Sidebar';
-import Overview from './Overview';
 import UserManagement from './UserManagement';
-import OperationsManagement from './OperationManagement';
-import FinanceManagement from './FinanceManagement';
+
+// --- Les 3 composants utilisant des bibliothèques client-side sont maintenant dynamiques ---
+
+// Pour chart.js
+const Overview = dynamic(() => import('./Overview'), {
+  ssr: false,
+  loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
+});
+
+// Pour chart.js
+const FinanceManagement = dynamic(() => import('./FinanceManagement'), {
+  ssr: false,
+  loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
+});
+
+// NOUVELLE CORRECTION : Pour leaflet
+const OperationsManagement = dynamic(() => import('./OperationManagement'), {
+  ssr: false,
+  loading: () => <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>,
+});
+
 
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
-  const [isLoading, setIsLoading] = useState(true); // Set to true initially
+  const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<SuperAdminProfile | null>(null);
 
   useEffect(() => {
-    // Set profile and then set loading to false
+    // Simuler le chargement du profil
     setProfile({
       name: 'Super Admin PicknDrop',
       email: 'superadmin@pickndrop.com',
@@ -27083,7 +27104,6 @@ export default function SuperAdminDashboardPage() {
     }
   };
 
-  // Show loading spinner while profile is being set
   if (isLoading || !profile) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -32636,8 +32656,8 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\marketplace\page\app-build-manif
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
       "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/src_6a48e0a1._.js",
-      "static/chunks/node_modules_416cceea._.js",
+      "static/chunks/src_40e46e07._.js",
+      "static/chunks/node_modules_c691b061._.js",
       "static/chunks/src_app_marketplace_page_tsx_02f6a851._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
@@ -32711,13 +32731,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\app-build-manife
       "static/chunks/src_730d25e2._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
-      "static/chunks/node_modules_870c4b4e._.js",
-      "static/chunks/src_2cd5c6ef._.js",
-      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
-      "static/chunks/node_modules_leaflet_dist_leaflet-src_e7e140e9.js",
-      "static/chunks/node_modules_026fd78d._.js",
-      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
+      "static/chunks/_d3d50d58._.js",
+      "static/chunks/node_modules_2592906d._.js",
+      "static/chunks/src_400ac9bf._.js",
       "static/chunks/src_app_superadmin_page_tsx_02f6a851._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
@@ -32796,11 +32812,30 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\superadmin\page\react-loadable-m
 ================================================================================
 
 {
-  "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)": {
-    "id": "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)",
+  "[project]/src/app/superadmin/FinanceManagement.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/src/app/superadmin/FinanceManagement.tsx [app-client] (ecmascript, next/dynamic entry)",
     "files": [
-      "static/chunks/node_modules_6cbfb658._.js",
-      "static/chunks/node_modules_react-leaflet_lib_index_c857b6d8.js"
+      "static/chunks/node_modules_c358cb31._.js",
+      "static/chunks/src_app_superadmin_FinanceManagement_tsx_012a3f33._.js",
+      "static/chunks/src_app_superadmin_FinanceManagement_tsx_075649ec._.js"
+    ]
+  },
+  "[project]/src/app/superadmin/Overview.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/src/app/superadmin/Overview.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_0c9b58e6._.js",
+      "static/chunks/src_app_superadmin_Overview_tsx_b6bc9696._.js",
+      "static/chunks/src_app_superadmin_Overview_tsx_075649ec._.js"
+    ]
+  },
+  "[project]/src/app/superadmin/OperationManagement.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/src/app/superadmin/OperationManagement.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_react-leaflet_lib_index_3a6428a0.js",
+      "static/chunks/src_app_superadmin_OperationManagement_tsx_354cba2f._.js",
+      "static/chunks/node_modules_251e8e70._.js",
+      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
+      "static/chunks/src_app_superadmin_OperationManagement_tsx_075649ec._.js"
     ]
   }
 }
@@ -32951,36 +32986,21 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
-================================================================================
-
-{
-  "node": {},
-  "edge": {},
-  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
-}
-
-
-================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
 ================================================================================
 
-{
-  "/_app": "pages/_app.js",
-  "/_document": "pages/_document.js",
-  "/_error": "pages/_error.js"
-}
+{}
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 ================================================================================
 
 {
-  "version": 3,
-  "middleware": {},
-  "sortedMiddleware": [],
-  "functions": {}
+  "/_not-found/page": "app/_not-found/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/marketplace/page": "app/marketplace/page.js",
+  "/page": "app/page.js"
 }
 
 
@@ -32997,16 +33017,25 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\middleware-manifest.json
 ================================================================================
 
 {
-  "/(legal)/[slug]/page": "app/(legal)/[slug]/page.js",
-  "/_not-found/page": "app/_not-found/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/login/page": "app/login/page.js",
-  "/page": "app/page.js",
-  "/superadmin/page": "app/superadmin/page.js"
+  "version": 3,
+  "middleware": {},
+  "sortedMiddleware": [],
+  "functions": {}
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
+================================================================================
+
+{
+  "node": {},
+  "edge": {},
+  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
 }
 
 
@@ -39767,12 +39796,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:bg-blue-100:hover {
-      background-color: var(--color-blue-100);
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:bg-blue-600:hover {
       background-color: var(--color-blue-600);
     }
@@ -39853,12 +39876,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       .hover\:bg-green-50\/50:hover {
         background-color: color-mix(in oklab, var(--color-green-50) 50%, transparent);
       }
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:bg-green-100:hover {
-      background-color: var(--color-green-100);
     }
   }
 
@@ -39989,18 +40006,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
-    .hover\:bg-white\/10:hover {
-      background-color: rgba(255, 255, 255, .1);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:bg-white\/10:hover {
-        background-color: color-mix(in oklab, var(--color-white) 10%, transparent);
-      }
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:bg-white\/20:hover {
       background-color: rgba(255, 255, 255, .2);
     }
@@ -40033,12 +40038,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
       .hover\:bg-white\/50:hover {
         background-color: color-mix(in oklab, var(--color-white) 50%, transparent);
       }
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:bg-yellow-100:hover {
-      background-color: var(--color-yellow-100);
     }
   }
 
@@ -48232,34 +48231,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\build-manifest.json
 
 {
   "pages": {
-    "/_app": [
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
-      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
-      "static/chunks/node_modules_next_dist_shared_lib_492fcef6._.js",
-      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
-      "static/chunks/node_modules_next_dist_ad6392d3._.js",
-      "static/chunks/node_modules_next_app_95ea274f.js",
-      "static/chunks/[next]_entry_page-loader_ts_f9f6e84e._.js",
-      "static/chunks/node_modules_react-dom_82bb97c6._.js",
-      "static/chunks/node_modules_f2979c3a._.js",
-      "static/chunks/[root-of-the-server]__010dee56._.js",
-      "static/chunks/pages__app_5771e187._.js",
-      "static/chunks/pages__app_4b3c26ac._.js"
-    ],
-    "/_error": [
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
-      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
-      "static/chunks/node_modules_next_dist_shared_lib_3cbd5cc2._.js",
-      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
-      "static/chunks/node_modules_next_dist_7c4b9b2a._.js",
-      "static/chunks/node_modules_next_error_8c8bf619.js",
-      "static/chunks/[next]_entry_page-loader_ts_8ccf5f86._.js",
-      "static/chunks/node_modules_react-dom_82bb97c6._.js",
-      "static/chunks/node_modules_f2979c3a._.js",
-      "static/chunks/[root-of-the-server]__95ff7225._.js",
-      "static/chunks/pages__error_5771e187._.js",
-      "static/chunks/pages__error_50fcf3db._.js"
-    ]
+    "/_app": []
   },
   "devFiles": [],
   "ampDevFiles": [],
@@ -48291,26 +48263,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
 
 {
   "pages": {
-    "/(legal)/[slug]/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_2d4cc483._.js",
-      "static/chunks/src_730d25e2._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
-      "static/chunks/_7d8e713c._.js",
-      "static/chunks/src_app_(legal)_[slug]_page_tsx_02f6a851._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
-    ],
     "/_not-found/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
@@ -48328,7 +48280,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
     ],
-    "/login/page": [
+    "/marketplace/page": [
       "static/chunks/node_modules_next_dist_01fcdebf._.js",
       "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
       "static/chunks/src_app_globals_b805903d.css",
@@ -48337,9 +48289,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
       "static/chunks/node_modules_@supabase_node-fetch_browser_b1ac0bb2.js",
-      "static/chunks/node_modules_34a78007._.js",
-      "static/chunks/src_1664adfa._.js",
-      "static/chunks/src_app_login_page_tsx_02f6a851._.js",
+      "static/chunks/src_40e46e07._.js",
+      "static/chunks/node_modules_c691b061._.js",
+      "static/chunks/src_app_marketplace_page_tsx_02f6a851._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
       "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
@@ -48370,32 +48322,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\app-build-manifest.json
       "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
       "static/chunks/_e69f0d32._.js",
       "static/chunks/_01f48b92._.js"
-    ],
-    "/superadmin/page": [
-      "static/chunks/node_modules_next_dist_01fcdebf._.js",
-      "static/chunks/src_app_favicon_ico_mjs_f9cadd25._.js",
-      "static/chunks/src_app_globals_b805903d.css",
-      "static/chunks/node_modules_2d4cc483._.js",
-      "static/chunks/src_730d25e2._.js",
-      "static/chunks/src_app_layout_tsx_68b267f5._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_02f6a851.js",
-      "static/chunks/node_modules_870c4b4e._.js",
-      "static/chunks/src_2cd5c6ef._.js",
-      "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
-      "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
-      "static/chunks/node_modules_leaflet_dist_leaflet-src_e7e140e9.js",
-      "static/chunks/node_modules_026fd78d._.js",
-      "static/chunks/node_modules_leaflet_dist_leaflet_88e19fd3.css",
-      "static/chunks/src_app_superadmin_page_tsx_02f6a851._.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_d575f738.js",
-      "static/chunks/node_modules_next_dist_compiled_0f1b9fd4._.js",
-      "static/chunks/node_modules_next_dist_client_20b209c9._.js",
-      "static/chunks/node_modules_next_dist_445d8acf._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_8e433861._.js",
-      "static/chunks/_e69f0d32._.js",
-      "static/chunks/_01f48b92._.js"
     ]
   }
 }
@@ -48412,7 +48338,17 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\routes-manifest.json
 FICHIER: D:\4GI\PO\pick-n-drop\.next\prerender-manifest.json
 ================================================================================
 
-{"version":4,"routes":{"/terms-of-use":{},"/privacy-policy":{},"/cookies-policy":{},"/legal-notice":{},"/fraud-policy":{}},"dynamicRoutes":{"/[slug]":{"fallback":null}},"notFoundRoutes":[],"preview":{"previewModeId":"58451b51ea01992c43660453f459878d","previewModeSigningKey":"6d528143832f058e47455f116427d6e2b89510b5ef2ef5f16ffe30f0045309fe","previewModeEncryptionKey":"d65a3673f72dd8ebd05203ddd82e77da48de4f1a8a6be166888cd861cd6ef192"}}
+{
+  "version": 4,
+  "routes": {},
+  "dynamicRoutes": {},
+  "notFoundRoutes": [],
+  "preview": {
+    "previewModeId": "ec9c7271495fd7d5c5f44388c8ca1ead",
+    "previewModeSigningKey": "f0ce728d0ad4333a49eacc1641ea8e49a9c1d203a81d1f5122f68811a5f6f4cb",
+    "previewModeEncryptionKey": "bf3b8958907e4e8566f9834b69e58dc2f4a41c914717b5da9def84c89ad0f48b"
+  }
+}
 
 
 ================================================================================
@@ -48421,34 +48357,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\fallback-build-manifest.json
 
 {
   "pages": {
-    "/_app": [
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
-      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
-      "static/chunks/node_modules_next_dist_shared_lib_492fcef6._.js",
-      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
-      "static/chunks/node_modules_next_dist_ad6392d3._.js",
-      "static/chunks/node_modules_next_app_95ea274f.js",
-      "static/chunks/[next]_entry_page-loader_ts_f9f6e84e._.js",
-      "static/chunks/node_modules_react-dom_82bb97c6._.js",
-      "static/chunks/node_modules_f2979c3a._.js",
-      "static/chunks/[root-of-the-server]__010dee56._.js",
-      "static/chunks/pages__app_5771e187._.js",
-      "static/chunks/pages__app_4b3c26ac._.js"
-    ],
-    "/_error": [
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_82a36480.js",
-      "static/chunks/node_modules_next_dist_compiled_ca41998d._.js",
-      "static/chunks/node_modules_next_dist_shared_lib_3cbd5cc2._.js",
-      "static/chunks/node_modules_next_dist_client_becf32a6._.js",
-      "static/chunks/node_modules_next_dist_7c4b9b2a._.js",
-      "static/chunks/node_modules_next_error_8c8bf619.js",
-      "static/chunks/[next]_entry_page-loader_ts_8ccf5f86._.js",
-      "static/chunks/node_modules_react-dom_82bb97c6._.js",
-      "static/chunks/node_modules_f2979c3a._.js",
-      "static/chunks/[root-of-the-server]__95ff7225._.js",
-      "static/chunks/pages__error_5771e187._.js",
-      "static/chunks/pages__error_50fcf3db._.js"
-    ]
+    "/_app": []
   },
   "devFiles": [],
   "ampDevFiles": [],
@@ -48858,6 +48767,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\package.json
     "lucide-react": "^0.525.0",
     "maplibre-gl": "^5.6.1",
     "next": "15.4.4",
+    "next-intl": "^4.3.9",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "react": "19.1.0",
@@ -48912,6 +48822,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
         "lucide-react": "^0.525.0",
         "maplibre-gl": "^5.6.1",
         "next": "15.4.4",
+        "next-intl": "^4.3.9",
         "qrcode": "^1.5.4",
         "qrcode.react": "^4.2.0",
         "react": "19.1.0",
@@ -48978,6 +48889,66 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
       "optional": true,
       "dependencies": {
         "tslib": "^2.4.0"
+      }
+    },
+    "node_modules/@formatjs/ecma402-abstract": {
+      "version": "2.3.4",
+      "resolved": "https://registry.npmjs.org/@formatjs/ecma402-abstract/-/ecma402-abstract-2.3.4.tgz",
+      "integrity": "sha512-qrycXDeaORzIqNhBOx0btnhpD1c+/qFIHAN9znofuMJX6QBwtbrmlpWfD4oiUUD2vJUOIYFA/gYtg2KAMGG7sA==",
+      "license": "MIT",
+      "dependencies": {
+        "@formatjs/fast-memoize": "2.2.7",
+        "@formatjs/intl-localematcher": "0.6.1",
+        "decimal.js": "^10.4.3",
+        "tslib": "^2.8.0"
+      }
+    },
+    "node_modules/@formatjs/ecma402-abstract/node_modules/@formatjs/intl-localematcher": {
+      "version": "0.6.1",
+      "resolved": "https://registry.npmjs.org/@formatjs/intl-localematcher/-/intl-localematcher-0.6.1.tgz",
+      "integrity": "sha512-ePEgLgVCqi2BBFnTMWPfIghu6FkbZnnBVhO2sSxvLfrdFw7wCHAHiDoM2h4NRgjbaY7+B7HgOLZGkK187pZTZg==",
+      "license": "MIT",
+      "dependencies": {
+        "tslib": "^2.8.0"
+      }
+    },
+    "node_modules/@formatjs/fast-memoize": {
+      "version": "2.2.7",
+      "resolved": "https://registry.npmjs.org/@formatjs/fast-memoize/-/fast-memoize-2.2.7.tgz",
+      "integrity": "sha512-Yabmi9nSvyOMrlSeGGWDiH7rf3a7sIwplbvo/dlz9WCIjzIQAfy1RMf4S0X3yG724n5Ghu2GmEl5NJIV6O9sZQ==",
+      "license": "MIT",
+      "dependencies": {
+        "tslib": "^2.8.0"
+      }
+    },
+    "node_modules/@formatjs/icu-messageformat-parser": {
+      "version": "2.11.2",
+      "resolved": "https://registry.npmjs.org/@formatjs/icu-messageformat-parser/-/icu-messageformat-parser-2.11.2.tgz",
+      "integrity": "sha512-AfiMi5NOSo2TQImsYAg8UYddsNJ/vUEv/HaNqiFjnI3ZFfWihUtD5QtuX6kHl8+H+d3qvnE/3HZrfzgdWpsLNA==",
+      "license": "MIT",
+      "dependencies": {
+        "@formatjs/ecma402-abstract": "2.3.4",
+        "@formatjs/icu-skeleton-parser": "1.8.14",
+        "tslib": "^2.8.0"
+      }
+    },
+    "node_modules/@formatjs/icu-skeleton-parser": {
+      "version": "1.8.14",
+      "resolved": "https://registry.npmjs.org/@formatjs/icu-skeleton-parser/-/icu-skeleton-parser-1.8.14.tgz",
+      "integrity": "sha512-i4q4V4qslThK4Ig8SxyD76cp3+QJ3sAqr7f6q9VVfeGtxG9OhiAk3y9XF6Q41OymsKzsGQ6OQQoJNY4/lI8TcQ==",
+      "license": "MIT",
+      "dependencies": {
+        "@formatjs/ecma402-abstract": "2.3.4",
+        "tslib": "^2.8.0"
+      }
+    },
+    "node_modules/@formatjs/intl-localematcher": {
+      "version": "0.5.10",
+      "resolved": "https://registry.npmjs.org/@formatjs/intl-localematcher/-/intl-localematcher-0.5.10.tgz",
+      "integrity": "sha512-af3qATX+m4Rnd9+wHcjJ4w2ijq+rAVP3CCinJQvFv1kgSu1W6jypUmvleJxcewdxmutM8dmIRZFxO/IQBZmP2Q==",
+      "license": "MIT",
+      "dependencies": {
+        "tslib": "2"
       }
     },
     "node_modules/@heroicons/react": {
@@ -49788,6 +49759,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
       }
+    },
+    "node_modules/@schummar/icu-type-parser": {
+      "version": "1.21.5",
+      "resolved": "https://registry.npmjs.org/@schummar/icu-type-parser/-/icu-type-parser-1.21.5.tgz",
+      "integrity": "sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==",
+      "license": "MIT"
     },
     "node_modules/@standard-schema/spec": {
       "version": "1.0.0",
@@ -50619,6 +50596,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
         "node": ">=0.10.0"
       }
     },
+    "node_modules/decimal.js": {
+      "version": "10.6.0",
+      "resolved": "https://registry.npmjs.org/decimal.js/-/decimal.js-10.6.0.tgz",
+      "integrity": "sha512-YpgQiITW3JXGntzdUmyUR1V812Hn8T1YVXhCu+wO3OpS4eU9l4YdD3qjyiKdV6mvV29zapkMeD390UVEf2lkUg==",
+      "license": "MIT"
+    },
     "node_modules/deepmerge-ts": {
       "version": "7.1.5",
       "resolved": "https://registry.npmjs.org/deepmerge-ts/-/deepmerge-ts-7.1.5.tgz",
@@ -50946,6 +50929,18 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
       "license": "ISC",
       "engines": {
         "node": "^14.17.0 || ^16.13.0 || >=18.0.0"
+      }
+    },
+    "node_modules/intl-messageformat": {
+      "version": "10.7.16",
+      "resolved": "https://registry.npmjs.org/intl-messageformat/-/intl-messageformat-10.7.16.tgz",
+      "integrity": "sha512-UmdmHUmp5CIKKjSoE10la5yfU+AYJAaiYLsodbjL4lji83JNvgOQUjGaGhGrpFCb0Uh7sl7qfP1IyILa8Z40ug==",
+      "license": "BSD-3-Clause",
+      "dependencies": {
+        "@formatjs/ecma402-abstract": "2.3.4",
+        "@formatjs/fast-memoize": "2.2.7",
+        "@formatjs/icu-messageformat-parser": "2.11.2",
+        "tslib": "^2.8.0"
       }
     },
     "node_modules/iobuffer": {
@@ -51462,6 +51457,15 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
         "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
       }
     },
+    "node_modules/negotiator": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-1.0.0.tgz",
+      "integrity": "sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==",
+      "license": "MIT",
+      "engines": {
+        "node": ">= 0.6"
+      }
+    },
     "node_modules/next": {
       "version": "15.4.4",
       "resolved": "https://registry.npmjs.org/next/-/next-15.4.4.tgz",
@@ -51510,6 +51514,33 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
           "optional": true
         },
         "sass": {
+          "optional": true
+        }
+      }
+    },
+    "node_modules/next-intl": {
+      "version": "4.3.9",
+      "resolved": "https://registry.npmjs.org/next-intl/-/next-intl-4.3.9.tgz",
+      "integrity": "sha512-4oSROHlgy8a5Qr2vH69wxo9F6K0uc6nZM2GNzqSe6ET79DEzOmBeSijCRzD5txcI4i+XTGytu4cxFsDXLKEDpQ==",
+      "funding": [
+        {
+          "type": "individual",
+          "url": "https://github.com/sponsors/amannn"
+        }
+      ],
+      "license": "MIT",
+      "dependencies": {
+        "@formatjs/intl-localematcher": "^0.5.4",
+        "negotiator": "^1.0.0",
+        "use-intl": "^4.3.9"
+      },
+      "peerDependencies": {
+        "next": "^12.0.0 || ^13.0.0 || ^14.0.0 || ^15.0.0",
+        "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || >=19.0.0-rc <19.0.0 || ^19.0.0",
+        "typescript": "^5.0.0"
+      },
+      "peerDependenciesMeta": {
+        "typescript": {
           "optional": true
         }
       }
@@ -52271,6 +52302,20 @@ FICHIER: D:\4GI\PO\pick-n-drop\package-lock.json
       "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
       "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==",
       "license": "MIT"
+    },
+    "node_modules/use-intl": {
+      "version": "4.3.9",
+      "resolved": "https://registry.npmjs.org/use-intl/-/use-intl-4.3.9.tgz",
+      "integrity": "sha512-bZu+h13HIgOvsoGleQtUe4E6gM49CRm+AH36KnJVB/qb1+Beo7jr7HNrR8YWH8oaOkQfGNm6vh0HTepxng8UTg==",
+      "license": "MIT",
+      "dependencies": {
+        "@formatjs/fast-memoize": "^2.2.0",
+        "@schummar/icu-type-parser": "1.21.5",
+        "intl-messageformat": "^10.5.14"
+      },
+      "peerDependencies": {
+        "react": "^17.0.0 || ^18.0.0 || >=19.0.0-rc <19.0.0 || ^19.0.0"
+      }
     },
     "node_modules/utrie": {
       "version": "1.0.2",
