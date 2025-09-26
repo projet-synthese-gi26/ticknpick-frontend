@@ -82,7 +82,14 @@ const InputField = ({ id, label, type = 'text', value, onChange, placeholder, re
           ))}
         </select>
       ) : (
-        <input {...{ id, name: id, type, value, onChange, required, placeholder }} className={`w-full ${Icon ? 'pl-10' : 'pl-3'} pr-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-500 transition-all text-sm`} />
+        <input 
+          {...{ id, name: id, type, value, onChange, required, placeholder }} 
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck="false"
+          className={`w-full ${Icon ? 'pl-10' : 'pl-3'} pr-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-500 transition-all text-sm`} 
+        />
       )}
     </div>
   </div>
