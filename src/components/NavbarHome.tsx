@@ -31,18 +31,7 @@ export default function NavbarHome() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
-  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState<LanguageCode>('FR');
 
-  // Langues disponibles
-  const languages: Language[] = [
-    { code: 'FR', name: 'Français', flag: '🇫🇷' },
-    { code: 'EN', name: 'English', flag: '🇺🇸' },
-    { code: 'DE', name: 'Deutsch', flag: '🇩🇪' },
-    { code: 'ES', name: 'Español', flag: '🇪🇸' },
-    { code: 'AR', name: 'العربية', flag: '🇸🇦' },
-    { code: 'MORE', name: 'Plus...', flag: '🌍' }
-  ];
 
   // Navigation items avec icônes
   const navigationItems: NavigationItem[] = [
