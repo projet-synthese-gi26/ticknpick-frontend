@@ -239,7 +239,7 @@ export default function Overview() {
           padding: 15,
           font: {
             size: 12,
-            weight: '500'
+            weight: 'bold'
           }
         }
       },
