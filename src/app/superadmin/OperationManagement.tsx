@@ -159,7 +159,7 @@ const DetailItem = ({
         <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
         <div>
             <p className="text-gray-500 text-xs font-medium">{label}</p>
-            <p className="font-semibold text-gray-800">{value || 'N/A'}</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-300">{value || 'N/A'}</p>
         </div>
     </div>
 );
@@ -203,120 +203,105 @@ const ShipmentDetailsModal = ({
         if (details.is_insured) specificities.push('Assuré');
         return specificities.length > 0 ? specificities.join(', ') : 'Aucune';
     };
-
-    return (
+    // --- JSX principal de la modale ---
+return (
+    <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+    >
         <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-            onClick={onClose}
+            initial={{ scale: 0.95, y: 10 }} 
+            animate={{ scale: 1, y: 0 }} 
+            exit={{ scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700"
+            onClick={e => e.stopPropagation()}
         >
-            <motion.div 
-                initial={{ scale: 0.9 }} 
-                animate={{ scale: 1 }} 
-                exit={{ scale: 0.9 }}
-                className="bg-white rounded-lg shadow-xl w-full max-w-2xl"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="flex justify-between items-center p-4 border-b">
-                    <h3 className="text-lg font-bold">Détails du Colis</h3>
-                    <button 
-                        onClick={onClose} 
-                        className="p-1 hover:bg-gray-200 rounded-full transition-colors"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    Détails du Colis
+                </h3>
+                <button 
+                    onClick={onClose} 
+                    className="p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+                    aria-label="Fermer la modale"
+                >
+                    <X size={20} />
+                </button>
+            </div>
 
-                {/* Content */}
-                <div className="p-6 max-h-[70vh] overflow-y-auto">
-                    {loading ? (
+            {/* Content */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+                {loading ? (
+                    <div className="flex justify-center items-center h-48">
                         <LoadingSpinner />
-                    ) : !details ? (
-                        <p className="text-red-500 text-center">Impossible de charger les détails.</p>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* General Information */}
-                            <div className="space-y-4">
-                                <h4 className="font-bold text-orange-600">Informations Générales</h4>
-                                <DetailItem icon={Package} label="N° de Suivi" value={details.tracking_number} />
-                                <DetailItem 
-                                    icon={Calendar} 
-                                    label="Créé le" 
-                                    value={new Date(details.created_at).toLocaleString('fr-FR')} 
-                                />
-                                <DetailItem 
-                                    icon={CheckCircle} 
-                                    label="Statut Actuel" 
-                                    value={<StatusBadge status={details.status} />} 
-                                />
-                                <DetailItem 
-                                    icon={DollarSign} 
-                                    label="Coût d'expédition" 
-                                    value={`${details.shipping_cost.toLocaleString()} FCFA`} 
-                                />
-                            </div>
-
-                            {/* Package Details */}
-                            <div className="space-y-4">
-                                <h4 className="font-bold text-orange-600">Détails du Colis</h4>
-                                <DetailItem icon={Edit} label="Description" value={details.description} />
-                                <DetailItem icon={Package} label="Poids" value={details.weight ? `${details.weight} kg` : null} />
-                                <DetailItem 
-                                    icon={Ban} 
-                                    label="Spécificités" 
-                                    value={formatSpecificities(details)} 
-                                />
-                                {details.is_insured && (
-                                    <DetailItem 
-                                        icon={DollarSign} 
-                                        label="Valeur Déclarée" 
-                                        value={`${details.declared_value?.toLocaleString()} FCFA`} 
-                                    />
-                                )}
-                            </div>
-
-                            {/* Sender Information */}
-                            <div className="space-y-4">
-                                <h4 className="font-bold text-orange-600">Expéditeur</h4>
-                                <DetailItem icon={User} label="Nom" value={details.sender_name} />
-                                <DetailItem icon={Phone} label="Téléphone" value={details.sender_phone} />
-                                <DetailItem 
-                                    icon={MapPin} 
-                                    label="Point de départ" 
-                                    value={details.departure_point?.name} 
-                                />
-                            </div>
-
-                            {/* Recipient Information */}
-                            <div className="space-y-4">
-                                <h4 className="font-bold text-orange-600">Destinataire</h4>
-                                <DetailItem icon={User} label="Nom" value={details.recipient_name} />
-                                <DetailItem icon={Phone} label="Téléphone" value={details.recipient_phone} />
-                                <DetailItem 
-                                    icon={MapPin} 
-                                    label="Point d'arrivée" 
-                                    value={details.arrival_point?.name} 
-                                />
-                            </div>
+                    </div>
+                ) : !details ? (
+                    <p className="text-red-500 dark:text-red-400 text-center py-10">
+                        Impossible de charger les détails du colis.
+                    </p>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+                        
+                        <div className="space-y-4 ">
+                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
+                                Informations Générales
+                            </h4>
+                            <DetailItem icon={Package} label="N° de Suivi" value={details.tracking_number} />
+                            <DetailItem icon={Calendar} label="Créé le" value={new Date(details.created_at).toLocaleString('fr-FR')} />
+                            <DetailItem icon={CheckCircle} label="Statut Actuel" value={<StatusBadge status={details.status} />} />
+                            <DetailItem icon={DollarSign} label="Coût d'expédition" value={`${details.shipping_cost.toLocaleString()} FCFA`} />
                         </div>
-                    )}
-                </div>
 
-                {/* Footer */}
-                <div className="p-4 bg-gray-50 border-t flex justify-end">
-                    <button 
-                        onClick={onClose} 
-                        className="bg-gray-200 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-300 transition-colors"
-                    >
-                        Fermer
-                    </button>
-                </div>
-            </motion.div>
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
+                                Détails du Colis
+                            </h4>
+                            <DetailItem icon={Edit} label="Description" value={details.description} />
+                            <DetailItem icon={Package} label="Poids" value={details.weight ? `${details.weight} kg` : null} />
+                            <DetailItem icon={Ban} label="Spécificités" value={formatSpecificities(details)} />
+                            {details.is_insured && (
+                                <DetailItem icon={DollarSign} label="Valeur Déclarée" value={`${details.declared_value?.toLocaleString()} FCFA`} />
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
+                                Expéditeur
+                            </h4>
+                            <DetailItem icon={User} label="Nom" value={details.sender_name} />
+                            <DetailItem icon={Phone} label="Téléphone" value={details.sender_phone} />
+                            <DetailItem icon={MapPin} label="Point de départ" value={details.departure_point?.name} />
+                        </div>
+
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
+                                Destinataire
+                            </h4>
+                            <DetailItem icon={User} label="Nom" value={details.recipient_name} />
+                            <DetailItem icon={Phone} label="Téléphone" value={details.recipient_phone} />
+                            <DetailItem icon={MapPin} label="Point d'arrivée" value={details.arrival_point?.name} />
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex justify-end flex-shrink-0">
+                <button 
+                    onClick={onClose} 
+                    className="bg-gray-200 dark:bg-gray-700 px-4 py-2 rounded-lg text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                    Fermer
+                </button>
+            </div>
         </motion.div>
-    );
+    </motion.div>
+);
 };
 
 // =============================================================================
@@ -488,9 +473,8 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
     };
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-lg border space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">Gestion des Colis</h2>
-            
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border space-y-4">
+
             {/* Filters */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <input 
@@ -498,13 +482,13 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                     placeholder="Rechercher par N°, nom..." 
                     value={filters.searchTerm}
                     onChange={e => handleFilterChange('searchTerm', e.target.value)}
-                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
                 
                 <select 
                     value={filters.status}
                     onChange={e => handleFilterChange('status', e.target.value)}
-                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
                     <option value="ALL">Tous les statuts</option>
                     {ALL_STATUSES.map(status => (
@@ -517,7 +501,7 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                 <select 
                     value={filters.departure}
                     onChange={e => handleFilterChange('departure', e.target.value)}
-                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
                     <option value="ALL">Tous les départs</option>
                     {allRelayPoints.map(point => (
@@ -530,7 +514,7 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                 <select 
                     value={filters.arrival}
                     onChange={e => handleFilterChange('arrival', e.target.value)}
-                    className="p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
                     <option value="ALL">Toutes les arrivées</option>
                     {allRelayPoints.map(point => (
@@ -553,7 +537,7 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                     </div>
                 ) : (
                     <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 uppercase">
+                        <thead className="bg-gray-50 dark:bg-gray-900 dark:text-gray-300 text-gray-600 uppercase">
                             <tr>
                                 <th className="p-3 text-left">N° Suivi</th>
                                 <th className="p-3 text-left">Trajet</th>
@@ -565,7 +549,7 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                         </thead>
                         <tbody>
                             {shipments.map(shipment => (
-                                <tr key={shipment.id} className="border-b hover:bg-orange-50 transition-colors">
+                                <tr key={shipment.id} className="border-b hover:bg-orange-50 dark:hover:bg-gray-900 dark:text-gray-400 transition-colors">
                                     <td className="p-3 font-mono font-semibold">
                                         {shipment.tracking_number}
                                     </td>
@@ -595,16 +579,6 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                                             >
                                                 <Eye className="h-5 w-5" />
                                             </button>
-                                            <button 
-                                                onClick={() => setStatusToUpdate({
-                                                    id: shipment.id, 
-                                                    tracking_number: shipment.tracking_number
-                                                })}
-                                                title="Modifier Statut"
-                                                className="text-green-600 hover:text-green-800 transition-colors"
-                                            >
-                                                <Edit className="h-5 w-5" />
-                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -620,9 +594,9 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                     <button 
                         onClick={() => handlePageChange('prev')}
                         disabled={pagination.currentPage <= 1}
-                        className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
+                        className="px-4 py-2 bg-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-transparent rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
                     >
-                        <ArrowLeft size={16} /> Préc.
+                        <ArrowLeft size={16} /> Précédente
                     </button>
                     
                     <span className="font-medium">
@@ -633,9 +607,9 @@ const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) 
                     <button 
                         onClick={() => handlePageChange('next')}
                         disabled={pagination.currentPage >= pagination.totalPages}
-                        className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
+                        className="px-4 py-2 bg-gray-200  dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-transparent rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
                     >
-                        Suiv. <ArrowRight size={16} />
+                        Suivante <ArrowRight size={16} />
                     </button>
                 </div>
             )}
@@ -727,13 +701,13 @@ const RelayPointsManager = () => {
     }
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-lg border space-y-4">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border space-y-4">
             <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900">Gestion des Points Relais</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-200">Gestion des Points Relais</h2>
                 
                 {/* View Mode Toggle */}
                 <div className="flex items-center gap-4">
-                    <div className="flex gap-1 bg-gray-200 p-1 rounded-lg">
+                    <div className="flex gap-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg">
                         <button 
                             onClick={() => setViewMode('list')}
                             className={`px-3 py-1 rounded-md transition-colors ${
@@ -770,14 +744,14 @@ const RelayPointsManager = () => {
 
             {/* Content based on view mode */}
             {viewMode === 'list' ? (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto ">
                     {relayPoints.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">
                             Aucun point relais enregistré.
                         </div>
                     ) : (
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-50 text-gray-600 uppercase">
+                        <table className="w-full  text-sm">
+                            <thead className="bg-gray-50 dark:bg-gray-900 dark:text-gray-300 text-gray-600 uppercase">
                                 <tr>
                                     <th className="p-3 text-left">Nom</th>
                                     <th className="p-3 text-left">Adresse</th>
@@ -790,7 +764,7 @@ const RelayPointsManager = () => {
                             </thead>
                             <tbody>
                                 {relayPoints.map(point => (
-                                    <tr key={point.id} className="border-b hover:bg-orange-50 transition-colors">
+                                    <tr key={point.id} className="border-b hover:bg-orange-50 dark:hover:bg-gray-900 dark:text-gray-300 transition-colors">
                                         <td className="p-3 font-semibold">{point.name}</td>
                                         <td className="p-3">{point.address || 'N/A'}</td>
                                         <td className="p-3">{point.quartier || 'N/A'}</td>
@@ -1048,54 +1022,54 @@ export default function OperationsManagement() {
             component: <RelayPointsManager />
         }
     };
-
+    // ... (vos imports : AnimatePresence, motion, etc.)
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center gap-3">
-                <Truck className="h-8 w-8 text-orange-600" />
-                <h1 className="text-3xl font-bold text-gray-800">Gestion des Opérations</h1>
-            </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg transition-colors duration-300">
 
-            {/* Tab Navigation */}
-            <div className="flex border-b border-gray-200">
-                {Object.entries(tabConfig).map(([key, config]) => {
-                    const Icon = config.icon;
-                    return (
-                        <button
-                            key={key}
-                            onClick={() => setActiveTab(key as 'shipments' | 'relays')}
-                            className={`py-3 px-4 font-semibold flex items-center gap-2 transition-colors ${
-                                activeTab === key
-                                    ? 'border-b-2 border-orange-500 text-orange-600'
-                                    : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            <Icon className="w-5 h-5" />
-                            {config.label}
-                        </button>
-                    );
-                })}
+            {/* Tab Navigation Header */}
+            <div className="px-4 sm:px-6 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex -mb-px"> {/* -mb-px pour que la bordure de l'onglet actif fusionne avec la bordure du conteneur */}
+                    {Object.entries(tabConfig).map(([key, config]) => {
+                        const Icon = config.icon;
+                        const isActive = activeTab === key;
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => setActiveTab(key as 'shipments' | 'relays')}
+                                className={`py-3 px-4 font-semibold flex items-center gap-2 border-b-2 transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-t-md ${
+                                    isActive
+                                        ? 'border-orange-500 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10'
+                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
+                                }`}
+                            >
+                                <Icon className="w-5 h-5" />
+                                {config.label}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
             
             {/* Tab Content */}
-            {isLoading ? (
-                <div className="flex justify-center p-12">
-                    <LoadingSpinner size="large" />
-                </div>
-            ) : (
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={activeTab}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        {tabConfig[activeTab].component}
-                    </motion.div>
-                </AnimatePresence>
-            )}
+            <div className="p-4 sm:p-6">
+                {isLoading ? (
+                    <div className="flex justify-center py-10">
+                        <LoadingSpinner size="large" />
+                    </div>
+                ) : (
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            {tabConfig[activeTab].component}
+                        </motion.div>
+                    </AnimatePresence>
+                )}
+            </div>
         </div>
     );
 }

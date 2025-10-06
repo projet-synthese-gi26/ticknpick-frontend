@@ -81,14 +81,14 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, icon: Icon, color }) =>
   const colorClass = color.split('-')[1];
   
   return (
-    <div className={`p-6 bg-white rounded-xl shadow-lg border-l-4 ${color}`}>
+    <div className={`p-6 bg-white dark:bg-black dark:text-gray-400 rounded-xl shadow-lg border-l-4 ${color}`}>
       <div className="flex items-center space-x-4">
         <div className={`bg-${colorClass}-100 p-3 rounded-full`}>
           <Icon className={`h-6 w-6 text-${colorClass}-600`} />
         </div>
         <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-200">{value}</p>
         </div>
       </div>
     </div>
@@ -306,11 +306,6 @@ const FinanceManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* En-tête */}
-      <h1 className="text-3xl font-bold text-gray-800">
-        Finances et Rapports
-      </h1>
-
       {/* Section KPIs */}
       <section className="space-y-4">
         {loading.kpis ? (
@@ -362,9 +357,9 @@ const FinanceManagement: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="bg-white p-6 rounded-xl shadow-lg border"
+            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border"
           >
-            <h2 className="text-xl font-bold text-gray-800 mb-6">
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-400 mb-6">
               Évolution des revenus sur les 30 derniers jours
             </h2>
             
@@ -388,15 +383,15 @@ const FinanceManagement: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="bg-white p-6 rounded-xl shadow-lg border"
+            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border"
           >
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-400">
                 Gains des Partenaires (30 derniers jours)
               </h2>
               <button
                 onClick={handleExportData}
-                className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
+                className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
               >
                 <Download size={16} />
                 Exporter
@@ -413,7 +408,7 @@ const FinanceManagement: React.FC = () => {
                       {tableHeaders.map((header) => (
                         <th
                           key={header}
-                          className="p-4 text-left font-semibold text-gray-600 uppercase tracking-wider"
+                          className="p-4 text-left dark:bg-gray-900 font-semibold dark:text-gray-400 text-gray-600 uppercase tracking-wider"
                         >
                           {header}
                         </th>
