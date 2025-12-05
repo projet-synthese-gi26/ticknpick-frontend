@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import toast from 'react-hot-toast';
 
-// Enregistrement (si côté client)
+// Enregistrement conditionnel
 if (typeof window !== 'undefined') {
     ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 }
@@ -105,10 +105,13 @@ export default function MonitoringSystem() {
   const [latencyHistory, setLatencyHistory] = useState<number[]>(new Array(10).fill(0));
   
   const [isLoading, setIsLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null); // Initiale null pour eviter mismatch
+
+  useEffect(() => {
+      setLastUpdate(new Date()); // Hydratation client safe
+  }, []);
 
   const fetchSystemData = async () => {
-    // Avoid calling API during build or if component unmounted
     if (typeof window === 'undefined') return;
 
     try {
@@ -122,12 +125,11 @@ export default function MonitoringSystem() {
 
       setHealth(healthData);
 
-      // 1. SÉCURISATION LOGS : On force la conversion en Tableau
+      // 1. SÉCURISATION LOGS
       let safeLogs: LogEntry[] = [];
       if (Array.isArray(rawLogs)) {
         safeLogs = rawLogs;
       } else if (rawLogs && typeof rawLogs === 'object') {
-        // Gestion cas: { content: [...] } ou { logs: [...] }
         safeLogs = (rawLogs as any).content || (rawLogs as any).logs || (rawLogs as any).data || [];
       }
       setLogs(safeLogs);
@@ -147,7 +149,6 @@ export default function MonitoringSystem() {
           setTrafficHistory(prev => [...prev.slice(1), metricsData.requestCount]);
           setLatencyHistory(prev => [...prev.slice(1), metricsData.avgResponseTime]);
       } else {
-          // FALLBACK DEMO SI PAS DE DONNÉES
           const fakeReq = Math.floor(Math.random() * 50) + 100;
           const fakeLat = Math.floor(Math.random() * 30) + 20;
           
@@ -172,7 +173,9 @@ export default function MonitoringSystem() {
   };
 
   useEffect(() => {
+    // Premier fetch
     fetchSystemData();
+    // Interval
     const interval = setInterval(fetchSystemData, 5000); 
     return () => clearInterval(interval);
   }, []);
@@ -223,7 +226,7 @@ export default function MonitoringSystem() {
                  </h2>
              </div>
              <div className="text-right text-xs text-slate-400">
-                 Màj: <span className="font-mono font-bold">{lastUpdate.toLocaleTimeString()}</span>
+                 Màj: <span className="font-mono font-bold">{lastUpdate ? lastUpdate.toLocaleTimeString() : '...'}</span>
              </div>
         </div>
 
@@ -240,7 +243,7 @@ export default function MonitoringSystem() {
             <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
                 <h3 className="text-sm font-bold uppercase mb-4">Trafic Réseau (Live)</h3>
                 <div className="h-[300px]">
-                    <Line data={lineChartData} options={chartOptions} />
+                    {typeof window !== 'undefined' && <Line data={lineChartData} options={chartOptions} />}
                 </div>
             </div>
 
@@ -261,7 +264,6 @@ export default function MonitoringSystem() {
              </div>
              
              <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
-                 {/* VÉRIFICATION ICI AVANT DE MAPPER */}
                  {!Array.isArray(logs) || logs.length === 0 ? (
                      <div className="opacity-50 italic">En attente de logs...</div>
                  ) : (
