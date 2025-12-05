@@ -22,7 +22,7 @@ import {
 
 // --- Interface de Données Corrigée ---
 interface PackageData {
-  photo: File | null;
+  photo: File | string | null; // MODIFICATION ICI: Accept string for URL/Base64
   designation: string;
   description: string;
   weight: string;
@@ -145,7 +145,15 @@ export default function PackageRegistration({ initialData = {}, onContinue, onBa
   const [volume, setVolume] = useState(0);
   const [isFormValid, setIsFormValid] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
-  const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photo || null); 
+    // MODIFICATION: Initialisation sécurisée de la prévisualisation
+  const [photoPreview, setPhotoPreview] = useState<string | null>(() => {
+      if (!initialData?.photo) return null;
+      if (typeof initialData.photo === 'string') return initialData.photo;
+      // On ne peut pas créer d'ObjectUrl lors du SSR ou render initial pur sans side effect propre
+      // On laisse l'effet s'en charger si c'est un File
+      return null; 
+  });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
