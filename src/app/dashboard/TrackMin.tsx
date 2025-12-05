@@ -112,9 +112,14 @@ export default function TrackPackageMin({ onClose, onOpenFullTracker, initialTra
     setLoading(true); setError(null); setPkg(null);
     try {
       const response = await packageService.trackPackage(searchInput.trim());
-      if (!response || (!response.package && !response.trackingNumber)) throw new Error("Introuvable");
       
-      const unifiedData = response.package ? response : { package: response, history: [] };
+      // Fix Type Error: On force le type any ici car l'interface du service ne reflète pas
+      // potentiellement la structure "wrappée" { package: ..., history: ... }
+      const data = response as any;
+
+      if (!data || (!data.package && !data.trackingNumber)) throw new Error("Introuvable");
+      
+      const unifiedData = data.package ? data : { package: data, history: [] };
       setPkg(mapBackendToUI(unifiedData));
     } catch (err: any) {
       setError(err.message || "Erreur recherche");
@@ -122,6 +127,7 @@ export default function TrackPackageMin({ onClose, onOpenFullTracker, initialTra
       setLoading(false);
     }
   };
+
 
   const getStatusColor = (raw: string) => {
      if (raw.includes('RECU') || raw.includes('LIVRE')) return 'bg-green-500';
