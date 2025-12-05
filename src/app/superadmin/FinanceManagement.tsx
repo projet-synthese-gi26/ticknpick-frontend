@@ -13,7 +13,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  ChartOptions,
 } from 'chart.js';
 import {
   DollarSign,
@@ -39,7 +40,6 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 // ============================================================================
 
 // Type pour un colis reçu de l'API admin (pour les calculs)
-// Basé sur le Swagger Shipment entity
 interface AdminPackage {
     id: string;
     trackingNumber: string; // Adapter si tracking_number
@@ -159,38 +159,25 @@ export default function FinanceManagement() {
     
     const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
 
-    // Fonction utilitaire de logging
-    const logFinancialData = (pkg: AdminPackage) => {
-        //console.log(`📦 [FINANCE ANALYZER] Package processed: ID=${pkg.id} | Cost=${pkg.shippingCost} | Date=${pkg.createdAt}`);
-    };
-
     // Chargement & Calculs
     useEffect(() => {
         const processFinanceData = async () => {
             setLoading(true);
             try {
                 console.group("💰 [FINANCE] Starting Data Analysis...");
-                
-                // 1. Récupérer tous les colis pour analyse
-                // Utilisation de la route que vous avez spécifiée ou une route "Admin" équivalente qui renvoie TOUT
-                // GET /api/admin/packages est l'idéal
                 console.log("📡 Fetching Global Shipment Data via /api/admin/packages...");
                 
                 let packages: AdminPackage[] = [];
                 try {
-                     // On tente d'utiliser le service admin si implémenté, ou une requête directe
-                     const response = await adminService.getAllShipmentsGlobal(); // Suppose que adminService a été mis à jour
-                     
-                     // Mapping des données backend pour harmoniser camelCase/snake_case
+                     const response = await adminService.getAllShipmentsGlobal(); 
                      packages = response.map((p: any) => ({
                         id: p.id,
                         trackingNumber: p.trackingNumber || p.tracking_number,
                         shippingCost: Number(p.shippingCost || p.deliveryFee || p.shipping_cost || 0),
                         createdAt: p.createdAt || p.created_at,
-                        departurePointName: p.departurePointName || p.pickupAddress, // Adaptez selon le retour API réel
+                        departurePointName: p.departurePointName || p.pickupAddress,
                         senderName: p.senderName || p.sender_name || "Anonyme"
                      }));
-                     
                      console.log(`✅ Loaded ${packages.length} packages for financial analysis.`);
                 } catch (err) {
                     console.warn("⚠️ Failed to load global packages, data might be incomplete.", err);
@@ -202,22 +189,17 @@ export default function FinanceManagement() {
                     return;
                 }
 
-                // --- CALCULS STATISTIQUES (Frontend Aggregation) ---
                 const now = new Date();
                 const todayStart = new Date(now.setHours(0, 0, 0, 0)).getTime();
-                const oneWeekAgo = new Date(new Date().setDate(now.getDate() - 7)).getTime();
                 
                 let totalRev = 0;
                 let todayRev = 0;
                 
-                // Maps pour classements
                 const relayMap = new Map<string, { count: number, rev: number }>();
                 const senderMap = new Map<string, { count: number, rev: number }>();
 
-                // Aggrégation Temporelle (30 derniers jours pour le graph)
                 const dateMap = new Map<string, number>();
                 
-                // Initialiser les dates du graphe (30j)
                 for (let i = viewMode === 'week' ? 6 : 29; i >= 0; i--) {
                     const d = new Date();
                     d.setDate(d.getDate() - i);
@@ -225,38 +207,27 @@ export default function FinanceManagement() {
                     dateMap.set(key, 0);
                 }
 
-                // Boucle unique de traitement
                 packages.forEach((pkg) => {
-                    // Sécurité donnée
                     if (isNaN(pkg.shippingCost)) return;
-
-                    // Logging optionnel
-                    // logFinancialData(pkg);
 
                     totalRev += pkg.shippingCost;
                     
                     const pkgDate = new Date(pkg.createdAt);
                     const pkgTime = pkgDate.getTime();
                     
-                    // Revenus du jour
                     if (pkgTime >= todayStart) todayRev += pkg.shippingCost;
 
-                    // Données Graphique (si dans la plage)
-                    // Note : si la date est dans la map, on ajoute
                     const dateKey = pkgDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
                     if (dateMap.has(dateKey)) {
                         dateMap.set(dateKey, (dateMap.get(dateKey) || 0) + pkg.shippingCost);
                     }
 
-                    // Classement Points Relais (Départ)
-                    // On considère que le point de départ est celui qui génère le "lead" du transport
                     const relayName = pkg.departurePointName || "Inconnu";
                     if (relayName !== "Inconnu") {
                         const currRelay = relayMap.get(relayName) || { count: 0, rev: 0 };
                         relayMap.set(relayName, { count: currRelay.count + 1, rev: currRelay.rev + pkg.shippingCost });
                     }
 
-                    // Classement Clients (Senders)
                     const sender = pkg.senderName || "Client Inconnu";
                     if (sender !== "Client Inconnu") {
                         const currSender = senderMap.get(sender) || { count: 0, rev: 0 };
@@ -264,18 +235,16 @@ export default function FinanceManagement() {
                     }
                 });
 
-                // Transformation des Maps en Tableaux Triés
                 const sortedRelays = Array.from(relayMap.entries())
                     .map(([name, val]) => ({ name, count: val.count, revenue: val.rev, role: 'Point Relais' }))
-                    .sort((a, b) => b.revenue - a.revenue) // Tri par Chiffre d'Affaires généré
-                    .slice(0, 10); // Top 10
+                    .sort((a, b) => b.revenue - a.revenue) 
+                    .slice(0, 10); 
 
                 const sortedSenders = Array.from(senderMap.entries())
                     .map(([name, val]) => ({ name, count: val.count, revenue: val.rev, role: 'Expéditeur' }))
                     .sort((a, b) => b.revenue - a.revenue)
                     .slice(0, 10);
 
-                // Mise à jour States
                 setKpis({
                     totalRevenue: totalRev,
                     todayRevenue: todayRev,
@@ -300,16 +269,17 @@ export default function FinanceManagement() {
         };
 
         processFinanceData();
-    }, [viewMode]); // Re-calcul si changement de mode vue graphique (semaine/mois)
+    }, [viewMode]);
 
-    // --- CONFIGURATION DES GRAPHIQUES (Chart.js) ---
+    // --- CONFIGURATION DES GRAPHIQUES ---
+    
     const lineData = {
         labels: chartLabels,
         datasets: [{
             label: 'Revenus (FCFA)',
             data: revenueSeries,
             fill: true,
-            borderColor: '#f97316', // Orange 500
+            borderColor: '#f97316',
             backgroundColor: (context: any) => {
                 const ctx = context.chart.ctx;
                 const gradient = ctx.createLinearGradient(0, 0, 0, 300);
@@ -325,7 +295,7 @@ export default function FinanceManagement() {
         }]
     };
 
-    const chartOptions: ChartOptions<'line'> = {
+    const chartOptions: any = { // Usage de any pour éviter les erreurs de typage pointilleuses sur grid
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -337,7 +307,7 @@ export default function FinanceManagement() {
                 bodyFont: { size: 14, weight: 'bold' },
                 displayColors: false,
                 callbacks: {
-                    label: (context) => `${context.formattedValue} FCFA`
+                    label: (context: any) => `${context.formattedValue} FCFA`
                 }
             }
         },
@@ -347,8 +317,9 @@ export default function FinanceManagement() {
                 ticks: { color: '#94a3b8' }
             },
             y: { 
+                // Fix: borderDash est supporté au runtime mais typage parfois manquant sur interface standard
                 grid: { color: 'rgba(148, 163, 184, 0.1)', borderDash: [5, 5] },
-                ticks: { color: '#94a3b8', callback: (value) => `${value} F` } 
+                ticks: { color: '#94a3b8', callback: (value: any) => `${value} F` } 
             }
         }
     };
@@ -375,12 +346,11 @@ export default function FinanceManagement() {
         }
     };
 
-    // Génération PDF basique (Placeholder action)
+    // Génération PDF basique (Placeholder)
     const handleGenerateReport = () => {
         alert("Génération du rapport financier PDF en cours...\n(Intégrez ici jsPDF avec les données 'kpis' et 'topRelays')");
         console.log("DATA EXPORT:", { kpis, topRelays, topSenders });
     };
-
 
     if(loading) return (
         <div className="flex flex-col justify-center items-center py-32 animate-in fade-in">
@@ -392,7 +362,7 @@ export default function FinanceManagement() {
     return (
         <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
             
-            {/* HEADER SECTION */}
+            {/* HEADER */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
@@ -411,7 +381,7 @@ export default function FinanceManagement() {
                 </button>
             </div>
 
-            {/* KPI CARDS GRID */}
+            {/* KPI CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <KpiCard 
                     title="Chiffre d'Affaires Global" 
@@ -442,7 +412,6 @@ export default function FinanceManagement() {
 
             {/* GRAPHIQUES */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Chart - Revenue Timeline */}
                 <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
                     <div className="flex justify-between items-center mb-6">
                         <div>
@@ -450,18 +419,8 @@ export default function FinanceManagement() {
                             <p className="text-xs text-slate-400 dark:text-gray-500">Flux financier entrant (Expéditions)</p>
                         </div>
                         <div className="flex bg-slate-100 dark:bg-gray-700 rounded-lg p-1">
-                            <button 
-                                onClick={() => setViewMode('week')} 
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='week' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}
-                            >
-                                7 Jours
-                            </button>
-                            <button 
-                                onClick={() => setViewMode('month')} 
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='month' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}
-                            >
-                                30 Jours
-                            </button>
+                            <button onClick={() => setViewMode('week')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='week' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}>7 Jours</button>
+                            <button onClick={() => setViewMode('month')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='month' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}>30 Jours</button>
                         </div>
                     </div>
                     <div className="h-72 w-full">
@@ -469,7 +428,6 @@ export default function FinanceManagement() {
                     </div>
                 </div>
 
-                {/* Side Chart - Top Relays Bar */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col">
                      <div className="mb-6">
                         <h3 className="font-bold text-lg text-slate-700 dark:text-white flex items-center gap-2">
@@ -482,7 +440,7 @@ export default function FinanceManagement() {
                      </div>
                      <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
                          <div className="flex justify-between items-center">
-                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total Commissions Relais</span>
+                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total Commissions</span>
                              <span className="text-sm font-black text-blue-600 dark:text-blue-400">
                                  {(kpis.totalRevenue * 0.15).toLocaleString(undefined, { maximumFractionDigits: 0 })} F
                              </span>
@@ -490,12 +448,12 @@ export default function FinanceManagement() {
                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
                              <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '15%' }}></div>
                          </div>
-                         <p className="text-[10px] text-gray-400 mt-1 text-right">Basé sur 15% de commission moyenne</p>
+                         <p className="text-[10px] text-gray-400 mt-1 text-right">Basé sur 15% de commission</p>
                      </div>
                 </div>
             </div>
 
-            {/* TABLES CLASSEMENT DÉTAILLÉES */}
+            {/* CLASSEMENTS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <RankingTable 
                     title="Meilleurs Partenaires (CA)" 
@@ -508,7 +466,6 @@ export default function FinanceManagement() {
                     icon={Users} 
                 />
             </div>
-
         </div>
     );
 }
