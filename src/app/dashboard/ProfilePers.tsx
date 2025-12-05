@@ -1,12 +1,11 @@
 // FICHIER: src/app/dashboard/ProfilePers.tsx
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Dispatch, SetStateAction  } from 'react';
 import { 
   User, Mail, Phone, Home, CreditCard, FileText, IdCard, Save, Loader2, Camera, Upload, CheckCircle, Edit, X, CheckSquare
 } from 'lucide-react';
 import { UserProfile } from './page';
-import apiClient from '@/services/apiClient';
 import toast from 'react-hot-toast'; 
 import { userService } from '@/services/userservice'; 
 
@@ -116,7 +115,7 @@ const AnimatedInputField = ({ label, name, value, onChange, readOnly, icon: Icon
 
 interface Props {
     formData: UserProfile;
-    setFormData: (data: UserProfile) => void;
+    setFormData: Dispatch<SetStateAction<UserProfile>>; // Correction ICI: Utiliser le bon type pour le setState
     onUpdate: () => void;
     isEditing: boolean;
     setIsEditing: (val: boolean) => void;
@@ -163,10 +162,10 @@ export default function ProfilePersonalInfo({ formData, setFormData, onUpdate, i
 
             // Mise à jour Visuelle immédiate (sans toucher à la BDD)
             // On supporte les variantes de nommage (camelCase/snake_case) pour l'affichage
-            setFormData(prev => ({ 
+            // Correction ICI : Typer explicitement 'prev'
+            setFormData((prev: UserProfile) => ({ 
                 ...prev, 
                 [stateField]: previewUrl,
-                // Hack pour supporter les variantes de props si le type est pas strict
                 ...(stateField.includes('_') ? {[stateField.replace(/_([a-z])/g, g => g[1].toUpperCase())]: previewUrl} : {})
             }));
 
