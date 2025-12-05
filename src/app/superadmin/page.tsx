@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation';
 import { Loader2, LayoutDashboard, Users, Map, CircleDollarSign, LogOut, PackageCheck, Bell, Search, Settings, Shield, Activity } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { userService } from '@/services/userservice'; 
+import dynamic from 'next/dynamic';
 
-// Sous-composants
-import Overview from './Overview';
-import UserManagement from './UserManagement';
-import OperationsManagement from './OperationManagement';
-import FinanceManagement from './FinanceManagement';
-import MonitoringSystem from './Monitoring'; // Import du monitoring corrigé
+// Sous-composants - Chargés dynamiquement pour éviter SSR
+const Overview = dynamic(() => import('./Overview'), { ssr: false });
+const UserManagement = dynamic(() => import('./UserManagement'), { ssr: false });
+const OperationsManagement = dynamic(() => import('./OperationManagement'), { ssr: false });
+const FinanceManagement = dynamic(() => import('./FinanceManagement'), { ssr: false });
+const MonitoringSystem = dynamic(() => import('./Monitoring'), { ssr: false });
 
 const TABS = {
   overview: { label: "Vue d'ensemble", icon: LayoutDashboard, comp: Overview },
@@ -26,10 +27,16 @@ export default function SuperAdminDashboard() {
   const [activeTab, setActiveTab] = useState<keyof typeof TABS>('overview');
   const [isLoadingCheck, setIsLoadingCheck] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userEmailDisplay, setUserEmailDisplay] = useState('Admin'); // Stocker l'email pour l'affichage
+  const [userEmailDisplay, setUserEmailDisplay] = useState('Admin');
+  const [isMounted, setIsMounted] = useState(false); // ✅ Nouveau state
   
   const router = useRouter();
   const { user: authUser, isAuthenticated, logout, isLoading: isAuthLoading } = useAuth();
+
+  // ✅ Vérifier que le composant est monté côté client
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const verifyAdminAccess = async () => {
@@ -42,8 +49,6 @@ export default function SuperAdminDashboard() {
       }
 
       try {
-        // --- MODIFICATION ICI ---
-        // On utilise getProfileById(id) au lieu de getMyProfile()
         let profile = null;
         try {
            console.log("SuperAdmin: Vérification via ID:", authUser.id);
@@ -51,9 +56,7 @@ export default function SuperAdminDashboard() {
         } catch(e) {
            console.warn("Erreur récupération profil par ID:", e);
         }
-        // -----------------------
 
-        // Fallback sur le token/authContext si l'API user fail
         const roleToCheck = (profile?.account_type || authUser.accountType || '').toUpperCase();
         
         console.log("SuperAdmin: Rôle détecté:", roleToCheck);
@@ -78,6 +81,10 @@ export default function SuperAdminDashboard() {
     verifyAdminAccess();
   }, [isAuthenticated, isAuthLoading, authUser, router]);
 
+  // ✅ Ne rien rendre tant que le composant n'est pas monté côté client
+  if (!isMounted) {
+    return null;
+  }
 
   if (isAuthLoading || isLoadingCheck) {
     return (
