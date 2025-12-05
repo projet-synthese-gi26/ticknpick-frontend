@@ -397,7 +397,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
             
             <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6 border border-orange-200 dark:border-orange-700">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide font-semibold">Numéro de suivi</p>
-              <p className="text-3xl font-black text-orange-600 dark:text-orange-500 font-mono tracking-wider">${newTracking}</p>
+              <p className="text-3xl font-black text-orange-600 dark:text-orange-500 font-mono tracking-wider">${trackingNumber}</p>
             </div>
 
             <motion.button
