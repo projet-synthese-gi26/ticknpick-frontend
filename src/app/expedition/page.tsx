@@ -288,137 +288,83 @@ export default function ShippingPage() {
   };
 
   const generateBordereauPDF = async () => {
-              try {
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pageWidth = pdf.internal.pageSize.getWidth();
-                const margin = 15;
-                let y = 20;
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const margin = 15;
+            let y = 20;
 
-                // FONCTIONS UTILITAIRES
-                const addSectionTitle = (title: string) => {
-                  pdf.setFontSize(14);
-                  pdf.setFont('helvetica', 'bold');
-                  pdf.setTextColor(45, 55, 72); // Couleur sombre (slate-700)
-                  pdf.text(title, margin, y);
-                  y += 8;
-                  pdf.setLineWidth(0.2);
-                  pdf.line(margin, y - 3, pageWidth - margin, y - 3);
-                  pdf.setFont('helvetica', 'normal');
-                  pdf.setTextColor(0, 0, 0);
-                };
-                
-                const addField = (label: string, value: string | undefined | null) => {
-                  if (!value) return;
-                  pdf.setFontSize(9);
-                  pdf.setFont('helvetica', 'bold');
-                  pdf.text(label, margin, y);
-                  pdf.setFont('helvetica', 'normal');
-                  pdf.text(String(value), margin + 45, y);
-                  y += 6;
-                };
-
-                // 1. EN-TÊTE
-                pdf.setFontSize(22);
+            // Utilitaires
+            const addSectionTitle = (title: string) => {
+                pdf.setFontSize(14);
                 pdf.setFont('helvetica', 'bold');
-                pdf.setTextColor(249, 115, 22); // Orange
-                pdf.text("PicknDrop Link", margin, y - 5);
-                
-                pdf.setFontSize(9);
-                pdf.setFont('helvetica', 'italic');
-                pdf.setTextColor(100, 116, 139); // slate-500
-                pdf.text('Votre solution de livraison de confiance', margin, y);
-
-                const qrDataURL = await OriginalQRCode.toDataURL(trackingNumber, { width: 110, margin: 1 });
-                const qrSize = 28;
-                pdf.addImage(qrDataURL, 'PNG', pageWidth - margin - qrSize, y - 12, qrSize, qrSize);
-
-                pdf.setFontSize(11);
-                pdf.setFont('helvetica', 'bold');
-                pdf.setTextColor(0,0,0);
-                pdf.text(`Bordereau d'Expédition`, pageWidth - margin - 35, y - 5, { align: 'right' });
-                
-                pdf.setFontSize(9);
+                pdf.setTextColor(45, 55, 72);
+                pdf.text(title, margin, y);
+                y += 8;
+                pdf.setLineWidth(0.2);
+                pdf.line(margin, y - 3, pageWidth - margin, y - 3);
                 pdf.setFont('helvetica', 'normal');
-                pdf.text(`N°: ${trackingNumber}`, pageWidth - margin - 35, y, { align: 'right' });
-                pdf.text(`Date: ${new Date().toLocaleDateString('fr-CM')}`, pageWidth - margin - 35, y + 5, { align: 'right' });
-
-                y += qrSize - 5;
-                
-                // 2. EXPÉDITEUR & DESTINATAIRE
-                addSectionTitle('Intervenants');
-                const startYCols = y;
-                addField('Expéditeur:', formData.senderData.senderName);
-                addField('Téléphone:', formData.senderData.senderPhone);
-                addField('Point de Dépôt:', formData.routeData.departurePointName);
-                
-                y = startYCols; // Reset y pour la deuxième colonne
-                pdf.text('', pageWidth / 2, y); // Placeholder pour aligner
-                addField('Destinataire:', formData.recipientData.recipientName);
-                addField('Téléphone:', formData.recipientData.recipientPhone);
-                addField('Point de Retrait:', formData.routeData.arrivalPointName);
-                y = Math.max(y, startYCols + (3*6)); // S'assurer que 'y' est à la fin de la colonne la plus longue
-                y += 5;
-
-                // 3. DÉTAILS DU COLIS
-                addSectionTitle('Détails du Colis');
-                if (formData.packageData.photo) {
-                  pdf.setFont('helvetica', 'bold');
-                  pdf.text('Photo du Colis:', margin + 110, y - 6);
-                  pdf.addImage(formData.packageData.photo, 'JPEG', margin + 110, y, 35, 35); 
-                }
-                addField('Désignation:', formData.packageData.designation);
-                addField('Poids:', `${formData.packageData.weight} kg`);
-                let caracteristiques = [];
-                if (formData.packageData.isFragile) caracteristiques.push("Fragile");
-                if (formData.packageData.isPerishable) caracteristiques.push("Périssable");
-                if (formData.packageData.isInsured) caracteristiques.push(`Assuré (Valeur: ${Number(formData.packageData.declaredValue).toLocaleString('fr-FR')} FCFA)`);
-                if (caracteristiques.length > 0) addField('Spécificités:', caracteristiques.join(', '));
-                y += 5;
-                
-                // 4. RÉCAPITULATIF FINANCIER
-                addSectionTitle('Récapitulatif Financier');
-                addField('Coût de base:', `${formData.pricing.basePrice.toLocaleString('fr-FR')} FCFA`);
-                addField('Frais de trajet:', `${formData.pricing.travelPrice.toLocaleString('fr-FR')} FCFA`);
-                if(formData.pricing.operatorFee > 0) addField('Frais transaction:', `${formData.pricing.operatorFee.toLocaleString('fr-FR')} FCFA`);
-                pdf.setLineWidth(0.3);
-                pdf.line(margin, y, margin + 85, y);
-                y += 6;
-
-                pdf.setFont('helvetica', 'bold');
-                addField('Total:', `${formData.pricing.totalPrice.toLocaleString('fr-FR')} FCFA`);
-                pdf.setFont('helvetica', 'normal');
-                y += 10;
-                
-                // 5. SIGNATURE
-                addSectionTitle('Signature');
-                if (formData.signatureData.signatureUrl) {
-                  try {
-                    pdf.addImage(formData.signatureData.signatureUrl, 'PNG', margin, y, 50, 20);
-                  } catch(e) { 
-                    console.error("Erreur d'ajout de signature"); 
-                  }
-                } else {
-                  pdf.text('Pas de signature numérique.', margin, y);
-                }
-                pdf.line(margin, y + 25, margin + 60, y + 25);
-                pdf.text("Signature de l'agent", margin + 100, y + 28);
-                pdf.line(margin + 90, y + 25, margin + 150, y + 25);
-
-                // 6. PIED DE PAGE
-                const finalY = pdf.internal.pageSize.getHeight() - 15;
-                pdf.setLineWidth(0.5);
-                pdf.line(margin, finalY - 5, pageWidth - margin, finalY - 5);
-                pdf.setFontSize(8);
-                pdf.setTextColor(150, 150, 150);
-                pdf.text(`Document généré le ${new Date().toLocaleString('fr-CM')}. PicknDrop Link vous remercie.`, pageWidth / 2, finalY, { align: 'center' });
-
-                // SAUVEGARDE
-                pdf.save(`Bordereau_Expedition_${trackingNumber}.pdf`);
-              } catch (error) {
-                console.error("Erreur détaillée lors de la génération du PDF:", error);
-                alert("Une erreur est survenue lors de la génération du bordereau PDF.");
-              }
+                pdf.setTextColor(0, 0, 0);
             };
+            const addField = (label: string, value: string | undefined | null) => {
+                if (!value) return;
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(label, margin, y);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(String(value), margin + 45, y);
+                y += 6;
+            };
+
+            // HEADER
+            pdf.setFontSize(22);
+            pdf.setTextColor(249, 115, 22); 
+            pdf.text("PicknDrop Link", margin, y - 5);
+            
+            pdf.setFontSize(11);
+            pdf.setTextColor(0,0,0);
+            pdf.text(`Bordereau d'Expédition`, pageWidth - margin - 35, y - 5, { align: 'right' });
+            
+            pdf.setFontSize(9);
+            pdf.text(`N°: ${trackingNumber}`, pageWidth - margin - 35, y, { align: 'right' });
+            
+            y += 25;
+            
+            // DETAILS
+            addSectionTitle('Détails du Colis');
+
+            // Image
+            if (typeof formData.packageData.photo === 'string') {
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Photo du Colis:', margin + 110, y - 6);
+                try {
+                    // Essai ajout image
+                    pdf.addImage(formData.packageData.photo, 'JPEG', margin + 110, y, 35, 35);
+                } catch (e) {
+                    // Si échec (format base64 invalide ou cors), on ignore
+                }
+            } else {
+                pdf.text('(Photo indisponible sur ce document)', margin + 110, y);
+            }
+
+            addField('Désignation:', formData.packageData.designation);
+            addField('Poids:', `${formData.packageData.weight} kg`);
+            
+            addSectionTitle('Intervenants');
+            addField('Expéditeur:', formData.senderData.senderName);
+            addField('Destinataire:', formData.recipientData.recipientName);
+            
+            addSectionTitle('Financier');
+            addField('Total:', `${formData.pricing.totalPrice} FCFA`);
+            
+            pdf.save(`Bordereau_${trackingNumber}.pdf`);
+
+        } catch (error) {
+            console.error("Erreur PDF", error);
+            alert("Erreur lors de la génération du PDF.");
+        }
+  };
+
 const handleCreateAccount = () => {
               // 1. Préparer les données de l'expéditeur pour le pré-remplissage
               const prefillData = {
