@@ -77,7 +77,7 @@ interface RecipientData {
 }
 // << CORRIGÉ: Mise à jour de l'interface PackageData >>
 interface PackageData {
-  photo: string | null;
+  photo: File | string | null;
   designation: string;
   description: string;
   weight: string;
@@ -461,13 +461,19 @@ const handleCreateAccount = () => {
           onBack={() => setFormData(prev => ({ ...prev, currentStep: 4 }))}
         />;
       case 6:
+        // Construction de l'objet final pour le composant de paiement
+        // Conversion forcée et nettoyage des types
         const fullDataForPayment = {
-          
           ...formData.senderData,
           ...formData.recipientData,
           ...formData.packageData,
+          // Gérer explicitement le type File/String de la photo
+          photo: typeof formData.packageData.photo === 'string' ? formData.packageData.photo : null, 
           ...formData.routeData,
           ...formData.signatureData,
+          // Ne pas caster en Number() si ce sont des UUIDs (chaines)
+          departurePointId: (formData.routeData.departurePointId) as any, 
+          arrivalPointId: (formData.routeData.arrivalPointId) as any,
           basePrice: formData.pricing.basePrice,
           travelPrice: formData.pricing.travelPrice,
         };
