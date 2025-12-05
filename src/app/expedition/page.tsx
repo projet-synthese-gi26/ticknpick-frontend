@@ -95,8 +95,8 @@ interface PackageData {
   delivery: boolean;
 }
 interface RouteData {
-  departurePointId: number | null;
-  arrivalPointId: number | null;
+  departurePointId: string | null;
+  arrivalPointId: string | null;
   departurePointName: string;
   arrivalPointName: string;
   distanceKm: number;
@@ -212,6 +212,14 @@ export default function ShippingPage() {
   useEffect(() => {
     if (formData.currentStep > 0 && formData.currentStep < 7) {
       try {
+                // Protection contre l'objet File lors de la sauvegarde JSON
+        const safeData = {
+             ...formData,
+             packageData: { 
+                 ...formData.packageData, 
+                 photo: typeof formData.packageData.photo === 'string' ? formData.packageData.photo : null 
+             }
+        };
         localStorage.setItem(EXPEDITION_FORM_STORAGE_KEY, JSON.stringify(formData));
       } catch (e) {
         console.error("Erreur de sauvegarde localStorage:", e);
