@@ -13,48 +13,43 @@ const getMyProfile = async (): Promise<any> => {
 
 /**
  * Récupère le profil complet. 
- * Stratégie de fusion : User + BusinessActor
  */
 const getProfileById = async (userId: string): Promise<any> => {
   console.log(`👤 [UserService] Step 1: Fetching base User /api/users/${userId}...`);
   
-  // 1. Récupération des infos de base (Table User)
-  let baseUser: any;
-  try {
-    baseUser = await apiClient<any>(`/api/users/${userId}`, 'GET');
-  } catch (e) {
-    // Si erreur user, on propage
-    throw e;
-  }
-
-  // 2. Si c'est un Business Actor, on va chercher les infos complémentaires
-  // Note: Le backend peut renvoyer "account_type" (snake) ou "accountType" (camel)
-  const type = baseUser.account_type || baseUser.accountType;
+  // 1. Récupération Base User
+  const baseUser = await apiClient<any>(`/api/users/${userId}`, 'GET');
+  
+  // Normalisation préliminaire du type
+  const type = baseUser.account_type || baseUser.accountType || 'CLIENT';
 
   if (type === 'BUSINESS_ACTOR') {
-      console.log(`👤 [UserService] Step 2: User is Business, fetching details /api/business-actors/${userId}...`);
+      console.log(`👤 [UserService] Step 2: Business Actor detected. Attempting to fetch details...`);
       try {
-          // On suppose que l'ID est partagé (stratégie @Inheritance(JOINED) courante en Java)
           const businessDetails = await apiClient<any>(`/api/business-actors/${userId}`, 'GET');
           
-          console.log("✅ [UserService] Business details found, merging...");
-          
-          // 3. FUSION : On écrase les données de base par les données précises du BusinessActor
-          // Cela permet d'avoir 'businessActorType', 'businessName', etc.
+          console.log("✅ [UserService] Business details merged.");
           return { 
             ...baseUser, 
-            ...businessDetails,
-            // Sécurisation des champs pour qu'ils soient au format attendu par l'UI
-            account_type: type,
-            // On s'assure que businessActorType est remonté
-            business_actor_type: businessDetails.businessActorType || businessDetails.business_actor_type,
-            name: businessDetails.businessName || businessDetails.name || baseUser.name
+            ...businessDetails, // Priorité aux détails business
+            account_type: type 
           };
 
-      } catch (err) {
-          console.warn("⚠️ Impossible de récupérer les détails Business (Probable ID mismatch ou pas encore créé)", err);
-          // Si ça échoue, on renvoie au moins l'utilisateur de base pour ne pas planter l'app
-          return baseUser;
+      } catch (err: any) {
+          // --- BLOC DE RÉCUPÉRATION D'ERREUR ---
+          console.warn(`⚠️ [UserService] Failed to fetch Business Details (Error ${err.message}). Using Fallback.`);
+          
+          // Si 404, cela veut dire que l'User existe mais pas son entrée BusinessActor spécifique.
+          // C'est une incohérence de BDD, mais on ne doit pas bloquer le front.
+          
+          // On renvoie l'utilisateur de base, mais on force un type business générique
+          // pour que le dashboard s'affiche quand même (mode dégradé)
+          return {
+              ...baseUser,
+              account_type: 'BUSINESS_ACTOR',
+              business_actor_type: 'FREELANCE', // Valeur par défaut safe
+              businessName: baseUser.name || 'Business (Non Configuré)'
+          };
       }
   }
 
