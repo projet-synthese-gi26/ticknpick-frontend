@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Nécessaire pour la dynamique
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,11 +13,11 @@ import {
     Smartphone, HandCoins, Briefcase, Layers, Key,
     Star,
     MessageCircle,
-    Building
+    Building,
+    Loader2 // Pour le fallback Suspense
 } from 'lucide-react';
 
 // --- DATA : Dictionnaire de Contenu par Rôle ---
-// Cette structure permet de changer le texte/icones sans toucher au JSX
 
 type ContentData = {
     title: React.ReactNode;
@@ -146,7 +146,7 @@ const MARKET_DATA: ContentData = {
     stepsTitle: "Simple et Efficace",
     steps: [
         { icon: Search, title: "Recherche", desc: "Parcourez les profils ou publiez votre besoin d'expédition." },
-        { icon: MessageCircle, title: "Discussion", desc: "Échangez directement avec les transporteurs via la plateforme." }, // Correction: import manquait, supposé Lucide
+        { icon: MessageCircle, title: "Discussion", desc: "Échangez directement avec les transporteurs via la plateforme." }, 
         { icon: HandCoins, title: "Accord", desc: "Validez le devis et bloquez le paiement." },
         { icon: Truck, title: "Réalisation", desc: "Suivez la prestation jusqu'à la validation finale." }
     ],
@@ -163,28 +163,20 @@ const CONTENT_MAP: Record<string, ContentData> = {
     'MARKET': MARKET_DATA
 };
 
+// --- COMPOSANTS INTERNES ---
 
-// --- COMPOSANTS INTERNES (Mises à jour pour être purement présentation) ---
-
-// 1. BANNIÈRE MISE À JOUR (Design Requested)
 const DynamicBanniere = ({ data }: { data: ContentData }) => (
   <section className="relative h-[80vh] min-h-[500px] flex items-center justify-center text-white text-center overflow-hidden">
-    
-    {/* Couche 1: Image de fond dynamique */}
     <div 
         className="absolute inset-0 bg-cover bg-center transition-all duration-1000" 
         style={{ backgroundImage: `url('${data.heroImage}')` }}
     />
-
-    {/* Couche 2: Blur + Filtre Orangé (DEMANDE SPÉCIALE) */}
-    {/* On utilise bg-orange-600 avec une opacité mix-blend pour tinter l'image + backdrop-blur */}
     <div className="absolute inset-0 bg-orange-600/40 mix-blend-multiply backdrop-blur-[2px]" />
-    <div className="absolute inset-0 bg-black/30" /> {/* Légère couche sombre pour contraste texte */}
+    <div className="absolute inset-0 bg-black/30" /> 
 
-    {/* Couche 3: Contenu */}
     <div className="relative z-10 p-6 max-w-4xl mx-auto pt-20">
       <motion.div 
-        key={`title-${data.ctaPrimary.link}`} // Key change trigger animation on route change
+        key={`title-${data.ctaPrimary.link}`} 
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
       >
           <h1 className="text-4xl md:text-6xl font-black tracking-tight drop-shadow-md">
@@ -222,164 +214,167 @@ const DynamicBanniere = ({ data }: { data: ContentData }) => (
   </section>
 );
 
-const DynamicFeatures = ({ data }: { data: ContentData }) => {
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <AnimatePresence mode='wait'>
-            {data.features.map((feature, index) => {
-                const Icon = feature.icon;
+const DynamicFeatures = ({ data }: { data: ContentData }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <AnimatePresence mode='wait'>
+        {data.features.map((feature, index) => {
+            const Icon = feature.icon;
+            return (
+                <motion.div 
+                  key={feature.title + index}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl dark:shadow-gray-900/20 dark:hover:shadow-gray-900/30 hover:-translate-y-2 transition-all duration-300 border border-gray-100 dark:border-gray-700"
+                >
+                    <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full inline-block mb-4 text-orange-600 dark:text-orange-500">
+                        <Icon className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
+                    <p className="text-gray-600 dark:text-gray-300">{feature.desc}</p>
+                </motion.div>
+            )
+        })}
+        </AnimatePresence>
+    </div>
+);
+
+const DynamicSteps = ({ data }: { data: ContentData }) => (
+    <div className="relative">
+        <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-orange-200 dark:bg-orange-800 -translate-y-1/2 -mt-16"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
+            {data.steps.map((step, index) => {
+                const Icon = step.icon;
                 return (
                     <motion.div 
-                      key={feature.title + index}
-                      initial={{ opacity: 0, y: 20 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.4, delay: index * 0.1 }}
-                      className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl dark:shadow-gray-900/20 dark:hover:shadow-gray-900/30 hover:-translate-y-2 transition-all duration-300 border border-gray-100 dark:border-gray-700"
+                       key={step.title} 
+                       initial={{opacity:0, scale:0.9}} 
+                       whileInView={{opacity:1, scale:1}}
+                       transition={{delay: index * 0.15}}
+                       className="text-center"
                     >
-                        <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full inline-block mb-4 text-orange-600 dark:text-orange-500">
-                            <Icon className="w-8 h-8" />
+                        <div className="relative mb-6">
+                           <div className="bg-gradient-to-br from-orange-500 to-amber-500 dark:from-orange-600 dark:to-amber-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-lg dark:shadow-gray-900/20 relative z-10 text-white">
+                              <Icon className="w-10 h-10" />
+                           </div>
                         </div>
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
-                        <p className="text-gray-600 dark:text-gray-300">{feature.desc}</p>
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Étape {index + 1}: {step.title}</h3>
+                        <p className="text-gray-600 dark:text-gray-300">{step.desc}</p>
                     </motion.div>
                 )
             })}
-            </AnimatePresence>
         </div>
-    );
-};
-
-const DynamicSteps = ({ data }: { data: ContentData }) => {
-    return (
-        <div className="relative">
-            <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-orange-200 dark:bg-orange-800 -translate-y-1/2 -mt-16"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
-                {data.steps.map((step, index) => {
-                    const Icon = step.icon;
-                    return (
-                        <motion.div 
-                           key={step.title} 
-                           initial={{opacity:0, scale:0.9}} 
-                           whileInView={{opacity:1, scale:1}}
-                           transition={{delay: index * 0.15}}
-                           className="text-center"
-                        >
-                            <div className="relative mb-6">
-                               <div className="bg-gradient-to-br from-orange-500 to-amber-500 dark:from-orange-600 dark:to-amber-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-lg dark:shadow-gray-900/20 relative z-10 text-white">
-                                  <Icon className="w-10 h-10" />
-                               </div>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Étape {index + 1}: {step.title}</h3>
-                            <p className="text-gray-600 dark:text-gray-300">{step.desc}</p>
-                        </motion.div>
-                    )
-                })}
-            </div>
-        </div>
-    );
-};
-
-
-// --- COMPOSANT PRINCIPAL LANDING PAGE ---
-
-export default function LandingPage() {
-  // Hooks
-  const searchParams = useSearchParams();
-  const roleParam = searchParams.get('role')?.toUpperCase() || 'CLIENT';
-  
-  const [content, setContent] = useState<ContentData>(DEFAULT_DATA);
-
-  // Theme System (copié de l'existant pour la cohérence)
-  useEffect(() => {
-      const applyTheme = () => {
-          if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-              document.documentElement.classList.add('dark');
-          } else {
-              document.documentElement.classList.remove('dark');
-          }
-      };
-      applyTheme();
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', applyTheme);
-      return () => mq.removeEventListener('change', applyTheme);
-  }, []);
-
-  // Data Switch
-  useEffect(() => {
-      // On bascule les données si le rôle existe, sinon fallback CLIENT
-      if (roleParam && CONTENT_MAP[roleParam]) {
-          setContent(CONTENT_MAP[roleParam]);
-      } else {
-          setContent(DEFAULT_DATA);
-      }
-      
-      // Petit scroll top pour UX lors du switch
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [roleParam]);
-
-
-  return (
-    <div className="w-full bg-white dark:bg-gray-900 transition-colors duration-300">
-      <NavbarHome />
-      
-      <div className="min-h-screen flex flex-col font-[family-name:var(--font-geist-sans)]">
-        <main className="flex-grow">
-          
-          {/* Bannière Dynamique */}
-          <DynamicBanniere data={content} />
-          
-          {/* Section Features Dynamique */}
-          <section className="py-16 md:py-24 bg-orange-50/50 dark:bg-gray-800/50 transition-colors duration-300">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center mb-12">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                    {content.featuresTitle}
-                </h2>
-                <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                    Découvrez comment PicknDrop répond spécifiquement à vos besoins
-                </p>
-              </div>
-              <DynamicFeatures data={content} />
-            </div>
-          </section>
-
-          {/* Section Manuel Dynamique */}
-          <section id="how-it-works" className="py-16 md:py-24 bg-white dark:bg-gray-900 transition-colors duration-300">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center mb-16">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                    {content.stepsTitle}
-                </h2>
-                <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                    Processus simplifié pour un démarrage immédiat
-                </p>
-              </div>
-              <DynamicSteps data={content} />
-            </div>
-          </section>
-          
-          {/* Bottom CTA Dynamique */}
-          <section className="py-16 bg-orange-600 dark:bg-orange-700 text-white transition-colors duration-300">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <h2 className="text-3xl md:text-4xl font-bold">{content.bottomCtaTitle}</h2>
-              <p className="mt-4 text-xl max-w-3xl mx-auto opacity-90 dark:opacity-95">
-                {content.bottomCtaDesc}
-              </p>
-              <div className="mt-8">
-                <Link 
-                  href={content.ctaPrimary.link}
-                  className="bg-white dark:bg-gray-100 text-orange-600 dark:text-orange-700 px-10 py-5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-200 transition-all duration-300 font-bold text-lg shadow-2xl dark:shadow-gray-900/40 transform hover:-translate-y-1"
-                >
-                  {content.ctaPrimary.text}
-                </Link>
-              </div>
-            </div>
-          </section>
-
-        </main>
-        <Footer />
-      </div>
     </div>
-  );
+);
+
+// --- COMPOSANT INTERNE LOGIQUE ---
+// Ce composant contient la logique de `useSearchParams` et le contenu
+const LandingContent = () => {
+    const searchParams = useSearchParams();
+    const roleParam = searchParams.get('role')?.toUpperCase() || 'CLIENT';
+    
+    const [content, setContent] = useState<ContentData>(DEFAULT_DATA);
+
+    // Theme System
+    useEffect(() => {
+        const applyTheme = () => {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        };
+        applyTheme();
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        mq.addEventListener('change', applyTheme);
+        return () => mq.removeEventListener('change', applyTheme);
+    }, []);
+
+    // Data Switch
+    useEffect(() => {
+        if (roleParam && CONTENT_MAP[roleParam]) {
+            setContent(CONTENT_MAP[roleParam]);
+        } else {
+            setContent(DEFAULT_DATA);
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [roleParam]);
+
+    return (
+        <div className="min-h-screen flex flex-col font-[family-name:var(--font-geist-sans)]">
+            <main className="flex-grow">
+                <DynamicBanniere data={content} />
+                
+                <section className="py-16 md:py-24 bg-orange-50/50 dark:bg-gray-800/50 transition-colors duration-300">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="text-center mb-12">
+                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
+                                {content.featuresTitle}
+                            </h2>
+                            <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
+                                Découvrez comment PicknDrop répond spécifiquement à vos besoins
+                            </p>
+                        </div>
+                        <DynamicFeatures data={content} />
+                    </div>
+                </section>
+
+                <section id="how-it-works" className="py-16 md:py-24 bg-white dark:bg-gray-900 transition-colors duration-300">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="text-center mb-16">
+                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
+                                {content.stepsTitle}
+                            </h2>
+                            <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
+                                Processus simplifié pour un démarrage immédiat
+                            </p>
+                        </div>
+                        <DynamicSteps data={content} />
+                    </div>
+                </section>
+                
+                <section className="py-16 bg-orange-600 dark:bg-orange-700 text-white transition-colors duration-300">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                        <h2 className="text-3xl md:text-4xl font-bold">{content.bottomCtaTitle}</h2>
+                        <p className="mt-4 text-xl max-w-3xl mx-auto opacity-90 dark:opacity-95">
+                            {content.bottomCtaDesc}
+                        </p>
+                        <div className="mt-8">
+                            <Link 
+                                href={content.ctaPrimary.link}
+                                className="bg-white dark:bg-gray-100 text-orange-600 dark:text-orange-700 px-10 py-5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-200 transition-all duration-300 font-bold text-lg shadow-2xl dark:shadow-gray-900/40 transform hover:-translate-y-1"
+                            >
+                                {content.ctaPrimary.text}
+                            </Link>
+                        </div>
+                    </div>
+                </section>
+            </main>
+            <Footer />
+        </div>
+    );
+};
+
+// Fallback Component lors du chargement Suspense
+const LandingLoading = () => (
+    <div className="min-h-screen flex items-center justify-center bg-orange-50">
+        <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-12 h-12 text-orange-600 animate-spin" />
+            <p className="text-lg font-bold text-orange-800">Chargement de votre expérience...</p>
+        </div>
+    </div>
+);
+
+// --- COMPOSANT PAGE PRINCIPAL ---
+// Il ne fait que Wrapper dans Suspense
+export default function LandingPage() {
+    return (
+        <div className="w-full bg-white dark:bg-gray-900 transition-colors duration-300">
+            <NavbarHome />
+            <Suspense fallback={<LandingLoading />}>
+                <LandingContent />
+            </Suspense>
+        </div>
+    );
 }
