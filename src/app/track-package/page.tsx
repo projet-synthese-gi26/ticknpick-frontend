@@ -201,12 +201,10 @@ export default function TrackPackagePage() {
     try {
       console.log(`🔍 Fetching Tracking for: ${query}`);
       
-      // Appel au Service
-      const response = await packageService.trackPackage(query);
-      console.log("📦 Response JSON:", response);
-
-      // VÉRIFICATION DE VALIDITÉ
-      // On considère valide si response contient 'trackingNumber' à la racine OU dans 'package'
+      // Appel au Service et force du typage en any pour vérification souple
+      const response = (await packageService.trackPackage(query)) as any;
+      
+      // VÉRIFICATION DE VALIDITÉ avec support snake_case
       const isDirectPackage = response && (response.trackingNumber || response.tracking_number);
       const isWrappedPackage = response && response.package && (response.package.trackingNumber || response.package.tracking_number);
 
@@ -214,7 +212,7 @@ export default function TrackPackagePage() {
           throw new Error("Colis introuvable. Vérifiez le numéro de suivi.");
       }
 
-      // Normalisation de la réponse (toujours wrapper en { package, history })
+      // Normalisation de la réponse
       const unifiedData = isWrappedPackage 
           ? response 
           : { package: response, history: [] };
@@ -225,7 +223,6 @@ export default function TrackPackagePage() {
 
     } catch (err: any) {
       console.error("Tracking Error:", err);
-      // Gestion erreur UI
       const msg = err.message || "Erreur technique lors de la recherche.";
       setError(msg.includes('404') ? "Numéro de suivi inconnu." : msg);
     } finally {
