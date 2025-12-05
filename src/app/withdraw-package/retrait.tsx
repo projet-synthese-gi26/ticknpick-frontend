@@ -1,5 +1,3 @@
-// FICHIER : src/app/withdraw-package/retrait.tsx
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -19,12 +17,12 @@ import {
   PrinterIcon
 } from '@heroicons/react/24/outline';
 import { 
-  CheckCircleIcon as SolidCheckCircleIcon, 
-  ExclamationTriangleIcon, 
+  CheckCircle as SolidCheckCircleIcon, // Correction probable: CheckCircleIcon -> CheckCircle dans Lucide standard
+  AlertTriangle as ExclamationTriangleIcon, // CORRECTION ICI : On utilise AlertTriangle aliasé
   ArchiveRestore as ArchiveIcon,
   Loader2,
   Package,
-  AlertTriangleIcon
+  // AlertTriangleIcon // Retiré car doublon potentiel
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -185,8 +183,8 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
             departurePointName: shipment.pickupAddress || shipment.departurePointName || "",
             arrivalPointName: shipment.deliveryAddress || shipment.arrivalPointName || "",
             packageDescription: shipment.description || "",
-            packageWeight: String(shipment.weight || 0),
-            description: shipment.description || "", // Doublon sécurité pour l'affichage
+            weight: String(shipment.weight || 0),
+            description: shipment.description || "", 
             isFragile: shipment.packageType === 'FRAGILE',
             isInsured: (shipment.value && shipment.value > 0),
             status: status as any,
@@ -248,8 +246,6 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
     try {
         console.log(`📤 [Retrait] Envoi validation pour ${packageInfo.trackingNumber}...`);
         
-        // En théorie, on peut envoyer aussi les infos du retirant via le body (si l'API le supporte)
-        // Sinon c'est juste le changement de statut.
         // Endpoint: PUT /api/packages/{id}/deliver
         await packageService.markAsDelivered(packageInfo.id);
         
@@ -347,7 +343,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
           
           {error && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 text-red-700 dark:text-red-400 rounded-r-lg flex items-center gap-3">
-                   <AlertTriangleIcon className="w-6 h-6 flex-shrink-0"/>
+                   <ExclamationTriangleIcon className="w-6 h-6 flex-shrink-0"/>
                    <p className="font-medium">{error}</p>
               </motion.div>
           )}
@@ -395,7 +391,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
                              </p>
                          ) : (
                              <p className="text-xs text-red-600 text-right font-bold mt-1 flex justify-end items-center gap-1">
-                                 <AlertTriangleIcon className="w-3 h-3"/> À encaisser
+                                 <ExclamationTriangleIcon className="w-3 h-3"/> À encaisser
                              </p>
                          )}
                     </div>
