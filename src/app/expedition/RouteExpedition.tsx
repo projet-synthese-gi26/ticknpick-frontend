@@ -115,20 +115,24 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
     fetchPoints();
   }, []);
 
-
-  // --- FILTRAGE DE LA LISTE ---
+  // --- FILTRAGE DE LA LISTE (CORRIGÉ) ---
   useEffect(() => {
     if (!searchQuery) {
       setFilteredPoints(allRelayPoints);
     } else {
       const lowerQuery = searchQuery.toLowerCase();
-      const filtered = allRelayPoints.filter(p => 
-        p.relayPointName.toLowerCase().includes(lowerQuery) ||
-        p.relay_point_address.toLowerCase().includes(lowerQuery)
-      );
+      const filtered = allRelayPoints.filter(p => {
+        // Protection contre undefined : utilisation de l'opérateur OU || ""
+        const nameMatch = p.relayPointName?.toLowerCase().includes(lowerQuery) ?? false;
+        const addressMatch = (p.relay_point_address || p.address || "").toLowerCase().includes(lowerQuery);
+        const localityMatch = (p.relay_point_locality || p.locality || "").toLowerCase().includes(lowerQuery);
+        
+        return nameMatch || addressMatch || localityMatch;
+      });
       setFilteredPoints(filtered);
     }
   }, [searchQuery, allRelayPoints]);
+
 
   // --- GESTION CARTE & MARQUEURS ---
   useEffect(() => {
@@ -225,13 +229,18 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
          // Optionnel : appeler OSRM ici si besoin d'itinéraire réel
      }
   }, [mapRef, routeData.departurePointId, routeData.arrivalPointId]);
-
   // Trace une ligne pointillée simple
+
+  // Trace une ligne pointillée simple (Correction ici)
   const drawStraightLine = (origin: RelayPoint, destination: RelayPoint) => {
+     if (!mapRef) return;
+
      try {
+        // Nettoyage préventif des couches
         if (mapRef.getLayer('route')) mapRef.removeLayer('route');
         if (mapRef.getSource('route')) mapRef.removeSource('route');
 
+        // Ajout de la source
         mapRef.addSource('route', {
             type: 'geojson',
             data: {
@@ -247,6 +256,7 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
             }
         });
 
+        // Ajout de la couche visuelle
         mapRef.addLayer({
             id: 'route',
             type: 'line',
@@ -260,91 +270,19 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
             }
         });
         
+        // Calcul manuel de la bounding box (comme dans fetchRoute)
+        const minLng = Math.min(origin.longitude, destination.longitude);
+        const maxLng = Math.max(origin.longitude, destination.longitude);
+        const minLat = Math.min(origin.latitude, destination.latitude);
+        const maxLat = Math.max(origin.latitude, destination.latitude);
+
         // Ajuster la vue
-        const bounds = new maplibregl.LngLatBounds();
-        bounds.extend([origin.longitude, origin.latitude]);
-        bounds.extend([destination.longitude, destination.latitude]);
-        mapRef.fitBounds(bounds, { padding: 50 });
+        mapRef.fitBounds(
+            [[minLng, minLat], [maxLng, maxLat]],
+            { padding: 50 }
+        );
 
-     } catch (e) { console.error("Erreur tracé route", e); }
-  };
-  const fetchRoute = async (origin: PointRelais, destination: PointRelais) => {
-    try {
-      // Exemple avec OSRM (service de routing open source)
-      const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
-      );
-      
-      const data = await response.json();
-      
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        
-        // Supprimer l'ancienne route
-        try {
-          if (mapRef.getLayer('route')) {
-            mapRef.removeLayer('route');
-          }
-          if (mapRef.getSource('route')) {
-            mapRef.removeSource('route');
-          }
-
-          // Ajouter la nouvelle route
-          mapRef.addSource('route', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: route.geometry
-            }
-          });
-
-          mapRef.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: {
-              'line-join': 'round',
-              'line-cap': 'round'
-            },
-            paint: {
-              'line-color': '#10b981',
-              'line-width': 4,
-              'line-opacity': 0.8
-            }
-          });
-
-          // Ajuster la vue pour inclure toute la route
-          const coordinates = route.geometry.coordinates;
-          // Créer les bounds manuellement au lieu d'utiliser maplibregl.LngLatBounds
-          let minLng = coordinates[0][0];
-          let maxLng = coordinates[0][0];
-          let minLat = coordinates[0][1];
-          let maxLat = coordinates[0][1];
-
-          coordinates.forEach((coord: number[]) => {
-            minLng = Math.min(minLng, coord[0]);
-            maxLng = Math.max(maxLng, coord[0]);
-            minLat = Math.min(minLat, coord[1]);
-            maxLat = Math.max(maxLat, coord[1]);
-          });
-
-          mapRef.fitBounds([
-            [minLng, minLat],
-            [maxLng, maxLat]
-          ], {
-            padding: 50
-          });
-        } catch (error) {
-          console.warn('Erreur lors de l\'affichage de la route:', error);
-          drawStraightLine(origin, destination);
-        }
-      }
-    } catch (error) {
-      console.warn('Erreur lors du calcul de l\'itinéraire:', error);
-      // Fallback: dessiner une ligne droite
-      drawStraightLine(origin, destination);
-    }
+     } catch (e) { console.error("Erreur tracé route ligne droite", e); }
   };
 
   const handleMapReady = (map: any) => {
