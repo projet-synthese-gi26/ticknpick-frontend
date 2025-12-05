@@ -1,247 +1,381 @@
-// src/app/superadmin/UserManagement.tsx
-
+// FICHIER: src/app/superadmin/UserManagement.tsx
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Search, Filter, Loader2, MoreVertical, X, Eye, Edit, UserX, UserCheck, AlertCircle, Inbox, CheckCircle, ShieldQuestion } from 'lucide-react';
 
-// Interfaces pour typer nos données
-interface User {
+import React, { useState, useEffect, useCallback } from 'react';
+import { adminService } from '@/services/adminService';
+import apiClient from '@/services/apiClient'; 
+
+import { 
+    CheckCircle, UserX, Eye, Loader2, ShieldAlert, 
+    UserCheck, Search, RefreshCw, ShieldCheck, Trash2,
+    Briefcase, User, Zap,
+    Users
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// --- TYPES LOCAUX ---
+
+interface BaseUser {
     id: string;
-    manager_name: string;
+    name: string;
     email: string;
-    account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
-    phone_number: string;
-    created_at: string;
-    status: 'ACTIVE' | 'SUSPENDED';
-    validation_status?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Ajouté
-    // Inclure les champs de documents pour la validation
-    id_card_urls?: { front: string; back: string } | null;
-    niu_document_url?: string | null;
-    driving_license_front_url?: string | null;
+    phoneNumber: string;
+    createdAt?: string;
+    isActive: boolean;
+    roleDisplay: string;
+    avatarInitial: string; // Pour l'UI
 }
 
-const ITEMS_PER_PAGE = 10;
+interface ClientUser extends BaseUser {
+    type: 'CLIENT';
+}
 
-// Sous-composant : UserDetailsModal
-const UserDetailsModal = ({ user, onClose }: { user: User; onClose: () => void }) => (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-4">{user.manager_name}</h3>
-            <p><strong>ID:</strong> {user.id}</p>
-            <p><strong>Email:</strong> {user.email}</p>
-            <p><strong>Téléphone:</strong> {user.phone_number}</p>
-            <p><strong>Type:</strong> {user.account_type}</p>
-            <p><strong>Statut:</strong> {user.status}</p>
-            <p><strong>Inscrit le:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
-            {/* Ici on pourrait afficher les autres détails de profil */}
-            <button onClick={onClose} className="mt-4 bg-gray-200 px-4 py-2 rounded">Fermer</button>
-        </motion.div>
-    </motion.div>
-);
+interface BusinessUser extends BaseUser {
+    type: 'BUSINESS';
+    businessName: string;
+    businessActorType: string;
+    isVerified: boolean;
+    cniNumber?: string;
+    niu?: string;
+}
 
 // --- COMPOSANT PRINCIPAL ---
 export default function UserManagement() {
-    const [activeView, setActiveView] = useState<'all' | 'pending'>('all');
-    const [users, setUsers] = useState<User[]>([]);
-    const [pendingUsers, setPendingUsers] = useState<User[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [clients, setClients] = useState<ClientUser[]>([]);
+    const [businessActors, setBusinessActors] = useState<BusinessUser[]>([]);
+    const [loading, setLoading] = useState(true);
+    
+    // Tab actif : 'all' | 'business' | 'clients'
+    const [activeFilter, setActiveFilter] = useState<'all' | 'business' | 'clients'>('business');
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState('ALL');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalUsers, setTotalUsers] = useState(0);
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [actionProcessingId, setActionProcessingId] = useState<string | null>(null);
 
-    // Fonction pour récupérer les utilisateurs en attente de validation
-    const fetchPendingUsers = useCallback(async () => {
-        setIsLoading(true);
-        const { data, error } = await supabase.from('profiles_pro')
-            .select('*')
-            .eq('validation_status', 'PENDING');
-        if (error) setError("Erreur lors de la récupération des validations.");
-        else setPendingUsers(data as User[]);
-        setIsLoading(false);
+    // --- CHARGEMENT ---
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        try {
+            // 1. Business Actors
+            const actorsData = await adminService.getAllBusinessActors();
+            const mappedActors: BusinessUser[] = actorsData.map((a: any) => ({
+                id: a.id,
+                name: a.name || a.manager_name || "Nom inconnu",
+                email: a.email || "N/A",
+                phoneNumber: a.phoneNumber || a.phone_number || "N/A",
+                createdAt: a.createdAt,
+                isActive: a.isEnabled ?? a.is_enabled ?? true,
+                roleDisplay: (a.businessActorType || a.business_actor_type || 'PRO').toUpperCase(),
+                avatarInitial: (a.businessName || a.name || 'P')[0].toUpperCase(),
+                type: 'BUSINESS',
+                
+                businessName: a.businessName || a.business_name || a.name || "Business Inconnu",
+                businessActorType: a.businessActorType || a.business_actor_type,
+                isVerified: a.isVerified ?? a.is_verified ?? false,
+                cniNumber: a.cniNumber || a.cni_number,
+                niu: a.niu
+            }));
+            
+            // 2. Clients
+            let usersData: any[] = [];
+            try {
+                const response = await apiClient<any[]>('/api/users', 'GET');
+                usersData = response.filter((u: any) => (u.account_type || u.accountType) === 'CLIENT');
+            } catch(e) { console.warn("Clients introuvables"); }
+
+            const mappedClients: ClientUser[] = usersData.map((u: any) => ({
+                id: u.id,
+                name: u.name || "Nom Inconnu",
+                email: u.email || "N/A",
+                phoneNumber: u.phoneNumber || u.phone_number || "N/A",
+                createdAt: u.createdAt,
+                isActive: u.isActive ?? u.is_active ?? true,
+                roleDisplay: 'CLIENT',
+                avatarInitial: (u.name || 'C')[0].toUpperCase(),
+                type: 'CLIENT'
+            }));
+
+            setBusinessActors(mappedActors);
+            setClients(mappedClients);
+
+        } catch (err) {
+            console.error("Erreur Chargement", err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
-    // Fonction pour récupérer les utilisateurs paginés via la fonction RPC
-    const fetchUsers = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
+    useEffect(() => { loadData(); }, [loadData]);
 
-        const { data: countData, error: countError } = await supabase
-            .from('profiles')
-            .select('id', { count: 'exact' }); // Simplification pour le total
-        const { data: countProData, error: countProError } = await supabase
-            .from('profiles_pro')
-            .select('id', { count: 'exact' });
+
+    // --- ACTIONS ---
+
+    const handleValidation = async (actor: BusinessUser) => {
+        if (!confirm(`Valider le compte ${actor.businessName} ?`)) return;
+        setActionProcessingId(actor.id);
+        try {
+            await adminService.validateBusinessActor(actor.id, true);
+            setBusinessActors(prev => prev.map(p => p.id === actor.id ? { ...p, isVerified: true, isActive: true } : p));
+        } catch (e) { alert("Erreur validation"); } 
+        finally { setActionProcessingId(null); }
+    };
+
+    const handleToggleStatus = async (user: BaseUser) => {
+        const newStatus = !user.isActive;
+        setActionProcessingId(user.id);
+        try {
+            const endpoint = user.roleDisplay === 'CLIENT' ? `/api/users/${user.id}` : `/api/business-actors/${user.id}`;
+            const currentObj = await apiClient<any>(endpoint, 'GET');
+            await apiClient(endpoint, 'PUT', { ...currentObj, isActive: newStatus, isEnabled: newStatus });
+            
+            if (user.roleDisplay !== 'CLIENT') {
+                setBusinessActors(prev => prev.map(u => u.id === user.id ? { ...u, isActive: newStatus } : u));
+            } else {
+                setClients(prev => prev.map(u => u.id === user.id ? { ...u, isActive: newStatus } : u));
+            }
+        } catch (e) { alert("Erreur statut"); }
+        finally { setActionProcessingId(null); }
+    };
+
+    const handleDelete = async (user: BaseUser) => {
+        if (!confirm("Suppression définitive. Confirmer ?")) return;
+        setActionProcessingId(user.id);
+        try {
+             const endpoint = user.roleDisplay === 'CLIENT' ? `/api/users/${user.id}` : `/api/business-actors/${user.id}`;
+             await apiClient(endpoint, 'DELETE');
+             if (user.roleDisplay !== 'CLIENT') setBusinessActors(prev => prev.filter(u => u.id !== user.id));
+             else setClients(prev => prev.filter(u => u.id !== user.id));
+        } catch (e) { alert("Erreur suppression"); }
+        finally { setActionProcessingId(null); }
+    }
+
+    // --- UI & RENDER ---
+
+    const getFilteredData = () => {
+        let data: (BusinessUser | ClientUser)[] = [];
+        if (activeFilter === 'all') data = [...businessActors, ...clients];
+        else if (activeFilter === 'business') data = businessActors;
+        else data = clients;
+
+        if (!searchTerm) return data;
         
-        if (countError || countProError) {
-             setError("Erreur de comptage des utilisateurs");
-        } else {
-             setTotalUsers((countData?.length || 0) + (countProData?.length || 0));
-        }
-
-        const { data, error } = await supabase.rpc('search_all_users', {
-            search_term: searchTerm,
-            filter_type: filterType,
-            page_limit: ITEMS_PER_PAGE,
-            page_offset: (currentPage - 1) * ITEMS_PER_PAGE
-        });
-
-        if (error) {
-            setError("Impossible de charger les utilisateurs.");
-            console.error(error);
-        } else {
-            setUsers(data as User[]);
-        }
-        setIsLoading(false);
-    }, [searchTerm, filterType, currentPage]);
-
-    useEffect(() => {
-        if (activeView === 'all') {
-            fetchUsers();
-        } else {
-            fetchPendingUsers();
-        }
-    }, [activeView, fetchUsers, fetchPendingUsers]);
-    
-    // Déclencher une nouvelle recherche avec un délai pour ne pas surcharger la DB
-    useEffect(() => {
-        const handler = setTimeout(() => {
-            setCurrentPage(1); // Revenir à la première page lors d'une nouvelle recherche
-            if (activeView === 'all') fetchUsers();
-        }, 500); // 500ms de délai
-        return () => clearTimeout(handler);
-    }, [searchTerm, filterType, fetchUsers, activeView]);
-
-    const handleUpdateUserStatus = async (user: User, newStatus: 'ACTIVE' | 'SUSPENDED') => {
-        const table = ['CLIENT', 'LIVREUR'].includes(user.account_type) ? 'profiles' : 'profiles_pro';
-        const { error } = await supabase.from(table).update({ status: newStatus }).eq('id', user.id);
-        if (error) alert("Erreur lors de la mise à jour du statut.");
-        else fetchUsers(); // Recharger les données
+        const term = searchTerm.toLowerCase();
+        return data.filter(u => 
+            u.name.toLowerCase().includes(term) || 
+            u.email.toLowerCase().includes(term) ||
+            (u as BusinessUser).businessName?.toLowerCase().includes(term)
+        );
     };
 
-    const handleValidation = async (userId: string, decision: 'APPROVED' | 'REJECTED') => {
-        const { error } = await supabase.from('profiles_pro').update({ validation_status: decision }).eq('id', userId);
-        if(error) alert(`Erreur lors de la ${decision === 'APPROVED' ? 'validation' : 'rejet'}.`);
-        else fetchPendingUsers();
-    };
-
-    const totalPages = Math.ceil(totalUsers / ITEMS_PER_PAGE);
+    const displayData = getFilteredData();
+    const pendingCount = businessActors.filter(b => !b.isVerified).length;
 
     return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-gray-800">Gestion des Utilisateurs</h1>
+        <div className="space-y-6 pb-12">
+            
+            {/* HEADER AVEC FILTRES VISUELS */}
+            <div className="flex flex-col lg:flex-row justify-between items-end lg:items-center gap-4">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-3">
+                        <Users className="w-6 h-6 text-orange-500"/>
+                        Comptes Utilisateurs
+                    </h2>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">
+                        {businessActors.length} Pros • {clients.length} Clients • {pendingCount} en attente
+                    </p>
+                </div>
 
-            <div className="flex border-b">
-                <button onClick={() => setActiveView('all')} className={`py-2 px-4 font-semibold ${activeView === 'all' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}>Tous les utilisateurs</button>
-                <button onClick={() => setActiveView('pending')} className={`py-2 px-4 font-semibold relative ${activeView === 'pending' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}>
-                    File de validation
-                    {pendingUsers.length > 0 && <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{pendingUsers.length}</span>}
+                <div className="flex p-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    {[
+                        { id: 'business', label: 'Partenaires Pro', icon: Briefcase, count: businessActors.length },
+                        { id: 'clients', label: 'Clients', icon: User, count: clients.length },
+                        { id: 'all', label: 'Tout afficher', icon: Zap, count: null }
+                    ].map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = activeFilter === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveFilter(tab.id as any)}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all duration-300
+                                ${isActive 
+                                    ? 'bg-slate-900 dark:bg-orange-600 text-white shadow-lg shadow-slate-900/20' 
+                                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900'
+                                }`}
+                            >
+                                <Icon className={`w-4 h-4 ${isActive ? 'text-orange-400 dark:text-white' : ''}`} />
+                                {tab.label}
+                                {tab.count !== null && (
+                                    <span className={`text-[10px] py-0.5 px-1.5 rounded-md ml-1 ${isActive ? 'bg-slate-700 dark:bg-orange-700' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                                        {tab.count}
+                                    </span>
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* BARRE DE RECHERCHE */}
+            <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                    type="text"
+                    placeholder="Rechercher un nom, une société ou un email..."
+                    className="block w-full pl-11 pr-4 py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all shadow-sm text-sm font-medium"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <button 
+                    onClick={loadData} 
+                    className="absolute right-3 top-3 p-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition text-slate-500 dark:text-slate-300"
+                    title="Actualiser"
+                >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}/>
                 </button>
             </div>
 
-            <AnimatePresence mode="wait">
-                {activeView === 'all' ? (
-                    <motion.div key="all-users" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <div className="flex flex-col md:flex-row gap-4 mb-4">
-                            <input type="text" placeholder="Rechercher (nom, email...)" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-grow p-2 border rounded"/>
-                            <select value={filterType} onChange={e => setFilterType(e.target.value)} className="p-2 border rounded">
-                                <option value="ALL">Tous les types</option>
-                                <option value="CLIENT">Client</option>
-                                <option value="LIVREUR">Livreur</option>
-                                <option value="FREELANCE">Freelance</option>
-                                <option value="AGENCY">Agence</option>
-                            </select>
+            {/* LISTE (GRID POUR RESPONSIVE, TABLEAU POUR LARGE) */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                {displayData.length === 0 && !loading ? (
+                    <div className="p-16 text-center flex flex-col items-center">
+                        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
+                             <Search className="w-8 h-8 text-slate-300"/>
                         </div>
-                        {isLoading && <Loader2 className="animate-spin mx-auto" />}
-                        {error && <p className="text-red-500">{error}</p>}
-                        
-                        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                           {/* Tableau des utilisateurs */}
-                           {/* (code du tableau ci-dessous) */}
-                           <table className="w-full text-sm text-left text-gray-500">
-                              <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                  <tr>
-                                      <th className="px-6 py-3">Nom</th>
-                                      <th className="px-6 py-3">Type</th>
-                                      <th className="px-6 py-3">Inscription</th>
-                                      <th className="px-6 py-3">Statut</th>
-                                      <th className="px-6 py-3">Actions</th>
-                                  </tr>
-                              </thead>
-                              <tbody>
-                                  {users.map(user => (
-                                      <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
-                                          <td className="px-6 py-4 font-medium text-gray-900">
-                                              {user.manager_name}<br/>
-                                              <span className="text-gray-400 font-normal">{user.email}</span>
-                                          </td>
-                                          <td className="px-6 py-4">{user.account_type}</td>
-                                          <td className="px-6 py-4">{new Date(user.created_at).toLocaleDateString()}</td>
-                                          <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs ${user.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{user.status}</span>
-                                          </td>
-                                          <td className="px-6 py-4 flex gap-2">
-                                              <button onClick={() => setSelectedUser(user)} className="text-blue-500"><Eye size={16} /></button>
-                                              <button className="text-green-500"><Edit size={16} /></button>
-                                              {user.status === 'ACTIVE' 
-                                                ? <button onClick={() => handleUpdateUserStatus(user, 'SUSPENDED')} className="text-red-500"><UserX size={16} /></button> 
-                                                : <button onClick={() => handleUpdateUserStatus(user, 'ACTIVE')} className="text-yellow-500"><UserCheck size={16} /></button>}
-                                          </td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                        </div>
-                        {/* Pagination */}
-                        <div className="flex justify-between items-center mt-4">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1}>Précédent</button>
-                            <span>Page {currentPage} sur {totalPages}</span>
-                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages}>Suivant</button>
-                        </div>
-                    </motion.div>
+                        <p className="text-slate-500 dark:text-slate-400 font-medium">Aucun résultat ne correspond à votre recherche.</p>
+                    </div>
                 ) : (
-                    <motion.div key="pending-users" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        {/* Section pour la file de validation */}
-                         {isLoading && <Loader2 className="animate-spin mx-auto" />}
-                         {error && <p className="text-red-500">{error}</p>}
-                         {!isLoading && pendingUsers.length === 0 ? (
-                           <div className="text-center p-8 bg-white rounded-lg shadow">
-                             <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
-                             <h3 className="mt-2 text-sm font-medium text-gray-900">Tout est à jour !</h3>
-                             <p className="mt-1 text-sm text-gray-500">Aucun nouveau compte PRO n'est en attente de validation.</p>
-                           </div>
-                         ) : (
-                           <div className="space-y-4">
-                              {pendingUsers.map(user => (
-                                 <div key={user.id} className="bg-white shadow-md rounded-lg p-4 flex justify-between items-center">
-                                      <div>
-                                          <p className="font-bold">{user.manager_name} ({user.account_type})</p>
-                                          <p className="text-sm text-gray-500">{user.email}</p>
-                                          <div className="flex gap-4 mt-2">
-                                            {user.id_card_urls && <a href="#" className="text-blue-500 text-sm">Voir CNI</a>}
-                                            {user.niu_document_url && <a href={user.niu_document_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm">Voir NIU</a>}
-                                            {user.driving_license_front_url && <a href={user.driving_license_front_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm">Voir Permis</a>}
-                                          </div>
-                                      </div>
-                                      <div className="flex gap-2">
-                                          <button onClick={() => handleValidation(user.id, 'APPROVED')} className="bg-green-500 text-white px-3 py-1 rounded">Approuver</button>
-                                          <button onClick={() => handleValidation(user.id, 'REJECTED')} className="bg-red-500 text-white px-3 py-1 rounded">Rejeter</button>
-                                      </div>
-                                 </div>
-                              ))}
-                           </div>
-                         )}
-                    </motion.div>
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
+                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Utilisateur / Société</th>
+                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Contact</th>
+                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Type de Compte</th>
+                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">État</th>
+                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={5} className="p-12 text-center">
+                                        <div className="flex flex-col items-center gap-2 text-orange-500">
+                                            <Loader2 className="w-8 h-8 animate-spin"/>
+                                            <span className="text-sm font-medium">Chargement...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : (
+                                displayData.map((user) => {
+                                    const isBiz = user.type === 'BUSINESS';
+                                    const biz = isBiz ? (user as BusinessUser) : null;
+                                    const isProcessing = actionProcessingId === user.id;
+                                    
+                                    return (
+                                        <tr key={user.id} className={`group transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/30 ${isProcessing ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+                                            <td className="p-5">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm
+                                                        ${isBiz ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-400 to-slate-600'}
+                                                    `}>
+                                                        {user.avatarInitial}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-900 dark:text-white text-sm">
+                                                            {isBiz ? biz?.businessName : user.name}
+                                                        </p>
+                                                        {isBiz && (
+                                                            <p className="text-[11px] text-slate-500 font-medium">Gérant: {user.name}</p>
+                                                        )}
+                                                        <p className="text-[10px] text-slate-400 dark:text-slate-600 font-mono mt-0.5">
+                                                            {user.id.substring(0, 8)}...
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="p-5">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.email}</span>
+                                                    <span className="text-xs text-slate-500">{user.phoneNumber}</span>
+                                                </div>
+                                            </td>
+                                            <td className="p-5 text-center">
+                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide
+                                                    ${user.roleDisplay === 'CLIENT' 
+                                                        ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                                        : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800'}
+                                                 `}>
+                                                    {user.roleDisplay}
+                                                 </span>
+                                            </td>
+                                            <td className="p-5 text-center">
+                                                <div className="flex justify-center">
+                                                    {user.isActive ? (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            {isBiz && !biz?.isVerified ? (
+                                                                 <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-md text-[10px] font-bold">
+                                                                     <Loader2 className="w-3 h-3 animate-spin"/> Vérification...
+                                                                 </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-md text-[10px] font-bold">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                                                    Actif
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded-md text-[10px] font-bold">
+                                                            Suspendu
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="p-5 text-right">
+                                                <div className="flex items-center justify-end gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-200">
+                                                    
+                                                    {/* Bouton Valider (si Pro en attente) */}
+                                                    {isBiz && !biz?.isVerified && (
+                                                        <button onClick={() => handleValidation(biz!)}
+                                                            className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md shadow-emerald-200 hover:scale-105 transition-transform" title="Valider">
+                                                            <ShieldCheck className="w-4 h-4"/>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Voir Détails (Fake action pour l'instant) */}
+                                                    <button className="p-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-slate-300 text-slate-500 dark:text-slate-300 rounded-lg transition hover:bg-slate-50" title="Détails">
+                                                        <Eye className="w-4 h-4"/>
+                                                    </button>
+
+                                                    {/* Activer / Suspendre */}
+                                                    <button 
+                                                        onClick={() => handleToggleStatus(user)}
+                                                        className={`p-2 rounded-lg border transition hover:shadow-sm
+                                                        ${user.isActive 
+                                                            ? 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:text-red-600 hover:border-red-200' 
+                                                            : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100'}`}
+                                                        title={user.isActive ? 'Suspendre' : 'Réactiver'}
+                                                    >
+                                                        {user.isActive ? <UserX className="w-4 h-4"/> : <UserCheck className="w-4 h-4"/>}
+                                                    </button>
+                                                    
+                                                    {/* Supprimer */}
+                                                    <button 
+                                                        onClick={() => handleDelete(user)}
+                                                        className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition"
+                                                        title="Supprimer définitivement"
+                                                    >
+                                                        <Trash2 className="w-4 h-4"/>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )
+                                })
+                            )}
+                        </tbody>
+                    </table>
                 )}
-            </AnimatePresence>
-            
-            <AnimatePresence>
-              {selectedUser && <UserDetailsModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
-            </AnimatePresence>
+            </div>
         </div>
     );
 }

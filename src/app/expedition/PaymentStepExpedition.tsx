@@ -22,6 +22,11 @@ import { supabase } from '@/lib/supabase';
 import { PhoneIcon, PlusIcon, StarIcon, UserPlusIcon } from 'lucide-react';
 import { ProcessingAnimation } from './demo';
 import { useRouter } from 'next/navigation';
+// --- IMPORTATIONS CRUCIALES POUR LE BACKEND ---
+import { packageService, PackageCreationPayload } from '@/services/packageService';
+import { Loader2, CheckCircle, UserPlus, Star } from 'lucide-react';
+import { useNotification } from '@/context/NotificationContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface FinalData {
   senderName: string;
@@ -30,23 +35,35 @@ interface FinalData {
   recipientName: string;
   recipientPhone: string;
   recipientEmail: string;
-  photo: string | null; // NOUVEAU: La photo du colis est maintenant disponible
+  // --- AJOUT : On supporte aussi recipientAddress ---
+  recipientAddress?: string;
+  
+  photo: string | null; // Pour l'instant géré localement ou via un autre endpoint
   designation: string;
+  description?: string; // Mapping designation vers description si besoin
   weight: string;
+  length?: string;
+  width?: string;
+  height?: string;
+
   isFragile: boolean;
   isPerishable: boolean;
   isInsured: boolean;
   declaredValue: string;
+  
   logistics: 'standard' | 'express_24h' | 'express_48h';
+  
   departurePointId: number | null;
   arrivalPointId: number | null;
   departurePointName: string;
   arrivalPointName: string;
   distanceKm: number;
   signatureUrl: string | null;
+  
   basePrice: number;
   travelPrice: number;
 }
+
 
 interface LoggedInUser {
   id: string;
@@ -55,9 +72,10 @@ interface LoggedInUser {
 interface PaymentStepProps {
   allData: FinalData;
   onBack: () => void;
-  onPaymentFinalized: (pricing: {basePrice: number, travelPrice: number, operatorFee: number, totalPrice: number}) => void;
+  onPaymentFinalized: (pricing: {basePrice: number, travelPrice: number, operatorFee: number, totalPrice: number, trackingNumber?: string}) => void;
   currentUser: LoggedInUser | null;
 }
+
 
 // --- CORRECTION : Définition de l'interface pour le sous-composant ---
 interface PaymentOptionProps {
@@ -68,31 +86,31 @@ interface PaymentOptionProps {
   fee: number;
   selected: 'cash' | 'mobile' | 'recipient';
   setSelected: (id: 'cash' | 'mobile' | 'recipient') => void;
-  badge?: string; // La prop badge est optionnelle
+  badge?: string;
 }
-
-
 
 const PAYMENT_OPERATOR_FEE = 100;
 const APP_NAME = "PicknDrop Link";
-const DEFAULT_COUNTER_USER = {
-  id: '9b0ab148-dbbc-4a54-b952-62f4c736179e',
-  email: 'comptoir_pickndrop@gmail.com',
-  name: 'Comptoir PicknDrop'
-};
 
 export default function PaymentStep({ allData, onBack, onPaymentFinalized, currentUser }: PaymentStepProps) {
   const [selectedMethod, setSelectedMethod] = useState<'cash' | 'mobile' | 'recipient'>('cash');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [trackingNumber, setTrackingNumber] = useState('');
+  const [trackingNumber, setTrackingNumber] = useState(''); // Stockera le vrai tracking number du backend
   const [mobileOperator, setMobileOperator] = useState<'orange' | 'mtn'>('orange');
   const [mobilePhone, setMobilePhone] = useState('');
+  
   const router = useRouter(); 
-
+  const { addNotification } = useNotification();
+  
   const operatorFee = selectedMethod === 'mobile' ? PAYMENT_OPERATOR_FEE : 0;
   const totalPrice = allData.basePrice + allData.travelPrice + operatorFee;
+
+  const { user: authUser } = useAuth(); 
+
+  // Pour être sûr, on considère connecté si 'currentUser' (prop) OU 'authUser' (context) est présent.
+  const isUserLoggedIn = !!(currentUser || authUser);
 
 
 
@@ -111,17 +129,12 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
   };
 
   const handleCreateAccount = () => {
-    // 1. Préparer les données de l'expéditeur pour le pré-remplissage
     const prefillData = {
       name: allData.senderName,
       email: allData.senderEmail,
       phone: allData.senderPhone,
     };
-
-    // 2. Stocker les données dans localStorage pour que la page d'inscription puisse les lire
     localStorage.setItem('registration_prefill', JSON.stringify(prefillData));
-
-    // 3. Rediriger vers la page d'inscription
     router.push('/register');
   };
 
@@ -261,135 +274,83 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
     }
   };
 
-  const simulateMobilePayment = async () => {
-    setProcessingStep(`Demande de paiement ${mobileOperator.toUpperCase()} Money...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // --- SOUMISSION DES DONNÉES AU BACKEND ---
+  const handleSubmit = async () => {
+    console.log("🚀 Début de la soumission du colis...");
+    setIsProcessing(true);
     
-    setProcessingStep('Confirmation du paiement...');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Simuler une validation réussie
-    return true;
+    try {
+        // 1. Construction des dimensions JSON stringifié
+        const dimsObject = {
+            length: parseFloat(allData.length || '0'),
+            width: parseFloat(allData.width || '0'),
+            height: parseFloat(allData.height || '0')
+        };
+
+        // 2. Type de paquet
+        let pType = 'STANDARD';
+        if (allData.isFragile) pType = 'FRAGILE';
+        else if (allData.isPerishable) pType = 'PERISHABLE';
+
+        // 3. Nettoyage du téléphone (on enlève les espaces et on assure le +237)
+        let cleanRecipientPhone = allData.recipientPhone.replace(/\s+/g, '');
+        if (!cleanRecipientPhone.startsWith('+')) cleanRecipientPhone = '+237' + cleanRecipientPhone;
+
+        // 4. CONSTRUCTION DU PAYLOAD COMPLET
+        const payload: PackageCreationPayload = {
+            // Infos Destinataire
+            recipientName: allData.recipientName,
+            recipientPhone: cleanRecipientPhone,
+            recipientAddress: allData.recipientAddress || "Adresse non précisée",
+            
+            // Infos Lieux (Noms affichés dans l'historique ou sur le bordereau)
+            // Important : Ce sont des strings, le backend stocke l'historique ou les détails d'adresse
+            pickupAddress: allData.departurePointName, 
+            deliveryAddress: allData.arrivalPointName, 
+            
+            // IDs techniques pour la relation SQL
+            departureRelayPointId: String(allData.departurePointId),
+            arrivalRelayPointId: String(allData.arrivalPointId),
+            
+            // Caractéristiques physiques
+            packageType: pType,
+            weight: parseFloat(allData.weight),
+            dimensions: JSON.stringify(dimsObject), // Format String JSON "{\"length\":...}"
+            description: allData.designation + (allData.description ? ` - ${allData.description}` : ''),
+            value: allData.isInsured ? (parseFloat(allData.declaredValue) || 0) : 0,
+            
+            // Logistique
+            deliveryOption: 'RELAY_POINT_DELIVERY',
+            specialInstructions: `Paiement: ${selectedMethod === 'recipient' ? 'Destinataire' : 'Expéditeur'}. Logistique: ${allData.logistics}`,
+            deliveryFee: Number(totalPrice)
+        };
+
+        console.log("📦 PAYLOAD ENVOYÉ AU BACKEND :", JSON.stringify(payload, null, 2));
+
+        // 5. APPEL SERVICE
+        const response = await packageService.createPackage(payload);
+        
+        console.log("✅ RÉPONSE BACKEND REÇUE :", response);
+        
+        const newTracking = response.trackingNumber || (response as any).tracking_number;
+        
+        if (!newTracking) throw new Error("Numéro de suivi manquant dans la réponse backend.");
+
+        setTrackingNumber(newTracking);
+        setPaymentSuccess(true);
+        addNotification(`Colis créé ! Suivi : ${newTracking}`, 'success');
+
+    } catch (err: any) {
+        console.error("❌ ERREUR D'ENVOI :", err);
+        // Affiche le message détaillé de l'erreur s'il existe (ex: validation backend)
+        const errorMsg = err.message || JSON.stringify(err);
+        addNotification("Erreur lors de la création: " + errorMsg, 'error');
+    } finally {
+        setIsProcessing(false);
+    }
   };
-const handleSubmit = async () => {
-  if (!canConfirmPayment()) {
-    alert('Veuillez vérifier vos informations de paiement');
-    return;
-  }
 
-  setIsProcessing(true);
-  const newTrackingNumber = `PDL${Date.now().toString().slice(-7)}`;
-  setTrackingNumber(newTrackingNumber);
-  setProcessingStep('Vérification des données...');
-
-  try {
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Simuler le paiement mobile si nécessaire
-    if (selectedMethod === 'mobile') {
-      const paymentSuccess = await simulateMobilePayment();
-      if (!paymentSuccess) {
-        throw new Error('Échec du paiement mobile');
-      }
-    }
-
-    setProcessingStep('Enregistrement du colis...');
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Déterminer l'utilisateur à utiliser pour créer l'expédition
-    // Si currentUser existe, on l'utilise, sinon on utilise le compte comptoir par défaut
-    const userIdForDb = currentUser ? currentUser.id : DEFAULT_COUNTER_USER.id;
-
-    console.log('Utilisateur utilisé pour l\'enregistrement:', userIdForDb);
-
-    // Préparer les données pour la table 'shipments'
-    const shipmentData = {
-      tracking_number: newTrackingNumber,
-      status: 'EN_ATTENTE_DE_DEPOT', // Statut initial pour un envoi client
-      sender_name: allData.senderName,
-      sender_phone: allData.senderPhone,
-      recipient_name: allData.recipientName,
-      recipient_phone: allData.recipientPhone,
-      departure_point_id: allData.departurePointId,
-      arrival_point_id: allData.arrivalPointId,
-      description: allData.designation,
-      weight: parseFloat(allData.weight),
-      is_fragile: allData.isFragile,
-      is_perishable: allData.isPerishable,
-      is_insured: allData.isInsured,
-      declared_value: allData.isInsured ? parseFloat(allData.declaredValue) : null,
-      shipping_cost: totalPrice,
-      is_paid_at_departure: selectedMethod !== 'recipient',
-      amount_paid: selectedMethod !== 'recipient' ? totalPrice : 0,
-      created_by_user: userIdForDb, // Utilise soit l'utilisateur connecté soit le comptoir
-    };
-
-    console.log("Données à insérer pour le colis :", shipmentData);
-
-    // Insérer les données dans Supabase
-    const { data, error } = await supabase
-      .from('shipments')
-      .insert(shipmentData)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Erreur détaillée Supabase:", error);
-      
-      // Messages d'erreur plus spécifiques selon le type d'erreur
-      let errorMessage = 'Erreur lors de l\'enregistrement du colis';
-      
-      if (error.code === 'PGRST301') {
-        errorMessage = 'Erreur de permissions. Contactez l\'administrateur.';
-      } else if (error.code === '23505') {
-        errorMessage = 'Ce numéro de suivi existe déjà. Veuillez réessayer.';
-      } else if (error.code === '23503') {
-        errorMessage = 'Erreur de référence des points de relais. Vérifiez les points sélectionnés.';
-      } else {
-        errorMessage = `Erreur de base de données : ${error.message}`;
-      }
-      
-      throw new Error(errorMessage);
-    }
-    
-    console.log('Colis enregistré avec succès:', data);
-    
-    setProcessingStep('Génération du bordereau...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const finalPricing = { 
-      basePrice: allData.basePrice, 
-      travelPrice: allData.travelPrice, 
-      operatorFee, 
-      totalPrice 
-    };
-
-    setPaymentSuccess(true);
-    onPaymentFinalized(finalPricing);
-    
-  } catch (error: any) {
-    console.error("Erreur complète lors de la finalisation :", error);
-    
-    let userMessage = error.message;
-    
-    // Gestion spécifique des erreurs courantes
-    if (error.message.includes('row-level security')) {
-      userMessage = "Erreur de permissions. L'utilisateur comptoir n'est pas autorisé à créer des expéditions.";
-    } else if (error.message.includes('Network request failed')) {
-      userMessage = "Problème de connexion réseau. Vérifiez votre connexion internet.";
-    } else if (error.message.includes('JWT')) {
-      userMessage = "Erreur d'authentification. Veuillez rafraîchir la page et réessayer.";
-    }
-    
-    alert(`Échec de l'enregistrement du colis : ${userMessage}`);
-    
-    // Réinitialiser en cas d'erreur
-    setIsProcessing(false);
-    setProcessingStep('');
-    setPaymentSuccess(false);
-    setTrackingNumber('');
-  }
-};
 
 
   // Animation des variantes
@@ -423,7 +384,7 @@ const handleSubmit = async () => {
         className="min-h-screen flex items-center justify-center bg-orange-50 dark:bg-gray-900 p-4"
       >
         <div className="max-w-md w-full text-center space-y-6">
-          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl border border-orange-100 dark:border-orange-800">
             <motion.div
               animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
@@ -434,55 +395,53 @@ const handleSubmit = async () => {
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Expédition confirmée !</h2>
             <p className="text-gray-600 dark:text-gray-300 mb-6">Votre colis a été enregistré.</p>
             
-            <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Numéro de suivi</p>
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{trackingNumber}</p>
+            <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6 border border-orange-200 dark:border-orange-700">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide font-semibold">Numéro de suivi</p>
+              <p className="text-3xl font-black text-orange-600 dark:text-orange-500 font-mono tracking-wider">${newTracking}</p>
             </div>
 
-            {/* --- NOUVEAU BOUTON : Télécharger le bordereau --- */}
             <motion.button
               onClick={generateBordereauPDF}
-              className="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors shadow-lg"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-orange-500/25"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
               <PrinterIcon className="w-5 h-5 mr-2" />
               Télécharger le Bordereau
             </motion.button>
           </div>
 
-          {/* --- NOUVEAU BLOC : Incitation à l'inscription --- */}
-          {/* S'affiche uniquement si l'utilisateur n'est pas déjà connecté */}
-          {!currentUser && (
+          {!isUserLoggedIn && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-xl border-2 border-dashed border-orange-300 dark:border-orange-600"
+              className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-lg border-2 border-dashed border-blue-300 dark:border-blue-700"
             >
               <div className="flex items-center justify-center gap-2 mb-3">
-                  <StarIcon className="w-6 h-6 text-orange-400" />
-                  <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Devenez Client !</h3>
+                  <StarIcon className="w-6 h-6 text-yellow-400" />
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Gagnez du temps !</h3>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                  Créez votre compte pour suivre vos colis, voir votre historique et bénéficier d'offres exclusives. Vos informations sont déjà prêtes !
+                  Créez un compte pour sauvegarder vos adresses et suivre vos colis sans saisir le numéro.
               </p>
               <motion.button
                 onClick={handleCreateAccount}
-                className="w-full flex items-center justify-center bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-all"
-                whileHover={{ scale: 1.05, y: -2 }}
+                className="w-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-3 px-6 rounded-xl shadow-md hover:shadow-lg transition-all"
+                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.98 }}
               >
                 <UserPlusIcon className="w-5 h-5 mr-2" />
-                Créer mon compte en 1 clic
+                Créer mon compte
               </motion.button>
             </motion.div>
           )}
 
           <button 
-            onClick={() => window.location.reload()}
-            className="text-gray-500 hover:text-orange-600 text-sm font-medium mt-4"
+            onClick={() => window.location.href = '/expedition'} // Recharge complet pour vider le state
+            className="text-gray-500 hover:text-orange-600 text-sm font-medium mt-4 flex items-center justify-center gap-2 mx-auto transition-colors"
           >
+            <ArrowPathIcon className="w-4 h-4" />
             Effectuer une autre expédition
           </button>
         </div>

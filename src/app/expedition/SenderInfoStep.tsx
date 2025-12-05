@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Phone, Mail, MapPin, Home, ArrowRight, Send, Sparkles, Circle, UserPlus, X, Globe, Building, Navigation } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 interface SenderData {
   senderName: string;
@@ -197,6 +198,10 @@ export default function SenderInfoStep({ initialData, onContinue, currentUser }:
   const [showNotification, setShowNotification] = useState(false);
   const [notificationTimer, setNotificationTimer] = useState<NodeJS.Timeout | null>(null);
   const router = useRouter();
+  const { user: authUser } = useAuth(); 
+
+  // Pour être sûr, on considère connecté si 'currentUser' (prop) OU 'authUser' (context) est présent.
+  const isUserLoggedIn = !!(currentUser || authUser);
 
   // --- CORRECTION START ---
   // Effet pour réinitialiser la région et la ville si le pays change et que la région n'est plus valide.
@@ -311,8 +316,9 @@ const handleSubmit = async (e: React.FormEvent) => {
   // --- FIN DE LA CORRECTION ---
   return (
     <>
-      <BreakingNewsNotification isVisible={showNotification} onClose={handleCloseNotification} onRegister={handleRegister} onContinueWithout={handleContinueWithout} />
-      
+      {!isUserLoggedIn && (
+        <BreakingNewsNotification isVisible={showNotification} onClose={handleCloseNotification} onRegister={handleRegister} onContinueWithout={handleContinueWithout} />
+      )}
       <div className="min-h-screen bg-transparent relative overflow-hidden transition-colors duration-300">
         <FloatingIcon delay={0}><Send className="w-16 h-16 absolute top-20 right-20" /></FloatingIcon>
         <FloatingIcon delay={0.5}><Sparkles className="w-12 h-12 absolute top-40 left-10" /></FloatingIcon>

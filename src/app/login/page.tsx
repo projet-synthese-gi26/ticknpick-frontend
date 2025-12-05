@@ -3,157 +3,100 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Package, Shield, Star, Users } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/services/authService'; // Importez le service
+import { useAuth } from '@/context/AuthContext';       // Importez le hook du contexte d'auth
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth(); // Récupérez la fonction login du contexte
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
-  setError(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
 
-  try {
-    console.log('🔍 Tentative de connexion...');
-    console.log('📧 Email saisi:', email.trim().toLowerCase());
-    
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password: password,
-    });
-
-    console.log('📋 Réponse signIn:', { data, error: signInError });
-
-    if (signInError) {
-      console.error('❌ Erreur signIn:', signInError);
+    try {
+      console.log('Tentative de connexion pour:', email);
+      // On type la réponse en 'any' ici pour accéder aux champs dynamiques sans erreur TS bloquante
+      // si votre interface AuthResponse n'est pas encore mise à jour
+      const authResponse: any = await authService.login({ email: email.trim().toLowerCase(), password });
       
-      // Messages d'erreur plus spécifiques
-      if (signInError.message.includes('Invalid login credentials')) {
-        throw new Error("Email ou mot de passe incorrect. Vérifiez vos informations.");
-      }
-      if (signInError.message.includes('Email not confirmed')) {
-        throw new Error("Veuillez confirmer votre email avant de vous connecter. Vérifiez votre boîte mail.");
-      }
-      if (signInError.message.includes('Too many requests')) {
-        throw new Error("Trop de tentatives de connexion. Veuillez patienter quelques minutes.");
-      }
-      
-      throw new Error(signInError.message);
-    }
+      console.log('Réponse complète du backend:', authResponse);
 
-    if (!data.user) {
-      throw new Error("Aucune données utilisateur reçues.");
-    }
-
-    console.log('🎉 Connexion réussie! User ID:', data.user.id);
-    console.log('📧 Email confirmé:', data.user.email_confirmed_at ? 'Oui' : 'Non');
-
-    // Vérifier si l'email est confirmé
-    if (!data.user.email_confirmed_at) {
-      setError("Votre email n'est pas encore confirmé. Vérifiez votre boîte mail et cliquez sur le lien de confirmation.");
-      await supabase.auth.signOut();
-      setIsLoading(false);
-      return;
-    }
-
-    // Récupérer le profil dans la table 'profiles' (pas 'profiles_pro')
-    console.log('👤 Récupération du profil...');
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('manager_name, account_type, email')
-      .eq('id', data.user.id)
-      .single();
-
-    console.log('📋 Profil récupéré:', { profile, error: profileError });
-
-    if (profileError) {
-      console.error('❌ Erreur profil:', profileError);
-      
-      if (profileError.code === 'PGRST116') {
-        // Si pas trouvé dans 'profiles', essayer dans 'profiles_pro' comme fallback
-        console.log('🔄 Tentative de récupération depuis profiles_pro...');
-        const { data: profilePro, error: profileProError } = await supabase
-          .from('profiles_pro')
-          .select('manager_name, account_type, email')
-          .eq('id', data.user.id)
-          .single();
+      if (authResponse && authResponse.token) {
         
-        if (profileProError || !profilePro) {
-          throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous inscrire d'abord ou contactez le support.");
+        // --- CORRECTION ICI ---
+        // Récupération des données spécifiques Business
+        const businessType = authResponse.businessActorType || null; 
+        const userName = authResponse.name || authResponse.businessName || 'Utilisateur';
+
+        // On passe l'objet complet au contexte
+        // Le contexte stockera : { id, email, accountType, businessActorType, name }
+        login(authResponse.token, {
+          id: authResponse.userId,
+          email: authResponse.email,
+          accountType: authResponse.accountType,
+          // @ts-ignore : On ignore l'erreur si l'interface User du contexte n'a pas encore ce champ
+          businessActorType: businessType, 
+          name: userName
+        });
+        
+        console.log(`Connexion réussie ! Rôle: ${authResponse.accountType} (${businessType || 'N/A'})`);
+
+        // --- LOGIQUE DE REDIRECTION ---
+        const userRole = authResponse.accountType.toLowerCase();
+
+        if (userRole === 'admin' || userRole === 'superadmin') {
+          console.log('Redirection vers /superadmin...');
+          router.push('/superadmin');
+        } else {
+          // Le dashboard '/home' lira businessActorType pour afficher la bonne UI (Agency vs Point)
+          console.log('Redirection vers /home...');
+          router.push('/home');
         }
-        
-        // Utiliser le profil trouvé dans profiles_pro
-        const userProfileForStorage = {
-          name: profilePro.manager_name,
-          email: data.user.email,
-          account_type: profilePro.account_type
-        };
-        
-        localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
-        console.log('💾 Profil PRO stocké dans localStorage');
-        router.push('/home');
-        return;
+
+      } else {
+        throw new Error("La réponse du serveur est invalide.");
       }
-      
-      throw new Error(`Erreur lors du chargement du profil: ${profileError.message}`);
+
+    } catch (err: any) {
+      console.error('Erreur de connexion:', err);
+      setError(err.message || 'Email ou mot de passe incorrect.');
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    if (!profile) {
-      throw new Error("Profil introuvable. Contactez le support.");
-    }
-
-    console.log('✅ Profil chargé:', profile.manager_name);
-
-    // Stockage des informations utilisateur
-    const userProfileForStorage = {
-      name: profile.manager_name,
-      email: data.user.email,
-      account_type: profile.account_type
-    };
-    
-    localStorage.setItem('pickndrop_currentUser', JSON.stringify(userProfileForStorage));
-    console.log('💾 Profil stocké dans localStorage');
-
-    // Redirection vers le dashboard
-    router.push('/home');
-
-  } catch (err: any) {
-    console.error('💥 Erreur complète de connexion:', err);
-    setError(err.message || 'Une erreur inattendue est survenue.');
-  } finally {
-    setIsLoading(false);
-  }
-};
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-amber-50 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-12 items-center">
-        {/* Section gauche - Illustration (thème orange) */}
+        {/* Section gauche - Illustration */}
         <div className="hidden lg:flex flex-col justify-center space-y-12 p-12 relative">
-          <div className="absolute top-8 left-8 w-20 h-20 bg-orange-200/30 rounded-full animate-pulse"></div>
-          <div className="absolute bottom-12 right-8 w-16 h-16 bg-amber-200/30 rounded-full animate-bounce" style={{animationDelay: '1s'}}></div>
+          <div className="absolute top-8 left-8 w-20 h-20 bg-orange-200/30 dark:bg-orange-500/20 rounded-full animate-pulse"></div>
+          <div className="absolute bottom-12 right-8 w-16 h-16 bg-amber-200/30 dark:bg-amber-500/20 rounded-full animate-bounce" style={{animationDelay: '1s'}}></div>
           
           <div className="text-center space-y-8 relative z-10">
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-orange-500 to-amber-600 rounded-3xl mb-8 shadow-2xl transform hover:scale-110 transition-all duration-500 hover:rotate-3">
-              <Package className="w-12 h-12 text-white" />
+            <div className="inline-flex items-center justify-center w-24 h-24 bg-amber-600 dark:bg-orange-600 rounded-3xl mb-8 shadow-2xl transform hover:scale-110 transition-all duration-500 hover:rotate-3">
+              <Package className="w-12 h-12 text-gray-800 dark:text-white" />
             </div>
             <div className="space-y-4">
-              <h1 className="text-5xl font-black text-gray-800 leading-tight">
-                <span className="bg-gradient-to-r from-orange-600 to-amber-800 bg-clip-text text-transparent animate-pulse">
+              <h1 className="text-5xl font-black text-gray-800 dark:text-slate-50 leading-tight">
+                <span className="bg-gradient-to-r from-orange-600 to-amber-800 dark:from-orange-500 dark:to-amber-500 bg-clip-text text-transparent animate-pulse">
                   PicknDrop
                 </span>
-                <span className="block text-4xl font-bold text-orange-600 mt-2">
+                <span className="block text-4xl font-bold text-orange-600 dark:text-orange-400 mt-2">
                   Link
                 </span>
               </h1>
-              <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed">
+              <p className="text-xl text-gray-600 dark:text-slate-300 max-w-lg mx-auto leading-relaxed">
                 Gérez votre point relais avec notre plateforme intuitive. 
-                <span className="block mt-2 text-orange-600 font-semibold">
+                <span className="block mt-2 text-orange-600 dark:text-orange-400 font-semibold">
                   Simple • Sécurisé • Efficace
                 </span>
               </p>
@@ -162,77 +105,77 @@ const handleSubmit = async (e: React.FormEvent) => {
 
           {/* Statistiques animées */}
           <div className="grid grid-cols-3 gap-6 relative z-10">
-            <div className="text-center p-4 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Users className="w-6 h-6 text-green-600" />
+            <div className="text-center p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2">
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-600/30 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Users className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
-              <div className="text-2xl font-bold text-gray-800">500+</div>
-              <div className="text-sm text-gray-600">Points actifs</div>
+              <div className="text-2xl font-bold text-gray-800 dark:text-slate-100">500+</div>
+              <div className="text-sm text-gray-600 dark:text-slate-400">Points actifs</div>
             </div>
             
-            <div className="text-center p-4 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2" style={{animationDelay: '0.2s'}}>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Package className="w-6 h-6 text-blue-600" />
+            <div className="text-center p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2" style={{animationDelay: '0.2s'}}>
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-600/30 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Package className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
-              <div className="text-2xl font-bold text-gray-800">10k+</div>
-              <div className="text-sm text-gray-600">Colis traités</div>
+              <div className="text-2xl font-bold text-gray-800 dark:text-slate-100">10k+</div>
+              <div className="text-sm text-gray-600 dark:text-slate-400">Colis traités</div>
             </div>
             
-            <div className="text-center p-4 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2" style={{animationDelay: '0.4s'}}>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Star className="w-6 h-6 text-purple-600" />
+            <div className="text-center p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2" style={{animationDelay: '0.4s'}}>
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-600/30 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
               </div>
-              <div className="text-2xl font-bold text-gray-800">4.8/5</div>
-              <div className="text-sm text-gray-600">Satisfaction</div>
+              <div className="text-2xl font-bold text-gray-800 dark:text-slate-100">4.8/5</div>
+              <div className="text-sm text-gray-600 dark:text-slate-400">Satisfaction</div>
             </div>
           </div>
         </div>
 
-        {/* Section droite - Formulaire de connexion (thème orange) */}
+        {/* Section droite - Formulaire de connexion */}
         <div className="w-full max-w-md mx-auto">
-          <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 p-8 space-y-8">
+          <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 dark:border-slate-700/50 p-8 space-y-8">
             <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">Connexion PRO</h2>
-              <p className="text-gray-600">Accédez à votre espace de gestion</p>
+              <h2 className="text-3xl font-bold text-gray-800 dark:text-slate-50">Connexion PRO</h2>
+              <p className="text-gray-600 dark:text-slate-300">Accédez à votre espace de gestion</p>
             </div>
             
-            {error && <div className="p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-xl text-center">{error}</div>}
+            {error && <div className="p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700/50 text-red-700 dark:text-red-300 text-sm rounded-xl text-center">{error}</div>}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Adresse email</label>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300">Adresse email</label>
                 <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 transition-all bg-gray-50 hover:shadow-md"/>
+                  className="w-full px-4 py-3 text-gray-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 transition-all bg-gray-50 dark:bg-slate-700 hover:shadow-md border-0 dark:placeholder:text-slate-400"/>
               </div>
               <div className="space-y-2">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">Mot de passe</label>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300">Mot de passe</label>
                 <div className="relative">
                   <input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 transition-all bg-gray-50 hover:shadow-md"/>
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    className="w-full px-4 py-3 pr-12 text-gray-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 transition-all bg-gray-50 dark:bg-slate-700 hover:shadow-md border-0 dark:placeholder:text-slate-400"/>
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-300">
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
               <button type="submit" disabled={isLoading}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-amber-600 disabled:from-orange-400 text-white font-semibold py-3 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg hover:shadow-xl">
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-amber-600 disabled:from-orange-400 dark:from-orange-600 dark:to-amber-600 dark:hover:from-amber-500 text-white font-semibold py-3 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg hover:shadow-xl">
                 {isLoading ? 'Connexion en cours...' : 'Se connecter'}
               </button>
             </form>
 
             <div className="relative">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-              <div className="relative flex justify-center text-sm"><span className="px-4 bg-white text-gray-500">Pas encore de compte ?</span></div>
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-slate-700"></div></div>
+              <div className="relative flex justify-center text-sm"><span className="px-4 bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-400">Pas encore de compte ?</span></div>
             </div>
 
             <button
               onClick={() => router.push('/register')}
-              className="w-full flex items-center justify-center py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition-all hover:shadow-md"
+              className="w-full flex items-center justify-center py-3 border border-gray-300 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all hover:shadow-md"
             >
-              <span className="text-sm font-medium text-gray-700">Créer un compte</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Créer un compte</span>
             </button>
             
-            <p className="text-center text-xs text-gray-500 flex items-center justify-center space-x-1">
+            <p className="text-center text-xs text-gray-500 dark:text-slate-400 flex items-center justify-center space-x-1">
               <Shield className="w-4 h-4" />
               <span>Connexion sécurisée</span>
             </p>

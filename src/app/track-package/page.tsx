@@ -1,79 +1,60 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  QrCodeIcon,
-  MagnifyingGlassIcon,
-  CheckCircleIcon,
-  ArrowUturnLeftIcon,
-  TruckIcon,
-  MapPinIcon,
-  PhoneIcon,
-  CubeIcon,
-  ClockIcon,
-  XMarkIcon,
-  ExclamationTriangleIcon,
-  ChatBubbleLeftRightIcon,
-  DocumentTextIcon,
-  InformationCircleIcon,
-  CalendarDaysIcon,
-} from '@heroicons/react/24/outline';
-import {
-  Package,
-  Sparkles,
-  AlertTriangle,
-  Search,
-  Loader2,
-  MapPin as LucideMapPin,
-  Clock,
-  Phone,
-  User,
-  Building,
-  FileText,
-  MessageSquare,
-  Send,
-  CheckCheck,
-  AlertCircle,
-  Info,
-  Route,
-  ArrowLeftIcon,
-} from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
-import NavbarHome from '@/components/NavbarHome';
-import { supabase } from '@/lib/supabase'; 
-import Footer from '@/components/FooterHome';
-import router from 'next/navigation';
-import { useRouter } from 'next/navigation';
+import { 
+  Search, Package, Truck, MapPin, CheckCircle, Clock, 
+  AlertTriangle, ArrowLeft, Loader2, QrCode, X, AlertCircle,
+  CalendarDays, Weight, FileText, User, Coins
+} from 'lucide-react';
 
-interface TrackingInfo {
-  trackingNumber: string;
-  status: 'Au départ' | 'En transit' | 'Arrivé au relais' | 'Reçu' | 'En cours de livraison' | 'Livré';
-  senderName: string;
-  senderPhone: string;
-  recipientName: string;
-  recipientPhone: string;
-  departurePoint: string;
-  arrivalPoint: string;
-  description: string;
-  weight: string;
-  estimatedDelivery: string;
-  lastUpdate: string;
-  currentLocation?: string;
-  trackingHistory: Array<{
-    date: string;
-    status: string;
-    location: string;
-    description: string;
-  }>;
+// Service API
+import { packageService } from '@/services/packageService';
+import Footer from '@/components/FooterHome';
+import NavbarHome from '@/components/NavbarHome';
+
+// --- TYPES UI INTERNES ---
+
+interface TimelineStep {
+  label: string;
+  date?: string;
+  status: 'completed' | 'current' | 'upcoming' | 'error';
+  icon: React.ElementType;
+  location?: string;
+  description?: string;
 }
 
-interface ClaimForm {
-  type: 'damaged' | 'lost' | 'delay' | 'other';
+interface TrackedPackageUI {
+  trackingNumber: string;
+  statusRaw: string;
+  statusLabel: string;
+  percentage: number;
+  
+  // Infos Détails
   description: string;
-  contactName: string;
-  contactPhone: string;
-  contactEmail: string;
-  priority: 'low' | 'medium' | 'high';
+  weight: string;
+  dimensions: string;
+  specialInstructions: string;
+  price: string;
+  paymentStatus: string;
+  
+  lastUpdate: string;
+  estimatedDelivery: string;
+  
+  // Acteurs & Lieux
+  senderName: string;
+  recipientName: string;
+  recipientPhone: string;
+  
+  pickupAddress: string; // Point de Départ
+  deliveryAddress: string; // Point d'Arrivée
+  
+  // Historique réel ou généré
+  timeline: TimelineStep[];
+  
+  isFragile: boolean;
+  isInsured: boolean;
 }
 
 const cardVariants: Variants = {
@@ -82,995 +63,567 @@ const cardVariants: Variants = {
   exit: { opacity: 0, y: -20, transition: { duration: 0.3, ease: 'easeIn' } },
 };
 
-const TrackPackagePage: React.FC = () => {
-  const [searchInput, setSearchInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [trackingInfo, setTrackingInfo] = useState<TrackingInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showClaimForm, setShowClaimForm] = useState(false);
-  const [claimForm, setClaimForm] = useState<ClaimForm>({
-    type: 'other',
-    description: '',
-    contactName: '',
-    contactPhone: '',
-    contactEmail: '',
-    priority: 'medium'
-  });
-  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
-  const [claimSubmitted, setClaimSubmitted] = useState(false);
+// --- MAPPING INTELLIGENT ---
+const mapBackendToUI = (responseData: any): TrackedPackageUI => {
+  // 1. SÉCURISATION: Extraction de l'objet "package" peu importe la structure
+  // Si la réponse est directement le paquet (pas encapsulé), on gère les deux cas.
+  const pkg = responseData.package || responseData || {};
+  const history = Array.isArray(responseData.history) ? responseData.history : [];
+
+  const statusRaw = (pkg.currentStatus || pkg.status || 'PRE_REGISTERED').toUpperCase();
+  
+  // Formatage dates
+  const createdAt = pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString('fr-FR') : '-';
+  const updatedAt = pkg.updatedAt 
+      ? new Date(pkg.updatedAt).toLocaleString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) 
+      : '-';
+
+  // 2. LOGIQUE DE PROGRESSION & LABEL
+  let percentage = 10;
+  let label = "Enregistré";
+
+  if (['PRE_REGISTERED', 'PENDING', 'EN_ATTENTE_DE_DEPOT'].some(s => statusRaw.includes(s))) {
+    percentage = 15;
+    label = "En attente de dépôt";
+  } else if (['AU_DEPART', 'AT_DEPARTURE_RELAY_POINT', 'ARRIVE_AU_RELAIS_DEPART'].some(s => statusRaw.includes(s))) {
+    percentage = 35;
+    label = "Déposé au point de départ";
+  } else if (['EN_TRANSIT', 'IN_TRANSIT'].some(s => statusRaw.includes(s))) {
+    percentage = 60;
+    label = "En cours d'acheminement";
+  } else if (['ARRIVE_AU_RELAIS', 'AT_ARRIVAL_RELAY_POINT'].some(s => statusRaw.includes(s))) {
+    percentage = 85;
+    label = "Arrivé au point de retrait";
+  } else if (['RECU', 'LIVRE', 'DELIVERED', 'WITHDRAWN'].some(s => statusRaw.includes(s))) {
+    percentage = 100;
+    label = "Livré / Retiré";
+  } else if (['ANNULE', 'CANCELLED'].some(s => statusRaw.includes(s))) {
+    percentage = 0;
+    label = "Annulé";
+  }
+
+  // 3. Construction de la TIMELINE
+  // Si l'API retourne un historique, on l'utilise. Sinon, on génère une timeline visuelle basée sur le pourcentage.
+  const timeline: TimelineStep[] = history.length > 0 
+    ? history.map((log: any, index: number) => ({
+        label: (log.status || 'ÉTAPE').replace(/_/g, ' '),
+        description: log.location || log.description || '',
+        status: index === 0 ? 'current' : 'completed',
+        date: log.eventDate || log.createdAt ? new Date(log.eventDate || log.createdAt).toLocaleString('fr-FR') : undefined,
+        icon: log.status?.includes('LIVRE') ? CheckCircle : Truck
+      }))
+    : [
+        // Fallback visuel si pas d'historique technique
+        { label: "Création commande", status: percentage >= 15 ? 'completed' : 'upcoming', date: createdAt, icon: FileText },
+        { label: "Prise en charge", status: percentage >= 35 ? 'completed' : 'upcoming', icon: Package },
+        { label: "En transit", status: percentage >= 60 ? 'completed' : 'upcoming', icon: Truck },
+        { label: "Disponible", status: percentage >= 85 ? 'completed' : 'upcoming', icon: MapPin },
+        { label: "Livré", status: percentage === 100 ? 'completed' : 'upcoming', icon: CheckCircle }
+    ];
+
+  // 4. Retour de l'objet UI normalisé
+  return {
+    trackingNumber: pkg.trackingNumber || 'N/A',
+    statusRaw: statusRaw,
+    statusLabel: label,
+    percentage,
+    
+    description: pkg.description || "Sans description",
+    weight: `${pkg.weight || 0} kg`,
+    dimensions: pkg.dimensions && pkg.dimensions !== "{}" ? pkg.dimensions : "-",
+    specialInstructions: pkg.specialInstructions || "Aucune",
+    price: (pkg.deliveryFee || pkg.shippingCost || 0).toLocaleString() + " FCFA",
+    paymentStatus: pkg.paymentStatus === 'PAID' ? 'Payé' : 'En attente de paiement',
+
+    lastUpdate: updatedAt,
+    estimatedDelivery: pkg.estimatedDeliveryDate 
+      ? new Date(pkg.estimatedDeliveryDate).toLocaleDateString('fr-FR') 
+      : "Non estimée",
+    
+    // On privilégie le nom si dispo, sinon on masque l'ID
+    senderName: pkg.senderName ? pkg.senderName : (pkg.senderId ? `Client #${pkg.senderId.substring(0,6)}` : "Inconnu"),
+    recipientName: pkg.recipientName || "Destinataire",
+    recipientPhone: pkg.recipientPhone || "",
+    
+    // Mapping précis des lieux
+    pickupAddress: pkg.pickupAddress || pkg.departureRelayPointId || "Point Départ",
+    deliveryAddress: pkg.deliveryAddress || pkg.arrivalRelayPointId || "Point Arrivée",
+    
+    timeline: timeline,
+    
+    isFragile: pkg.packageType === 'FRAGILE',
+    isInsured: (pkg.value && pkg.value > 0) ? true : false
+  };
+};
+
+
+export default function TrackPackagePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // États
+  const [searchInput, setSearchInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pkg, setPkg] = useState<TrackedPackageUI | null>(null);
+  
+  // États Scanner
+  const [showScanner, setShowScanner] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [scanStream, setScanStream] = useState<MediaStream | null>(null);
 
-  const resetPageState = () => {
-    setSearchInput('');
-    setIsLoading(false);
-    setTrackingInfo(null);
-    setError(null);
-    setShowClaimForm(false);
-    setClaimSubmitted(false);
-  };
-
-  const decodeQRFromCanvas = (): string | null => {
-    if (!videoRef.current || !canvasRef.current || !videoRef.current.videoWidth || !videoRef.current.videoHeight) return null;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    const video = videoRef.current;
-    if (!context) return null;
-    
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    try {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      if (Math.random() > 0.85) {
-        return ['TRK001XYZ', 'TRK002ABC', 'TRK003DEF'][Math.floor(Math.random() * 3)];
-      }
-    } catch (e) {
-      console.error("Canvas draw error:", e);
+  // Init Auto via URL
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      setSearchInput(ref);
+      handleSearch(ref);
     }
-    return null;
-  };
+  }, [searchParams]);
 
-  const startScanInterval = () => {
-    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-    scanIntervalRef.current = setInterval(() => {
-      if (!isScanning || !streamRef.current) {
-        if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-        return;
-      }
-      const detectedCode = decodeQRFromCanvas();
-      if (detectedCode) {
-        setSearchInput(detectedCode.toUpperCase());
-        handleStopScan(true);
-        setTimeout(() => handleSearchPackage(detectedCode.toUpperCase()), 100);
-      }
-    }, 500);
-  };
+  // Nettoyage caméra
+  useEffect(() => {
+    return () => {
+      if (scanStream) scanStream.getTracks().forEach(track => track.stop());
+    };
+  }, [scanStream]);
 
-  const handleScanQRCode = async () => {
-    setIsScanning(true);
+  // ⚡ FONCTION DE RECHERCHE PRINCIPALE
+  const handleSearch = async (forceInput?: string) => {
+    const query = (forceInput || searchInput).trim();
+    if (!query) return;
+
+    setLoading(true);
     setError(null);
-    setTrackingInfo(null);
-    
-    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-    
+    setPkg(null);
+    setShowScanner(false);
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 360 }, height: { ideal: 360 } }
-      });
-      streamRef.current = stream;
+      console.log(`🔍 Fetching Tracking for: ${query}`);
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        startScanInterval();
-        
-        scanTimeoutRef.current = setTimeout(() => {
-          if (isScanning && streamRef.current) {
-            handleStopScan();
-            if (!trackingInfo) setError("Aucun QR code détecté après 15 secondes.");
-          }
-        }, 15000);
-      }
-    } catch (err) {
-      let msg = "Erreur d'accès à la caméra. ";
-      if (err instanceof DOMException) {
-        if (err.name === "NotAllowedError") msg += "Veuillez autoriser l'accès à la caméra.";
-        else if (err.name === "NotFoundError") msg += "Aucune caméra compatible n'a été trouvée.";
-        else msg += "Détail: " + err.message;
-      }
-      setError(msg);
-      setIsScanning(false);
-    }
-  };
+      // Appel au Service
+      const response = await packageService.trackPackage(query);
+      console.log("📦 Response JSON:", response);
 
-  const handleStopScan = (codeFound = false) => {
-    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-    scanIntervalRef.current = null;
-    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-    scanTimeoutRef.current = null;
-    
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
-    }
-    
-    if (!codeFound) setIsScanning(false);
-  };
+      // VÉRIFICATION DE VALIDITÉ
+      // On considère valide si response contient 'trackingNumber' à la racine OU dans 'package'
+      const isDirectPackage = response && (response.trackingNumber || response.tracking_number);
+      const isWrappedPackage = response && response.package && (response.package.trackingNumber || response.package.tracking_number);
 
-  useEffect(() => () => {
-    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-  }, []);
-
-  const handleSearchPackage = async (value?: string) => {
-    const query = (value || searchInput).trim().toUpperCase();
-    if (!query) {
-      setError('Veuillez entrer un numéro de suivi.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setTrackingInfo(null);
-    setShowClaimForm(false);
-    
-    if (value && searchInput !== value) setSearchInput(value);
-    
-    try {
-      // Étape 1 : Interroger la base de données Supabase
-      const { data: shipment, error: dbError } = await supabase
-        .from('shipments')
-        .select(`
-          *,
-          departurePoint:departure_point_id(name, quartier),
-          arrivalPoint:arrival_point_id(name, quartier)
-        `)
-        .eq('tracking_number', query)
-        .single(); // .single() est idéal pour une clé unique, il renvoie une erreur si 0 ou >1 résultat
-
-      if (dbError || !shipment) {
-        throw new Error("Colis non trouvé ou erreur de communication.");
+      if (!isDirectPackage && !isWrappedPackage) {
+          throw new Error("Colis introuvable. Vérifiez le numéro de suivi.");
       }
 
-      // Étape 2 : Transformer les données de la base pour correspondre à l'interface `TrackingInfo`
-      const departurePointName = (shipment.departurePoint as any)?.name || 'Inconnu';
-      const arrivalPointName = (shipment.arrivalPoint as any)?.name || 'Inconnu';
+      // Normalisation de la réponse (toujours wrapper en { package, history })
+      const unifiedData = isWrappedPackage 
+          ? response 
+          : { package: response, history: [] };
 
-      const statusMap: Record<string, TrackingInfo['status']> = {
-        'EN_ATTENTE_DE_DEPOT': 'Au départ',
-        'AU_DEPART': 'Au départ', // regroupé
-        'EN_TRANSIT': 'En transit',
-        'ARRIVE_AU_RELAIS': 'Arrivé au relais',
-        'RECU': 'Livré', // "Reçu" dans la base correspond à "Livré" sur l'interface
-      };
-      const frontendStatus = statusMap[shipment.status] || 'Au départ';
-
-      // Logique pour déterminer la localisation actuelle
-      let currentLocation = departurePointName;
-      if (frontendStatus === 'En transit') currentLocation = `En transit vers ${arrivalPointName}`;
-      if (frontendStatus === 'Arrivé au relais') currentLocation = arrivalPointName;
-      if (frontendStatus === 'Livré') currentLocation = "Livré";
-
-      // Générer un historique de suivi plausible à partir des données disponibles
-      const generateTrackingHistory = (shipmentData: typeof shipment) => {
-        const history = [];
-        const depName = (shipmentData.departurePoint as any)?.name || 'Point de départ';
-        const arrName = (shipmentData.arrivalPoint as any)?.name || 'Point d\'arrivée';
-
-        // 1. Dépôt (toujours présent)
-        history.push({
-          date: new Date(shipmentData.created_at).toLocaleString('fr-CM'),
-          status: 'Colis déposé',
-          location: depName,
-          description: 'Colis accepté et enregistré.',
-        });
-
-        // 2. Départ (si applicable)
-        if (['EN_TRANSIT', 'ARRIVE_AU_RELAIS', 'RECU'].includes(shipmentData.status)) {
-            const departureTime = new Date(new Date(shipmentData.created_at).getTime() + 2 * 60 * 60 * 1000); // 2h après le dépôt
-            history.push({
-                date: departureTime.toLocaleString('fr-CM'),
-                status: 'Au départ',
-                location: depName,
-                description: 'Le colis a quitté son point de départ.',
-            });
-        }
-        
-        // 3. Arrivé au relais (si applicable)
-        if (['ARRIVE_AU_RELAIS', 'RECU'].includes(shipmentData.status)) {
-            const arrivalTime = new Date(new Date(shipmentData.updated_at).getTime() - 1 * 60 * 60 * 1000); // 1h avant la dernière mise à jour
-            history.push({
-                date: arrivalTime.toLocaleString('fr-CM'),
-                status: 'Arrivé au relais',
-                location: arrName,
-                description: 'Colis disponible pour le retrait.',
-            });
-        }
-        
-        // 4. Livré (si applicable)
-        if (shipmentData.status === 'RECU') {
-            history.push({
-                date: new Date(shipmentData.updated_at).toLocaleString('fr-CM'),
-                status: 'Livré',
-                location: arrName,
-                description: 'Colis remis au destinataire.',
-            });
-        }
-
-        // Tri par date pour s'assurer que c'est chronologique
-        return history.sort((a, b) => new Date(a.date.split(' ')[0].split('/').reverse().join('-') + ' ' + a.date.split(' ')[1]).getTime() - new Date(b.date.split(' ')[0].split('/').reverse().join('-') + ' ' + b.date.split(' ')[1]).getTime());
-      };
-
-
-      const transformedData: TrackingInfo = {
-        trackingNumber: shipment.tracking_number,
-        status: frontendStatus,
-        senderName: shipment.sender_name,
-        senderPhone: shipment.sender_phone,
-        recipientName: shipment.recipient_name,
-        recipientPhone: shipment.recipient_phone,
-        departurePoint: departurePointName,
-        arrivalPoint: arrivalPointName,
-        description: shipment.description || 'Non spécifié',
-        weight: String(shipment.weight || '0'),
-        // Génère une date de livraison estimée car non présente en BDD
-        estimatedDelivery: new Date(new Date(shipment.created_at).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        lastUpdate: new Date(shipment.updated_at).toLocaleString('fr-CM'),
-        currentLocation: currentLocation,
-        trackingHistory: generateTrackingHistory(shipment),
-      };
-
-      setTrackingInfo(transformedData);
+      // Mapping UI
+      const uiData = mapBackendToUI(unifiedData);
+      setPkg(uiData);
 
     } catch (err: any) {
-      setError(`Erreur de recherche pour "${query}": ${err.message}`);
+      console.error("Tracking Error:", err);
+      // Gestion erreur UI
+      const msg = err.message || "Erreur technique lors de la recherche.";
+      setError(msg.includes('404') ? "Numéro de suivi inconnu." : msg);
     } finally {
-      setIsLoading(false);
-    }
-  };
-  // --- FIN DE LA MODIFICATION PRINCIPALE ---
-
-  const getStatusColorClasses = (status: TrackingInfo['status']) => {
-    switch (status) {
-      case 'Au départ': return 'bg-gradient-to-r from-orange-400 to-red-500 text-white';
-      case 'En transit': return 'bg-gradient-to-r from-orange-500 to-amber-600 text-white';
-      case 'Arrivé au relais': return 'bg-gradient-to-r from-orange-600 to-yellow-600 text-white';
-      case 'En cours de livraison': return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white';
-      case 'Livré': return 'bg-gradient-to-r from-green-600 to-emerald-700 text-white';
-      default: return 'bg-gradient-to-r from-slate-500 to-gray-600 text-white';
+      setLoading(false);
     }
   };
 
-  const getStatusIcon = (status: TrackingInfo['status']) => {
-    switch (status) {
-      case 'Au départ': return <Package className="w-7 h-7" />;
-      case 'En transit': return <TruckIcon className="w-7 h-7" />;
-      case 'Arrivé au relais': return <MapPinIcon className="w-7 h-7" />;
-      case 'En cours de livraison': return <TruckIcon className="w-7 h-7" />;
-      case 'Livré': return <CheckCircleIcon className="w-7 h-7" />;
-      default: return <Package className="w-7 h-7" />;
-    }
+  // Gestion Couleurs Statuts
+  const getStatusColor = (raw: string) => {
+     if (raw.includes('RECU') || raw.includes('LIVRE') || raw.includes('DELIVERED')) return 'bg-green-500 text-white';
+     if (raw.includes('TRANSIT') || raw.includes('DEPART')) return 'bg-blue-500 text-white';
+     if (raw.includes('ANNULE') || raw.includes('CANCELLED')) return 'bg-red-500 text-white';
+     return 'bg-orange-500 text-white'; // Par défaut (Attente, Arrivé au relais)
   };
 
-  const handleClaimSubmit = async () => {
-    if (!claimForm.contactName.trim() || !claimForm.contactPhone.trim() || !claimForm.description.trim()) {
-      setError("Veuillez remplir tous les champs obligatoires.");
-      return;
-    }
-
-    setIsSubmittingClaim(true);
-    setError(null);
-
-    try {
-      // Simulation d'envoi de réclamation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setClaimSubmitted(true);
-      setShowClaimForm(false);
-    } catch (err) {
-      setError("Erreur lors de l'envoi de la réclamation. Veuillez réessayer.");
-    } finally {
-      setIsSubmittingClaim(false);
+  // Simulation Scanner
+  const toggleScanner = async () => {
+    if (showScanner) {
+      setShowScanner(false);
+      if (scanStream) {
+        scanStream.getTracks().forEach(track => track.stop());
+        setScanStream(null);
+      }
+    } else {
+      setShowScanner(true);
+      setError(null);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        setScanStream(stream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setTimeout(() => {
+            // Ici il faudrait utiliser une lib QR (ex: jsQR)
+            alert("Ceci est une simulation de scan.\nEn production, le QR code serait décodé ici.");
+            setShowScanner(false);
+            if(stream) stream.getTracks().forEach(t => t.stop());
+        }, 4000);
+      } catch (e) {
+        setError("Impossible d'accéder à la caméra.");
+        setShowScanner(false);
+      }
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 text-slate-800 p-0 font-sans relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 0.6, scale: 1 }}
-          transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute -top-24 -right-24 w-96 h-96 bg-gradient-to-br from-orange-200/30 to-amber-300/20 rounded-full blur-3xl"
-        />
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.6 }}
-          animate={{ opacity: 0.4, scale: 1 }}
-          transition={{ duration: 3, delay: 0.5, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute top-1/3 -left-32 w-80 h-80 bg-gradient-to-br from-yellow-200/20 to-orange-300/15 rounded-full blur-3xl"
-        />
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.7 }}
-          animate={{ opacity: 0.3, scale: 1 }}
-          transition={{ duration: 2.5, delay: 1, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-gradient-to-br from-red-200/20 to-orange-300/15 rounded-full blur-3xl"
-        />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300 flex flex-col font-sans">
+      <main className="flex-grow pt-24 px-4 sm:px-6 relative z-10 pb-20">
         
-        <motion.div
-          initial={{ y: 0 }}
-          animate={{ y: [-10, 10, -10] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-20 right-20 text-orange-300/30"
-        >
-          <Package className="w-12 h-12" />
-        </motion.div>
-        <motion.div
-          initial={{ y: 0 }}
-          animate={{ y: [10, -10, 10] }}
-          transition={{ duration: 3.5, delay: 0.5, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute bottom-32 left-32 text-amber-300/30"
-        >
-          <TruckIcon className="w-10 h-10" />
-        </motion.div>
-        <motion.div
-          initial={{ rotate: 0 }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute top-1/2 right-12 text-orange-300/25"
-        >
-          <Sparkles className="w-8 h-8" />
-        </motion.div>
-      </div>
+        {/* Decoration BG */}
+        <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-orange-100/50 to-transparent dark:from-orange-950/20 pointer-events-none -z-10" />
 
-      <motion.main
-        initial={{ opacity: 0, x: 20 }} 
-        animate={{ opacity: 1, x: 0 }} 
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-12 lg:py-16 relative z-20"
-      >
-        <div className="mb-8 text-center">
-          <button
-            onClick={() => router.push('/home')}
-            className="mb-4 flex items-center mx-auto text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
-          >
-            <ArrowLeftIcon className="w-4 h-4 mr-2" />
-            Retour à l'accueil
-          </button>
-          <div className="flex flex-col items-center">
+        <div className="max-w-4xl mx-auto space-y-8">
+          
+          {/* ZONE RECHERCHE */}
+          <div className="text-center space-y-6">
+            <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
+              Suivi de Colis
+            </h1>
+            <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
+              Entrez votre numéro de suivi pour localiser votre expédition.
+            </p>
+
             <motion.div 
-              initial={{ scale: 0, rotate: -180 }} 
-              animate={{ scale: 1, rotate: 0 }} 
-              transition={{ type: 'spring', stiffness: 260, damping: 15, delay: 0.1 }}
-              className="relative mb-4"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="relative max-w-lg mx-auto"
             >
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-2xl shadow-orange-500/25">
-                <Search className="w-9 h-9 text-white" />
+              <div className="relative group shadow-xl rounded-2xl bg-white dark:bg-slate-800 border-2 border-transparent focus-within:border-orange-500 dark:focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-500/20 transition-all">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors" />
+                <input
+                  type="text"
+                  placeholder="Ex: PND2025..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)} // Ne pas forcer UpperCase ici pour UX, on le fera au submit
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="w-full pl-12 pr-28 py-4 bg-transparent outline-none text-slate-900 dark:text-white font-mono tracking-wide font-bold placeholder:font-sans placeholder:text-slate-400 placeholder:font-normal"
+                />
+                
+                <div className="absolute right-2 top-2 bottom-2 flex gap-2">
+                    <button 
+                        onClick={toggleScanner}
+                        className="px-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl transition-colors text-slate-600 dark:text-slate-300"
+                        title="Scanner QR"
+                    >
+                        <QrCode className="w-5 h-5"/>
+                    </button>
+                    <button
+                        onClick={() => handleSearch()}
+                        disabled={loading || !searchInput.trim()}
+                        className="bg-orange-600 hover:bg-orange-700 text-white px-5 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center"
+                    >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Suivre"}
+                    </button>
+                </div>
               </div>
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center"
-              >
-                <Sparkles className="w-2.5 h-2.5 text-white" />
-              </motion.div>
             </motion.div>
-            
-            <motion.h1 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-orange-900 via-orange-800 to-orange-900 bg-clip-text text-transparent mb-2"
-            >
-              Retrouver mon Colis
-            </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-slate-600 text-base max-w-2xl leading-relaxed mb-6"
-            >
-              Suivez votre colis en temps réel et soyez informé de chaque étape de son acheminement.
-            </motion.p>
-          </div>
-        </div>
 
-        <AnimatePresence mode="wait">
-          {!trackingInfo && !isScanning && (
-            <motion.section 
-              key="search-scan" 
-              variants={cardVariants} 
-              initial="hidden" 
-              animate="visible" 
-              exit="exit"
-              className="relative bg-white/70 backdrop-blur-sm p-6 sm:p-8 rounded-2xl shadow-xl border border-white/50 mb-6"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-amber-50/30 rounded-2xl" />
-              <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-orange-200/20 to-transparent rounded-full -translate-y-12 translate-x-12" />
-              
-              <div className="relative z-10">
-                <div className="text-center mb-6">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg"
-                  >
-                    <Search className="w-7 h-7 text-white" />
-                  </motion.div>
-                  <h2 className="text-xl font-bold text-slate-800 mb-1">Rechercher votre Colis</h2>
-                  <p className="text-slate-500 text-sm">Entrez votre numéro de suivi ou scannez le QR code</p>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row items-stretch gap-3">
-                    <div className="relative flex-grow">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                      <input 
-                        type="text" 
-                        value={searchInput} 
-                        onChange={(e) => setSearchInput(e.target.value.toUpperCase())} 
-                        placeholder="Numéro de suivi (ex: TRK001XYZ)"
-                        className="w-full pl-10 pr-3 py-3 border-2 border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-base bg-white/80 transition-all hover:border-slate-300"
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearchPackage()} 
-                      />
-                    </div>
-                    <motion.button 
-                      whileHover={{ scale: 1.02, y: -1 }} 
-                      whileTap={{ scale: 0.98 }} 
-                      onClick={() => handleSearchPackage()} 
-                      disabled={isLoading || !searchInput.trim()}
-                      className="flex items-center justify-center bg-gradient-to-r from-orange-600 to-amber-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md disabled:opacity-60 transition-all hover:shadow-lg"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      ) : (
-                        <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
-                      )} 
-                      Rechercher
-                    </motion.button>
-                  </div>
-                  
-                  <div className="flex items-center my-4">
-                    <hr className="flex-grow border-slate-200" />
-                    <span className="px-3 text-xs text-slate-500 font-medium bg-white rounded-full">ou</span>
-                    <hr className="flex-grow border-slate-200" />
-                  </div>
-                  
-                  <motion.button 
-                    whileHover={{ scale: 1.02, y: -1 }} 
-                    whileTap={{ scale: 0.98 }} 
-                    onClick={handleScanQRCode} 
-                    disabled={isLoading || isScanning}
-                    className="w-full flex items-center justify-center bg-white text-slate-700 border-2 border-slate-300 font-medium py-3 px-5 rounded-lg shadow-md disabled:opacity-60 transition-all hover:bg-slate-50 hover:shadow-lg"
-                  >
-                    <QrCodeIcon className="w-5 h-5 mr-2" /> 
-                    Scanner le QR Code
-                  </motion.button>
-                </div>
-                
+            {/* ERREUR */}
+            <AnimatePresence>
                 {error && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10, scale: 0.95 }} 
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className="mt-4 p-3 bg-red-50 border-l-4 border-red-400 rounded-lg flex items-start text-red-700 text-sm shadow-sm"
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-2.5 flex-shrink-0 mt-0.5" />
-                    <span className="flex-1">{error}</span>
-                  </motion.div>
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0, y: -10 }} 
+                        animate={{ opacity: 1, height: "auto", y: 0 }} 
+                        exit={{ opacity: 0, height: 0, y: -10 }}
+                        className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl inline-flex items-center gap-2 max-w-lg mx-auto"
+                    >
+                        <AlertTriangle className="w-5 h-5" />
+                        <span className="text-sm font-medium">{error}</span>
+                    </motion.div>
                 )}
-              </div>
-            </motion.section>
-          )}
+            </AnimatePresence>
 
-          {isScanning && (
-            <motion.section 
-              key="scanning" 
-              variants={cardVariants} 
-              initial="hidden" 
-              animate="visible" 
-              exit="exit"
-              className="relative bg-white/80 backdrop-blur-md p-6 sm:p-8 rounded-2xl shadow-xl border border-white/50 mb-6"
-            >
-              <div className="relative z-10 text-center">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg"
-                >
-                  <QrCodeIcon className="w-7 h-7 text-white" />
-                </motion.div>
-                
-                <h2 className="text-xl font-bold text-slate-800 mb-4">Scan du QR Code en cours...</h2>
-                
-                <div className="relative mx-auto w-64 h-64 sm:w-80 sm:h-80 bg-slate-800 rounded-xl overflow-hidden shadow-lg border-2 border-white/20">
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                  <canvas ref={canvasRef} className="hidden" />
-                  
-                  <div className="absolute inset-2 border-2 border-orange-400/80 rounded-lg">
-                    <motion.div
-                      animate={{ y: ['0%', '100%', '0%'] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-orange-400 to-transparent shadow-lg shadow-orange-400/50"
-                    />
-                  </div>
-                </div>
-                
-                <p className="text-slate-600 text-sm mt-4 mb-5">Positionnez le QR code du colis dans le cadre.</p>
-                
-                <motion.button 
-                  whileHover={{ scale: 1.05 }} 
-                  whileTap={{ scale: 0.95 }} 
-                  onClick={() => handleStopScan()}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow-md transition-all inline-flex items-center text-sm"
-                >
-                  <XMarkIcon className="w-4 h-4 mr-1.5" /> 
-                  Annuler Scan
-                </motion.button>
-              </div>
-              
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-4 p-3 bg-red-50 border-l-4 border-red-400 rounded-lg flex items-start text-red-700 text-sm"
-                >
-                  <AlertTriangle className="w-4 h-4 mr-2.5 flex-shrink-0 mt-0.5" /> 
-                  <span className="flex-1">{error}</span>
-                </motion.div>
-              )}
-            </motion.section>
-          )}
-
-          {trackingInfo && !showClaimForm && (
-            <motion.section 
-              key="tracking-details" 
-              variants={cardVariants} 
-              initial="hidden" 
-              animate="visible" 
-              exit="exit" 
-              className="space-y-6"
-            >
-              {/* Status Header */}
-              <div className={`relative p-5 rounded-xl shadow-lg border-l-4 ${getStatusColorClasses(trackingInfo.status)} overflow-hidden`}>
-                <div className="absolute top-0 right-0 w-28 h-28 opacity-10">
-                  {getStatusIcon(trackingInfo.status)}
-                </div>
-                <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center space-x-3">
-                    <motion.div
-                      whileHover={{ scale: 1.1, rotate: 5 }}
-                      className="p-2.5 bg-white/20 rounded-lg"
-                    >
-                      {getStatusIcon(trackingInfo.status)}
-                    </motion.div>
-                    <div>
-                      <h3 className="text-lg font-bold mb-0.5">Colis {trackingInfo.trackingNumber}</h3>
-                      <p className="text-xs opacity-90">Statut : {trackingInfo.status}</p>
-                      {trackingInfo.currentLocation && (
-                        <p className="text-xs opacity-80 flex items-center mt-1">
-                          <LucideMapPin className="w-3 h-3 mr-1" />
-                          {trackingInfo.currentLocation}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-left sm:text-right bg-white/10 p-2.5 rounded-md backdrop-blur-sm text-xs">
-                    <p className="opacity-90 mb-0.5">Livraison Prévue</p>
-                    <p className="font-semibold text-sm">{new Date(trackingInfo.estimatedDelivery).toLocaleDateString('fr-CM')}</p>
-                    <p className="opacity-80 text-xs mt-1">Mise à jour : {trackingInfo.lastUpdate}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Package Details Grid */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <motion.div 
-                  whileHover={{ y: -2, scale: 1.01 }}
-                  className="relative bg-gradient-to-br from-orange-50 to-amber-100/50 p-4 rounded-xl shadow-md border border-orange-200/80 transition-all duration-300 overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-20 h-20 opacity-5 text-orange-500">
-                    <User className="w-full h-full" />
-                  </div>
-                  <div className="relative z-10">
-                    <h4 className="font-bold text-slate-800 mb-3 flex items-center text-base">
-                      <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg flex items-center justify-center mr-2.5 shadow-md">
-                        <User className="w-4 h-4 text-white" />
-                      </div>
-                      Expéditeur
-                    </h4>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Nom:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.senderName}</span>
-                      </div>
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Tél:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.senderPhone}</span>
-                      </div>
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Départ:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.departurePoint}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div 
-                  whileHover={{ y: -2, scale: 1.01 }}
-                  className="relative bg-gradient-to-br from-amber-50 to-orange-100/50 p-4 rounded-xl shadow-md border border-amber-200/80 transition-all duration-300 overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-20 h-20 opacity-5 text-amber-500">
-                    <User className="w-full h-full" />
-                  </div>
-                  <div className="relative z-10">
-                    <h4 className="font-bold text-slate-800 mb-3 flex items-center text-base">
-                      <div className="w-8 h-8 bg-gradient-to-r from-amber-500 to-orange-600 rounded-lg flex items-center justify-center mr-2.5 shadow-md">
-                        <User className="w-4 h-4 text-white" />
-                      </div>
-                      Destinataire
-                    </h4>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Nom:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.recipientName}</span>
-                      </div>
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Tél:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.recipientPhone}</span>
-                      </div>
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Destination:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.arrivalPoint}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div 
-                  whileHover={{ y: -2, scale: 1.01 }}
-                  className="relative bg-gradient-to-br from-yellow-50 to-orange-100/50 p-4 rounded-xl shadow-md border border-yellow-200/80 transition-all duration-300 overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-20 h-20 opacity-5 text-yellow-500">
-                    <Package className="w-full h-full" />
-                  </div>
-                  <div className="relative z-10">
-                    <h4 className="font-bold text-slate-800 mb-3 flex items-center text-base">
-                      <div className="w-8 h-8 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-lg flex items-center justify-center mr-2.5 shadow-md">
-                        <Package className="w-4 h-4 text-white" />
-                      </div>
-                      Détails du Colis
-                    </h4>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Description:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.description}</span>
-                      </div>
-                      <div className="flex justify-between items-start py-0.5">
-                        <span className="text-slate-600 font-medium">Poids:</span>
-                        <span className="font-semibold text-slate-800 text-right max-w-[65%]">{trackingInfo.weight} kg</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div 
-                  whileHover={{ y: -2, scale: 1.01 }}
-                  className="relative bg-gradient-to-br from-red-50 to-orange-100/50 p-4 rounded-xl shadow-md border border-red-200/80 transition-all duration-300 overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-20 h-20 opacity-5 text-red-500">
-                    <Route className="w-full h-full" />
-                  </div>
-                  <div className="relative z-10">
-                    <h4 className="font-bold text-slate-800 mb-3 flex items-center text-base">
-                      <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-orange-600 rounded-lg flex items-center justify-center mr-2.5 shadow-md">
-                        <Route className="w-4 h-4 text-white" />
-                      </div>
-                      Itinéraire
-                    </h4>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                        <span className="text-slate-600">{trackingInfo.departurePoint}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 ml-1">
-                        <div className="w-1 h-6 bg-orange-300 border-l-2 border-dashed border-orange-400"></div>
-                      </div>
-                      {trackingInfo.currentLocation && trackingInfo.currentLocation !== trackingInfo.arrivalPoint && trackingInfo.status !== 'Livré' && (
-                        <>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                            <span className="text-slate-800 font-medium">{trackingInfo.currentLocation}</span>
-                          </div>
-                          <div className="flex items-center space-x-2 ml-1">
-                            <div className="w-1 h-6 bg-orange-300 border-l-2 border-dashed border-orange-400"></div>
-                          </div>
-                        </>
-                      )}
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-2 h-2 rounded-full ${trackingInfo.status === 'Livré' ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-                        <span className={`${trackingInfo.status === 'Livré' ? 'text-green-800 font-medium' : 'text-slate-600'}`}>
-                          {trackingInfo.arrivalPoint}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Tracking History */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-white/50"
-              >
-                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-orange-600" />
-                  Historique de Suivi
-                </h3>
-                
-                <div className="space-y-4">
-                  {trackingInfo.trackingHistory.map((event, index) => (
-                    <motion.div 
-                      key={index}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex items-start space-x-3"
-                    >
-                      <div className="flex flex-col items-center">
-                        <div className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-orange-500' : 'bg-orange-300'} shadow-sm`}></div>
-                        {index < trackingInfo.trackingHistory.length - 1 && (
-                          <div className="w-0.5 h-8 bg-orange-200 mt-1"></div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{event.status}</p>
-                            <p className="text-xs text-slate-600 flex items-center mt-0.5">
-                              <LucideMapPin className="w-3 h-3 mr-1" />
-                              {event.location}
-                            </p>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1 sm:mt-0">
-                            {new Date(event.date).toLocaleString('fr-CM')}
-                          </p>
+            {/* ZONE CAMERA SCANNER */}
+            <AnimatePresence>
+            {showScanner && (
+                <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="mx-auto max-w-sm bg-black rounded-2xl overflow-hidden shadow-2xl relative mt-6 aspect-square">
+                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover opacity-80" />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-56 h-56 border-2 border-orange-500 rounded-lg relative">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-orange-500 animate-[scan_2s_infinite]"></div>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1">{event.description}</p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
+                    </div>
+                    <button onClick={toggleScanner} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full backdrop-blur-md hover:bg-white/30 transition">
+                        <X className="text-white w-6 h-6"/>
+                    </button>
+                    <p className="absolute bottom-6 left-0 right-0 text-center text-white text-sm font-medium drop-shadow-md">
+                        Placez le QR Code dans le cadre
+                    </p>
+                </motion.div>
+            )}
+            </AnimatePresence>
+          </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                <motion.button 
-                  whileHover={{ scale: 1.02, y: -2 }} 
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowClaimForm(true)}
-                  className="flex-1 bg-gradient-to-r from-red-500 to-orange-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all flex items-center justify-center text-base group"
-                >
-                  <MessageSquare className="w-5 h-5 mr-2 group-hover:rotate-6 transition-transform" />
-                  Signaler un Problème
-                </motion.button>
+          {/* CARTE DE RÉSULTATS */}
+          <AnimatePresence mode="wait">
+            {pkg && !loading && (
+              <motion.div 
+                variants={cardVariants}
+                initial="hidden" 
+                animate="visible"
+                exit="exit"
+                className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
+              >
                 
-                <motion.button 
-                  whileHover={{ scale: 1.02, y: -2 }} 
-                  whileTap={{ scale: 0.98 }} 
-                  onClick={resetPageState}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center sm:flex-none shadow-md"
-                >
-                  <Search className="w-4 h-4 mr-2" />
-                  Nouveau Suivi
-                </motion.button>
-              </div>
-            </motion.section>
-          )}
+                {/* 1. TOP BANNER */}
+                <div className="p-6 md:p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <span className="px-3 py-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
+                                    Colis Standard
+                                </span>
+                                {pkg.percentage === 100 && (
+                                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-lg">
+                                        <CheckCircle className="w-3 h-3" /> Terminé
+                                    </span>
+                                )}
+                            </div>
+                            <h2 className="text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight">
+                                {pkg.trackingNumber}
+                            </h2>
+                        </div>
 
-          {showClaimForm && trackingInfo && (
-            <motion.section 
-              key="claim-form" 
-              variants={cardVariants} 
-              initial="hidden" 
-              animate="visible" 
-              exit="exit"
-              className="relative bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-2xl shadow-xl border border-white/50"
-            >
-              <div className="relative z-10">
-                <div className="flex items-center mb-6">
-                  <div className="w-10 h-10 bg-gradient-to-r from-red-500 to-orange-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-                    <MessageSquare className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-800">Signaler un Incident</h2>
-                    <p className="text-slate-500 text-sm">Colis : {trackingInfo.trackingNumber}</p>
-                  </div>
+                        <div className="text-right">
+                             <div className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-sm mb-2 ${getStatusColor(pkg.statusRaw)}`}>
+                                {pkg.statusLabel}
+                             </div>
+                             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-end gap-1">
+                                <Clock className="w-3 h-3" /> Mise à jour : {pkg.lastUpdate}
+                             </p>
+                        </div>
+                    </div>
+                </div>
+                {/* 2. PROGRESS BAR (VISUAL TIMELINE) - Version Sophistiquée */}
+                <div className="p-6 md:p-10 bg-gradient-to-br from-slate-50 via-white to-orange-50/30 dark:from-slate-900 dark:via-slate-800 dark:to-orange-950/20">
+                    <div className="relative my-12">
+                        {/* Ligne de fond avec dégradé subtil */}
+                        <div className="absolute top-1/2 left-0 w-full h-1.5 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 dark:from-slate-700 dark:via-slate-600 dark:to-slate-700 rounded-full -translate-y-1/2 shadow-inner" />
+                        
+                        {/* Ligne remplie avec effet lumineux animé */}
+                        <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pkg.percentage}%` }}
+                            transition={{ duration: 2, ease: "easeInOut" }}
+                            className="absolute top-1/2 left-0 h-1.5 bg-gradient-to-r from-orange-500 via-orange-600 to-orange-500 rounded-full -translate-y-1/2 shadow-[0_0_20px_rgba(249,115,22,0.6)]"
+                            style={{
+                                boxShadow: '0 0 20px rgba(249,115,22,0.6), 0 0 40px rgba(249,115,22,0.3), inset 0 1px 0 rgba(255,255,255,0.3)'
+                            }}
+                        >
+                            {/* Effet de brillance animée */}
+                            <motion.div 
+                                animate={{ x: ['-100%', '200%'] }}
+                                transition={{ duration: 2, repeat: Infinity, ease: "linear", delay: 2 }}
+                                className="absolute inset-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent rounded-full"
+                            />
+                        </motion.div>
+
+                        {/* Points d'étapes avec icônes */}
+                        <div className="flex justify-between relative z-10">
+                             {[
+                                 { label: 'Enregistré', icon: FileText, percent: 0 },
+                                 { label: 'Départ', icon: Package, percent: 25 },
+                                 { label: 'Transit', icon: Truck, percent: 50 },
+                                 { label: 'Relais', icon: MapPin, percent: 75 },
+                                 { label: 'Livré', icon: CheckCircle, percent: 100 }
+                             ].map((step, idx) => {
+                                 const isPassed = pkg.percentage >= step.percent;
+                                 const isCurrent = pkg.percentage >= step.percent && pkg.percentage < (idx < 4 ? [0,25,50,75,100][idx+1] : 100);
+                                 const Icon = step.icon;
+                                 
+                                 return (
+                                     <div key={step.label} className="flex flex-col items-center relative group">
+                                         {/* Cercle avec icône */}
+                                         <motion.div 
+                                            initial={{ scale: 0, rotate: -180 }} 
+                                            animate={{ scale: 1, rotate: 0 }}
+                                            transition={{ 
+                                                delay: idx * 0.15, 
+                                                duration: 0.6,
+                                                type: "spring",
+                                                stiffness: 200
+                                            }}
+                                            className={`
+                                                w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 relative
+                                                ${isPassed 
+                                                    ? 'bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/50 dark:shadow-orange-500/30' 
+                                                    : 'bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600'
+                                                }
+                                                ${isCurrent ? 'ring-4 ring-orange-200 dark:ring-orange-900/50 scale-110' : ''}
+                                                hover:scale-110 cursor-pointer
+                                            `}
+                                         >
+                                             {/* Effet de pulse pour l'étape courante */}
+                                             {isCurrent && (
+                                                 <motion.div 
+                                                    animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                                                    transition={{ duration: 2, repeat: Infinity }}
+                                                    className="absolute inset-0 rounded-2xl bg-orange-400"
+                                                 />
+                                             )}
+                                             
+                                             <Icon className={`
+                                                 w-6 h-6 relative z-10 transition-all duration-300
+                                                 ${isPassed 
+                                                     ? 'text-white' 
+                                                     : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-400'
+                                                 }
+                                             `} />
+                                             
+                                             {/* Badge de validation */}
+                                             {isPassed && pkg.percentage > step.percent && (
+                                                 <motion.div 
+                                                    initial={{ scale: 0 }}
+                                                    animate={{ scale: 1 }}
+                                                    transition={{ delay: idx * 0.15 + 0.3 }}
+                                                    className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-lg"
+                                                 >
+                                                     <CheckCircle className="w-3 h-3 text-white" />
+                                                 </motion.div>
+                                             )}
+                                         </motion.div>
+                                         
+                                         {/* Label avec animation */}
+                                         <motion.span 
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.15 + 0.2 }}
+                                            className={`
+                                                text-xs font-bold uppercase mt-3 text-center transition-all duration-300
+                                                ${isPassed 
+                                                    ? 'text-orange-600 dark:text-orange-400' 
+                                                    : 'text-slate-400 dark:text-slate-500'
+                                                }
+                                                ${isCurrent ? 'text-orange-700 dark:text-orange-300 scale-105' : ''}
+                                                hidden sm:block max-w-[60px] leading-tight
+                                            `}
+                                         >
+                                             {step.label}
+                                         </motion.span>
+                                         
+                                         {/* Tooltip au survol */}
+                                         <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
+                                             <div className="bg-slate-900 dark:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs whitespace-nowrap shadow-xl">
+                                                 {step.label}
+                                                 <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 dark:bg-slate-700 rotate-45"></div>
+                                             </div>
+                                         </div>
+                                     </div>
+                                 )
+                             })}
+                        </div>
+                        
+                        {/* Pourcentage affiché */}
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.8 }}
+                            className="text-center mt-8"
+                        >
+                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-full shadow-lg border border-slate-200 dark:border-slate-700">
+                                <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+                                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                    Progression : 
+                                </span>
+                                <span className="text-lg font-black text-orange-600 dark:text-orange-400">
+                                    {pkg.percentage}%
+                                </span>
+                            </div>
+                        </motion.div>
+                    </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Type d'incident</label>
-                    <select 
-                      value={claimForm.type}
-                      onChange={(e) => setClaimForm(prev => ({ ...prev, type: e.target.value as any }))}
-                      className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base"
-                    >
-                      <option value="delay">Retard de livraison</option>
-                      <option value="damaged">Colis endommagé</option>
-                      <option value="lost">Colis perdu</option>
-                      <option value="other">Autre problème</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Description détaillée</label>
-                    <textarea 
-                      value={claimForm.description}
-                      onChange={(e) => setClaimForm(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Décrivez le problème en détail..."
-                      className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base resize-none"
-                      rows={4}
-                    />
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Votre nom</label>
-                      <input 
-                        type="text"
-                        value={claimForm.contactName}
-                        onChange={(e) => setClaimForm(prev => ({ ...prev, contactName: e.target.value }))}
-                        placeholder="Nom complet"
-                        className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Téléphone</label>
-                      <input 
-                        type="tel"
-                        value={claimForm.contactPhone}
-                        onChange={(e) => setClaimForm(prev => ({ ...prev, contactPhone: e.target.value }))}
-                        placeholder="+237 6XXXXXXXX"
-                        className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Email (optionnel)</label>
-                    <input 
-                      type="email"
-                      value={claimForm.contactEmail}
-                      onChange={(e) => setClaimForm(prev => ({ ...prev, contactEmail: e.target.value }))}
-                      placeholder="votre.email@exemple.com"
-                      className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Priorité</label>
-                    <select 
-                      value={claimForm.priority}
-                      onChange={(e) => setClaimForm(prev => ({ ...prev, priority: e.target.value as any }))}
-                      className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base"
-                    >
-                      <option value="low">Faible - Information générale</option>
-                      <option value="medium">Moyenne - Demande de suivi</option>
-                      <option value="high">Élevée - Problème urgent</option>
-                    </select>
-                  </div>
-
-                  {error && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -10 }} 
-                      animate={{ opacity: 1, y: 0 }} 
-                      className="p-3 bg-red-50 border-l-4 border-red-400 rounded-lg flex items-start text-red-700 text-sm shadow-sm"
-                    >
-                      <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-                      <span className="flex-1">{error}</span>
-                    </motion.div>
-                  )}
-
-                  <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                    <motion.button 
-                      whileHover={{ scale: 1.02, y: -2 }} 
-                      whileTap={{ scale: 0.98 }} 
-                      onClick={handleClaimSubmit}
-                      disabled={isSubmittingClaim}
-                      className="flex-1 bg-gradient-to-r from-orange-600 to-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg disabled:opacity-50 flex items-center justify-center"
-                    >
-                      {isSubmittingClaim ? (
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="w-5 h-5 mr-2" />
-                      )}
-                      Envoyer la Réclamation
-                    </motion.button>
+                {/* 3. GRID D'INFORMATIONS */}
+                <div className="p-6 md:p-8 bg-slate-50/50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-8">
                     
-                    <motion.button 
-                      whileHover={{ scale: 1.02, y: -2 }} 
-                      whileTap={{ scale: 0.98 }} 
-                      onClick={() => setShowClaimForm(false)}
-                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-3 px-6 rounded-lg flex items-center justify-center sm:flex-none shadow-md"
-                    >
-                      <ArrowUturnLeftIcon className="w-4 h-4 mr-2" />
-                      Annuler
-                    </motion.button>
-                  </div>
-                </div>
-              </div>
-            </motion.section>
-          )}
-
-          {claimSubmitted && (
-            <motion.section 
-              key="claim-success" 
-              variants={cardVariants} 
-              initial="hidden" 
-              animate="visible" 
-              exit="exit" 
-              className="text-center"
-            >
-              <div className="relative bg-gradient-to-br from-green-50 via-emerald-50 to-green-100 p-8 sm:p-10 rounded-2xl shadow-xl border border-green-200">
-                <div className="relative z-10">
-                  <motion.div 
-                    initial={{ scale: 0, rotate: -180 }} 
-                    animate={{ scale: 1, rotate: 0 }} 
-                    transition={{ type: 'spring', stiffness: 260, damping: 15, delay: 0.1 }}
-                    className="relative mx-auto mb-6"
-                  >
-                    <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-green-500/30">
-                      <CheckCheck className="w-10 h-10 text-white" />
+                    {/* GAUCHE: ITINÉRAIRE */}
+                    <div className="space-y-6">
+                        <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                           <MapPin className="w-5 h-5 text-orange-500"/> Itinéraire
+                        </h3>
+                        <div className="relative border-l-2 border-slate-200 dark:border-slate-700 pl-6 ml-2 space-y-8">
+                            <div className="relative">
+                                <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-white dark:bg-slate-800 border-4 border-blue-500 shadow-sm"></div>
+                                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Expéditeur</p>
+                                <p className="font-bold text-slate-800 dark:text-white">{pkg.senderName}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{pkg.pickupAddress}</p>
+                            </div>
+                            <div className="relative">
+                                <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-white dark:bg-slate-800 border-4 border-green-500 shadow-sm"></div>
+                                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Destinataire</p>
+                                <p className="font-bold text-slate-800 dark:text-white">{pkg.recipientName}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{pkg.deliveryAddress}</p>
+                            </div>
+                        </div>
                     </div>
-                  </motion.div>
-                  
-                  <motion.h2 
-                    initial={{ opacity: 0, y: 20 }} 
-                    animate={{ opacity: 1, y: 0 }} 
-                    transition={{ delay: 0.3 }}
-                    className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-green-800 to-emerald-700 bg-clip-text text-transparent mb-3"
-                  >
-                    Réclamation Envoyée !
-                  </motion.h2>
-                  
-                  <motion.p
-                    initial={{ opacity: 0, y: 20 }} 
-                    animate={{ opacity: 1, y: 0 }} 
-                    transition={{ delay: 0.4 }}
-                    className="text-slate-700 text-base mb-6"
-                  >
-                    Votre réclamation a été enregistrée. Nous vous contacterons dans les plus brefs délais pour résoudre votre problème.
-                  </motion.p>
-                  
-                  <motion.button 
-                    whileHover={{ scale: 1.05, y: -2 }} 
-                    whileTap={{ scale: 0.95 }} 
-                    onClick={resetPageState}
-                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-8 rounded-lg shadow-xl inline-flex items-center text-base group"
-                  >
-                    <Search className="w-5 h-5 mr-2 group-hover:rotate-6 transition-transform" />
-                    Nouveau Suivi
-                  </motion.button>
+
+                    {/* DROITE: INFO COLIS */}
+                    <div className="space-y-6">
+                        <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                           <Package className="w-5 h-5 text-orange-500"/> Détails
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                             <div className="p-4 rounded-xl bg-white dark:bg-slate-700 shadow-sm border border-slate-100 dark:border-slate-600">
+                                 <p className="text-[10px] text-slate-400 uppercase font-bold">Poids</p>
+                                 <p className="text-lg font-black text-slate-700 dark:text-white flex items-center gap-1"><Weight className="w-4 h-4"/> {pkg.weight}</p>
+                             </div>
+                             <div className="p-4 rounded-xl bg-white dark:bg-slate-700 shadow-sm border border-slate-100 dark:border-slate-600">
+                                 <p className="text-[10px] text-slate-400 uppercase font-bold">Prix Livraison</p>
+                                 <p className="text-lg font-black text-slate-700 dark:text-white"><Coins className="w-4 h-4 inline"/> {pkg.price}</p>
+                             </div>
+                        </div>
+                        
+                        <div className="bg-white dark:bg-slate-700 p-4 rounded-xl border border-slate-100 dark:border-slate-600">
+                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Contenu & Instructions</p>
+                            <p className="text-sm font-medium text-slate-800 dark:text-white line-clamp-2">
+                                "{pkg.description}"
+                            </p>
+                            <div className="mt-2 flex gap-2">
+                                {pkg.isFragile && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-bold border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">Fragile</span>}
+                                {pkg.isInsured && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">Assuré</span>}
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-              </div>
-            </motion.section>
-          )}
-        </AnimatePresence>
-      </motion.main>
-      <Footer />
+
+                {/* 4. TIMELINE DÉTAILLÉE (Optionnel: Toggle ou toujours affiché) */}
+                <div className="p-6 md:p-8 border-t border-slate-100 dark:border-slate-700">
+                     <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><FileText className="w-5 h-5 text-orange-500"/> Historique Détaillé</h3>
+                     <div className="space-y-4">
+                         {pkg.timeline.map((log, i) => (
+                             <div key={i} className="flex gap-4 items-start group">
+                                 <div className="flex flex-col items-center mt-1">
+                                     <div className={`w-3 h-3 rounded-full ${i === 0 ? 'bg-orange-500 ring-4 ring-orange-100 dark:ring-orange-900/30' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
+                                     {i < pkg.timeline.length - 1 && <div className="w-0.5 h-full bg-slate-100 dark:bg-slate-700 my-1 group-hover:bg-orange-200 dark:group-hover:bg-slate-600 transition-colors"></div>}
+                                 </div>
+                                 <div>
+                                     <div className="flex flex-wrap items-baseline gap-2">
+                                        <p className={`text-sm font-bold ${i===0 ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+                                            {log.label}
+                                        </p>
+                                        <span className="text-xs font-mono text-slate-400 dark:text-slate-500">{log.date}</span>
+                                     </div>
+                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{log.description}</p>
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                </div>
+
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+        </div>
+      </main>
     </div>
   );
-};
-
-export default TrackPackagePage;
+}

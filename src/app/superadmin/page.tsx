@@ -1,259 +1,189 @@
+// FICHIER: src/app/superadmin/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Loader2,
-  LayoutDashboard,
-  Users,
-  Map,
-  CircleDollarSign,
-  LogOut,
-  Moon,
-  Sun,
-  Menu,
-  X,
-} from 'lucide-react';
-import dynamic from 'next/dynamic';
-import { AnimatePresence, motion } from 'framer-motion';
+import { Loader2, LayoutDashboard, Users, Map, CircleDollarSign, LogOut, PackageCheck, Bell, Search, Settings, Shield, Activity } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { userService } from '@/services/userservice'; 
 
-// --- Type pour le profil, réutilisable ---
-interface SuperAdminProfile {
-  name: string;
-  email: string;
-  avatarUrl: string;
-}
+// Sous-composants
+import Overview from './Overview';
+import UserManagement from './UserManagement';
+import OperationsManagement from './OperationManagement';
+import FinanceManagement from './FinanceManagement';
+import MonitoringSystem from './Monitoring'; // Import du monitoring corrigé
 
-// --- Importations dynamiques pour les composants lourds ---
-const Overview = dynamic(() => import('./Overview'), {
-  ssr: false,
-  loading: () => <LoadingSpinner />,
-});
-
-const FinanceManagement = dynamic(() => import('./FinanceManagement'), {
-  ssr: false,
-  loading: () => <LoadingSpinner />,
-});
-
-const OperationsManagement = dynamic(() => import('./OperationManagement'), {
-  ssr: false,
-  loading: () => <LoadingSpinner />,
-});
-
-// Je crée un UserManagement placeholder pour l'exemple
-const UserManagement = () => (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-semibold">Gestion des Utilisateurs</h2>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">Le composant de gestion des utilisateurs sera affiché ici.</p>
-    </div>
-);
-
-
-// --- Composant de chargement réutilisable ---
-const LoadingSpinner = () => (
-  <div className="flex h-64 w-full items-center justify-center rounded-lg bg-white dark:bg-gray-800 shadow-lg">
-    <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-  </div>
-);
-
-// --- Définition des onglets pour éviter la répétition ---
 const TABS = {
-  overview: { label: 'Vue d\'ensemble', icon: LayoutDashboard },
-  users: { label: 'Utilisateurs', icon: Users },
-  operations: { label: 'Opérations', icon: Map },
-  finance: { label: 'Finances', icon: CircleDollarSign },
+  overview: { label: "Vue d'ensemble", icon: LayoutDashboard, comp: Overview },
+  users: { label: 'Gestion Utilisateurs', icon: Users, comp: UserManagement },
+  operations: { label: 'Opérations Colis', icon: Map, comp: OperationsManagement },
+  finance: { label: 'Finances & Revenus', icon: CircleDollarSign, comp: FinanceManagement},
+  system: { label: 'Monitoring Système', icon: Activity, comp: MonitoringSystem },
 };
-type TabId = keyof typeof TABS;
 
-
-// =================================================================
-// SIDEBAR COMPONENT
-// =================================================================
-const Sidebar = ({
-  activeTab,
-  setActiveTab,
-  profile,
-  isOpen,
-  setIsOpen,
-}: {
-  activeTab: TabId;
-  setActiveTab: (tab: TabId) => void;
-  profile: SuperAdminProfile;
-  isOpen: boolean;
-  setIsOpen: (isOpen: boolean) => void;
-}) => {
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    // Logique de déconnexion ici (ex: await supabase.auth.signOut())
-    console.log('Déconnexion...');
-    router.push('/login');
-  };
+export default function SuperAdminDashboard() {
+  const [activeTab, setActiveTab] = useState<keyof typeof TABS>('overview');
+  const [isLoadingCheck, setIsLoadingCheck] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userEmailDisplay, setUserEmailDisplay] = useState('Admin'); // Stocker l'email pour l'affichage
   
-  const NavLink = ({ tabId, children }: { tabId: TabId; children: React.ReactNode }) => {
-    const isActive = activeTab === tabId;
-    return (
-        <button
-            onClick={() => setActiveTab(tabId)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 ease-in-out ${
-            isActive
-                ? 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white'
-            }`}
-        >
-            {children}
-        </button>
-    );
-  };
-
-  return (
-    <>
-      {/* Overlay pour mobile */}
-      {isOpen && (
-        <div 
-          onClick={() => setIsOpen(false)}
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
-        ></div>
-      )}
-    
-      <aside
-        className={`fixed top-0 left-0 h-full z-40 w-64 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-r border-gray-200 dark:border-gray-700 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-            isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <span className="text-xl font-bold text-orange-500">PicknDrop</span>
-             <button onClick={() => setIsOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-800 dark:hover:text-white">
-                <X size={20}/>
-             </button>
-        </div>
-
-        <div className="p-4 flex items-center space-x-3 border-b border-gray-200 dark:border-gray-700">
-          <img
-            src={profile.avatarUrl}
-            alt="Avatar"
-            className="w-12 h-12 rounded-full border-2 border-orange-500"
-          />
-          <div>
-            <p className="font-semibold text-gray-900 dark:text-white">{profile.name}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{profile.email}</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2">
-          {Object.entries(TABS).map(([key, { label, icon: Icon }]) => (
-             <NavLink key={key} tabId={key as TabId}>
-                <Icon className="w-5 h-5" />
-                <span>{label}</span>
-             </NavLink>
-          ))}
-        </nav>
-        
-        <div className="p-4 mt-auto border-t border-gray-200 dark:border-gray-700">
-            <button 
-             onClick={handleLogout}
-             className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200">
-                <LogOut className="w-5 h-5"/>
-                <span>Déconnexion</span>
-            </button>
-        </div>
-      </aside>
-    </>
-  );
-};
-
-
-// =================================================================
-// PAGE HEADER COMPONENT
-// =================================================================
-const PageHeader = ({ title, icon: Icon, onMenuClick }: { title: string; icon: React.ElementType, onMenuClick: () => void; }) => {
-  return (
-    <div className="flex items-center justify-between mb-8">
-       <div className="flex items-center space-x-3">
-         <Icon className="w-8 h-8 text-orange-500" />
-         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-           {title}
-         </h1>
-       </div>
-       <button onClick={onMenuClick} className="lg:hidden p-2 rounded-md text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700">
-           <Menu size={24}/>
-       </button>
-    </div>
-  );
-}
-
-
-// =================================================================
-// MAIN DASHBOARD PAGE
-// =================================================================
-export default function SuperAdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [isLoading, setIsLoading] = useState(true);
-  const [profile, setProfile] = useState<SuperAdminProfile | null>(null);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
+  const { user: authUser, isAuthenticated, logout, isLoading: isAuthLoading } = useAuth();
 
   useEffect(() => {
-    // Simuler un appel API pour récupérer le profil
-    setTimeout(() => {
-        setProfile({
-            name: 'Super Admin',
-            email: 'admin@pickndrop.com',
-            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${Math.random()}`
-        });
-        setIsLoading(false);
-    }, 500);
-  }, []);
-  
-  // Fonction pour afficher le contenu en fonction de l'onglet actif
-  const renderContent = () => {
-    const components: Record<TabId, React.ReactNode> = {
-      overview: <Overview />,
-      users: <UserManagement />,
-      operations: <OperationsManagement />,
-      finance: <FinanceManagement />,
-    };
-    return components[activeTab] || <Overview />;
-  };
+    const verifyAdminAccess = async () => {
+      if (isAuthLoading) return;
 
-  if (isLoading || !profile) {
+      if (!isAuthenticated || !authUser || !authUser.id) {
+        console.log("SuperAdmin: Non authentifié ou ID manquant -> Login");
+        router.push('/login');
+        return;
+      }
+
+      try {
+        // --- MODIFICATION ICI ---
+        // On utilise getProfileById(id) au lieu de getMyProfile()
+        let profile = null;
+        try {
+           console.log("SuperAdmin: Vérification via ID:", authUser.id);
+           profile = await userService.getProfileById(authUser.id);
+        } catch(e) {
+           console.warn("Erreur récupération profil par ID:", e);
+        }
+        // -----------------------
+
+        // Fallback sur le token/authContext si l'API user fail
+        const roleToCheck = (profile?.account_type || authUser.accountType || '').toUpperCase();
+        
+        console.log("SuperAdmin: Rôle détecté:", roleToCheck);
+
+        if (roleToCheck === 'ADMIN' || roleToCheck === 'SUPERADMIN') {
+          setIsAdmin(true);
+          setUserEmailDisplay(profile?.email || authUser.email);
+        } else {
+          alert("⛔ Accès refusé. Cet espace est réservé aux administrateurs.");
+          router.push('/home'); 
+          return;
+        }
+
+      } catch (error) {
+        console.error("Erreur critique auth admin:", error);
+        router.push('/login');
+      } finally {
+        setIsLoadingCheck(false);
+      }
+    };
+
+    verifyAdminAccess();
+  }, [isAuthenticated, isAuthLoading, authUser, router]);
+
+
+  if (isAuthLoading || isLoadingCheck) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center transition-colors duration-300">
-        <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
+         <Loader2 className="animate-spin h-12 w-12 text-orange-500 mb-4" />
+         <p className="text-gray-500">Chargement de l'espace Admin...</p>
       </div>
     );
   }
 
+  if (!isAdmin) return null; 
+
+  const ActiveComponent = TABS[activeTab].comp;
+
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        profile={profile}
-        isOpen={isSidebarOpen}
-        setIsOpen={setSidebarOpen}
-      />
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+      
+      {/* --- SIDEBAR --- */}
+      <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out shadow-sm z-30">
+        {/* Logo Zone */}
+        <div className="h-20 flex items-center px-6 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => router.push('/home')}>
+             <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                <PackageCheck className="w-5 h-5"/>
+             </div>
+             <div>
+                 <h1 className="font-bold text-xl text-slate-900 dark:text-white leading-tight">PicknDrop</h1>
+                 <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded uppercase tracking-wider">
+                    Admin
+                 </span>
+             </div>
+          </div>
+        </div>
 
-      <main className="lg:ml-64 p-4 sm:p-6 lg:p-8">
-        <PageHeader 
-          title={TABS[activeTab].label}
-          icon={TABS[activeTab].icon}
-          onMenuClick={() => setSidebarOpen(true)}
-        />
-        
-        {/* AnimatePresence gère les animations d'entrée/sortie */}
-        <AnimatePresence mode="wait">
-           <motion.div
-             key={activeTab} // La clé est essentielle pour qu'AnimatePresence détecte le changement
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             exit={{ opacity: 0, y: -20 }}
-             transition={{ duration: 0.3 }}
+        {/* Menu Items */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+           {Object.entries(TABS).map(([key, tab]) => {
+             const isActive = activeTab === key;
+             const Icon = tab.icon;
+             return (
+               <button
+                 key={key}
+                 onClick={() => setActiveTab(key as any)}
+                 className={`relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-300
+                   ${isActive 
+                     ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md' 
+                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                   }
+                 `}
+               >
+                 <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                 <span>{tab.label}</span>
+               </button>
+             );
+           })}
+        </nav>
+
+        {/* User Footer */}
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+           <div className="flex items-center gap-3 mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+               <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">
+                   {userEmailDisplay?.charAt(0).toUpperCase() || 'A'}
+               </div>
+               <div className="flex-1 min-w-0">
+                   <p className="text-sm font-bold truncate">{userEmailDisplay}</p>
+                   <p className="text-xs text-slate-500">Super Admin</p>
+               </div>
+           </div>
+           <button 
+             onClick={logout} 
+             className="w-full flex items-center justify-center gap-2 text-red-500 hover:bg-red-50 py-2 rounded-xl text-sm font-bold transition-all"
            >
-             {renderContent()}
-           </motion.div>
-        </AnimatePresence>
+             <LogOut className="w-4 h-4" /> Déconnexion
+           </button>
+        </div>
+      </aside>
 
+      {/* --- MAIN CONTENT --- */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+         {/* Header Navbar */}
+         <header className="h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 flex items-center justify-between px-8 shadow-sm">
+             <div className="flex items-center gap-2 text-xs text-slate-500">
+                 <Shield className="w-4 h-4 text-orange-500" />
+                 <span className="font-semibold">Administration</span> / <span>{TABS[activeTab].label}</span>
+             </div>
+             
+             <div className="flex items-center gap-4">
+                 {/* Placeholder Search */}
+                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg">
+                    <Search className="w-4 h-4 text-slate-400" />
+                    <input type="text" placeholder="Recherche rapide..." className="bg-transparent text-sm outline-none w-48" />
+                 </div>
+                 <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+                 <button className="relative p-2 hover:bg-slate-100 rounded-full"><Bell className="w-5 h-5 text-slate-600"/><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span></button>
+                 <button className="p-2 hover:bg-slate-100 rounded-full"><Settings className="w-5 h-5 text-slate-600"/></button>
+             </div>
+         </header>
+
+         {/* Content Scroll */}
+         <div className="flex-1 overflow-auto p-8 custom-scrollbar relative bg-slate-50 dark:bg-gray-900">
+             <div className="max-w-[1600px] mx-auto animate-in fade-in duration-500">
+                <ActiveComponent />
+             </div>
+         </div>
       </main>
+
     </div>
   );
 }

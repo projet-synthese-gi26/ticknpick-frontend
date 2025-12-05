@@ -22,7 +22,7 @@ import {
 
 // --- Interface de Données Corrigée ---
 interface PackageData {
-  photo: string | null;
+  photo: File | null;
   designation: string;
   description: string;
   weight: string;
@@ -145,7 +145,7 @@ export default function PackageRegistration({ initialData = {}, onContinue, onBa
   const [volume, setVolume] = useState(0);
   const [isFormValid, setIsFormValid] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
-
+  const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photo || null); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -239,6 +239,9 @@ export default function PackageRegistration({ initialData = {}, onContinue, onBa
         alert('Le fichier est trop volumineux. Veuillez choisir une image de moins de 5MB.');
         return;
       }
+      
+      handleInputChange('photo', file); // On stocke l'objet Fichier
+      setPhotoPreview(URL.createObjectURL(file)); // On crée une URL locale pour l'aperçu
       
       const reader = new FileReader();
       reader.onload = (e) => {

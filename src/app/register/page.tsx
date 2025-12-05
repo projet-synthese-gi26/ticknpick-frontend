@@ -5,7 +5,9 @@ import { User, Briefcase, Clock, Building, ChevronLeft, Check, Mail, Lock, Phone
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-
+// ON IMPORTE NOTRE SERVICE ET NOS TYPES
+import { authService } from '@/services/authService';
+import { UserRegistrationRequest, BusinessActorRegistrationRequest, BusinessActorType } from '@/types/api';
 // Types pour améliorer la sécurité des types
 interface City {
   name: string;
@@ -71,7 +73,7 @@ const Stepper = ({ currentStep, steps }: { currentStep: number, steps: any[] }) 
 
 const InputField = ({ id, label, type = 'text', value, onChange, placeholder, required = true, icon: Icon, options = null }: any) => (
   <div className="space-y-1">
-    <label htmlFor={id} className="block text-sm font-medium text-gray-700">{label}</label>
+    <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
     <div className="relative">
       {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />}
       {options ? (
@@ -88,7 +90,7 @@ const InputField = ({ id, label, type = 'text', value, onChange, placeholder, re
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck="false"
-          className={`w-full ${Icon ? 'pl-10' : 'pl-3'} pr-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-500 transition-all text-sm`} 
+          className={`w-full ${Icon ? 'pl-10' : 'pl-3'} pr-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:border-black focus:border-orange-500 transition-all text-sm`} 
         />
       )}
     </div>
@@ -374,6 +376,7 @@ export default function RegisterProPage() {
     driving_license_front: null,
     driving_license_back: null,
   });
+  const [highlightedRole, setHighlightedRole] = useState<string | null>(null);
   const [pageMode, setPageMode] = useState<'register' | 'upgrade'>('register');
   const [accountType, setAccountType] = useState<'CLIENT' | 'FREELANCE' | 'AGENCY' | 'LIVREUR' | null>(null);
   const [formData, setFormData] = useState({
@@ -557,6 +560,22 @@ const daysOfWeek = [
       }
     }
   }, []); 
+
+  useEffect(() => {
+    // Lire l'intention de l'utilisateur depuis le portail
+    if (typeof window !== 'undefined') {
+        const preselect = localStorage.getItem('preselect_role_login');
+        if (preselect) {
+            setHighlightedRole(preselect);
+            
+            // On nettoie après 3 secondes pour arrêter le clignotement
+            setTimeout(() => {
+                setHighlightedRole(null);
+                localStorage.removeItem('preselect_role_login');
+            }, 3000);
+        }
+    }
+}, []);
 
   // Définir les étapes selon le type de compte
   const getStepsForAccountType = (type: string | null) => {
@@ -972,250 +991,190 @@ const ScheduleModal = ({
     setCurrentStep(2);
   };
 
+  // --- CORRECTION MAJEURE ICI ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    
-    // Si c'est une mise à niveau, on appelle le RPC
-    if (pageMode === 'upgrade') {
-      await handleUpgradeSubmit();
-    } else {
-      // Sinon, on exécute la logique d'inscription normale
-      await handleRegularSignUp(e);
-    }
-  };
-
-  const handleRegularSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+    setIsLoading(true);
     setError(null);
     setSuccess(null);
 
-    // Validations
     if (formData.password !== formData.confirmPassword) {
-      return setError("Les mots de passe ne correspondent pas.");
-    }
-    if (formData.password.length < 6) {
-      return setError("Le mot de passe doit faire au moins 6 caractères.");
+      setError("Les mots de passe ne correspondent pas.");
+      setIsLoading(false);
+      return;
     }
     if (!accountType) {
-      return setError("Veuillez sélectionner un type de compte.");
+        setError("Veuillez sélectionner un type de compte.");
+        setIsLoading(false);
+        return;
     }
-    if (!formData.manager_name.trim()) {
-      return setError("Le nom du gérant est obligatoire.");
-    }
-    if (!formData.phone_number.trim()) {
-      return setError("Le numéro de téléphone est obligatoire.");
-    }
-
-    setIsLoading(true);
 
     try {
-      console.log('🔍 Début de l\'inscription...');
-      console.log('📧 Email:', formData.email.trim().toLowerCase());
-      console.log('🏢 Type compte:', accountType);
+        // CAS 1: INSCRIPTION CLIENT SIMPLE
+        if (accountType === 'CLIENT') {
+            const clientData: UserRegistrationRequest = {
+                name: formData.manager_name,
+                email: formData.email,
+                password: formData.password,
+                phoneNumber: formData.phone_number,
+                accountType: 'CLIENT',
+                // Données d'adresse personnelle
+                city: formData.city,
+                region: formData.region,
+                country: formData.country,
+                homeAddress: formData.home_address,
+                homeAddressLocality: formData.home_address_locality
+            };
+            console.log("Envoi payload Client:", clientData);
+            await authService.registerClient(clientData);
 
-      // Vérifiez d'abord la session actuelle
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log('📱 Session actuelle:', sessionData.session?.user?.email || 'Aucune session');
-
-      // Si une session existe déjà, la fermer
-      if (sessionData.session) {
-        await supabase.auth.signOut();
-        console.log('🚪 Session précédente fermée');
-      }
-
-            const emailPath = formData.email.trim().toLowerCase().replace(/[^a-z0-9]/gi, '_');
-      const uploadTimestamp = Date.now();
-      
-      const fileUrls: Record<string, any> = {};
-
-      if (formData.identity_photo) {
-        const path = `${emailPath}/${uploadTimestamp}_identity_photo.jpg`;
-        fileUrls.identity_photo_url = await uploadFile(formData.identity_photo, path);
-      }
-      if (formData.id_card_front) {
-        const path = `${emailPath}/${uploadTimestamp}_id_card_front.jpg`;
-        fileUrls.id_card_front_url = await uploadFile(formData.id_card_front, path);
-      }
-      if (formData.id_card_back) {
-        const path = `${emailPath}/${uploadTimestamp}_id_card_back.jpg`;
-        fileUrls.id_card_back_url = await uploadFile(formData.id_card_back, path);
-      }
-      if (formData.niu_document) {
-        const path = `${emailPath}/${uploadTimestamp}_niu_document.jpg`;
-        fileUrls.niu_document_url = await uploadFile(formData.niu_document, path);
-      }
-      if (formData.relay_point_photo) {
-        const path = `${emailPath}/${uploadTimestamp}_relay_photo.jpg`;
-        fileUrls.relay_point_photo_url = await uploadFile(formData.relay_point_photo, path);
-      }
-      if (formData.vehicle_photo_front) {
-        const path = `${emailPath}/${uploadTimestamp}_vehicle_front.jpg`;
-        fileUrls.vehicle_photo_front_url = await uploadFile(formData.vehicle_photo_front, path);
-      }
-      if (formData.vehicle_photo_back) {
-        const path = `${emailPath}/${uploadTimestamp}_vehicle_back.jpg`;
-        fileUrls.vehicle_photo_back_url = await uploadFile(formData.vehicle_photo_back, path);
-      }
-      
-      // Construire l'objet `id_card_urls` et `vehicle_photo_urls`
-      if (fileUrls.id_card_front_url || fileUrls.id_card_back_url) {
-        fileUrls.id_card_urls = {
-          front: fileUrls.id_card_front_url || null,
-          back: fileUrls.id_card_back_url || null,
-        };
-      }
-       if (fileUrls.vehicle_photo_front_url || fileUrls.vehicle_photo_back_url) {
-        fileUrls.vehicle_photo_urls = {
-          front: fileUrls.vehicle_photo_front_url || null,
-          back: fileUrls.vehicle_photo_back_url || null,
-        };
-      }
-
-
-      // Préparer les métadonnées pour le trigger
-      const userMetadata = {
-        account_type: accountType,
-        manager_name: formData.manager_name.trim(),
-        phone_number: formData.phone_number.trim(),
-        birth_date: formData.birth_date || null,
-        home_address: formData.home_address?.trim() || null,
-        id_card_number: formData.id_card_number?.trim() || null,
-        relay_point_name: formData.relay_point_name?.trim() || null,
-        relay_point_address: formData.relay_point_address?.trim() || null,
-        opening_hours: formData.opening_hours?.trim() || null,
-        storage_capacity: formData.storage_capacity || 'Petit',
-                // --- Ajout des URL des fichiers ---
-        identity_photo_url: fileUrls.identity_photo_url || null,
-        id_card_urls: fileUrls.id_card_urls || null,
-        niu_document_url: fileUrls.niu_document_url || null,
-        relay_point_photo_url: fileUrls.relay_point_photo_url || null,
-        vehicle_photo_urls: fileUrls.vehicle_photo_urls || null
-      };
-
-      console.log('📦 Métadonnées pour le trigger:', userMetadata);
-
-      // Inscription avec métadonnées - le trigger s'occupera automatiquement de créer le profil
-      console.log('🚀 Inscription avec trigger automatique...');
-      
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
-        options: {
-          data: userMetadata
-        }
-      });
-
-      console.log('✅ Réponse inscription:', { data, error: signUpError });
-
-      if (signUpError) {
-        console.error('❌ Erreur signUp:', signUpError);
+        } 
+// CAS 2: INSCRIPTION BUSINESS (FREELANCE, AGENCY, LIVREUR)
+    else { 
+        let businessActorType: BusinessActorType;
+        let mappedBusinessName = "";
+        let mappedAddress = "";
+        let mappedLocality = "";
         
-        if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
-          throw new Error("Cette adresse email est déjà utilisée.");
+        // 1. MAPPING DES TYPES (Frontend -> Backend)
+        // C'est ici que nous traduisons le choix visuel en donnée technique API
+        switch(accountType) {
+            case 'FREELANCE': 
+                businessActorType = 'FREELANCE'; 
+                break;
+            case 'AGENCY': 
+                // Important: Le backend attend souvent AGENCY_OWNER lors de l'inscription d'une agence
+                businessActorType = 'AGENCY_OWNER'; 
+                break;
+            case 'LIVREUR': 
+                // Le backend attend DELIVERER
+                businessActorType = 'DELIVERER'; 
+                break;
+            default: 
+                throw new Error(`Type de compte '${accountType}' non reconnu par le système.`);
         }
-        if (signUpError.message.includes('Invalid email')) {
-          throw new Error("Format d'email invalide.");
+
+        // 2. MAPPING DES NOMS ET ADRESSES BUSINESS
+        if (businessActorType === 'DELIVERER') {
+            // Pour un livreur, on utilise son nom ou un nom généré s'il n'a pas de nom commercial
+            mappedBusinessName = formData.manager_name || `Livreur ${formData.email}`; 
+            // Adresse par défaut = Domicile
+            mappedAddress = formData.home_address;
+            mappedLocality = formData.home_address_locality;
+        } else {
+            // Pour FREELANCE (Point Relais) et AGENCY (AGENCY_OWNER)
+            // Le "Nom Business" est le nom du point relais/agence entré à l'étape 4
+            mappedBusinessName = formData.relay_point_name;
+            mappedAddress = formData.relay_point_address;
+            mappedLocality = formData.relay_point_locality;
+
+            // Vérification de sécurité
+            if (!mappedBusinessName) {
+                setError("Le nom du Point Relais ou de l'Agence est requis.");
+                setIsLoading(false);
+                return;
+            }
         }
-        if (signUpError.message.includes('Password should be at least 6 characters')) {
-          throw new Error("Le mot de passe doit faire au moins 6 caractères.");
+
+        // 3. SAUVEGARDE TEMPORAIRE (Cache pour création ultérieure du RelayPoint en BDD si besoin)
+        if (accountType === 'FREELANCE' || accountType === 'AGENCY') {
+             localStorage.setItem('registration_data_cache', JSON.stringify({
+                 relay_point_name: formData.relay_point_name,
+                 relay_point_address: formData.relay_point_address,
+                 relay_point_locality: formData.relay_point_locality,
+                 opening_hours: formData.opening_hours,
+                 storage_capacity: formData.storage_capacity
+             }));
         }
+
+        // 4. CONSTRUCTION DU PAYLOAD API
+        // On s'assure que les clés correspondent exactement au DTO du backend Java
+        const businessData: BusinessActorRegistrationRequest = {
+            // -- Données Utilisateur --
+            name: formData.manager_name,
+            email: formData.email,
+            password: formData.password,
+            phoneNumber: formData.phone_number,
+            
+            city: formData.city,
+            region: formData.region,
+            country: formData.country,
+            homeAddress: formData.home_address,
+            
+            // -- Configuration Business --
+            accountType: 'BUSINESS_ACTOR', // Constante requise par le polymorphisme
+            businessActorType: businessActorType, // La valeur mappée (ex: DELIVERER)
+            
+            // -- Données Entité Business --
+            businessName: mappedBusinessName,
+            businessAddress: mappedAddress,
+            businessLocality: mappedLocality,
+            town: formData.city, 
+            
+            // -- Documents Légaux --
+            cniNumber: formData.id_card_number,
+            niu: formData.niu
+        };
         
-        throw new Error(signUpError.message);
-      }
-
-      if (!data.user) {
-        throw new Error("Aucun utilisateur créé.");
-      }
-
-      console.log('🎉 Utilisateur créé:', data.user.email, 'ID:', data.user.id);
-      console.log('🔧 Le trigger Supabase va créer le profil automatiquement avec les métadonnées');
-
-      setSuccess("Inscription réussie ! Vérifiez votre boîte mail pour confirmer votre compte.");
-      
-      setTimeout(() => {
-        router.push('/');
-      }, 300);
-
-    } catch (err: any) {
-      console.error('💥 Erreur inscription:', err);
-      setError(err.message || 'Une erreur inattendue est survenue lors de l\'inscription.');
-    } finally {
-      setIsLoading(false);
+        console.log("📤 Envoi Inscription Business :", businessData);
+        
+        // 5. APPEL DU SERVICE
+        await authService.registerBusinessActor(businessData);
     }
-  };
 
-  const handleUpgradeSubmit = async () => {
-    console.log("Lancement de la mise à niveau...");
-    setIsLoading(true);
-    
-    try {
-      // Préparer les arguments pour la fonction RPC
-      const rpcParams = {
-        p_relay_point_name: formData.relay_point_name,
-        p_relay_point_address: formData.relay_point_address,
-        p_opening_hours: formData.opening_hours,
-        p_storage_capacity: formData.storage_capacity,
-        p_home_address_locality: formData.home_address_locality,
-        p_niu: formData.niu,
-        // Ajoutez tous les autres arguments que votre fonction RPC attend
-      };
+        // ... Gestion du succès (inchangé) ...
+        setSuccess("Inscription réussie ! Vous allez être redirigé vers la page de connexion.");
+        
+        // Petit nettoyage si nécessaire
+        localStorage.removeItem('registration_prefill');
+        localStorage.removeItem('temp_sender_info_for_registration');
+        localStorage.removeItem('upgrade_account_request');
 
-      console.log("Appel du RPC 'upgrade_client_to_freelance' avec:", rpcParams);
-
-      const { error: rpcError } = await supabase.rpc('upgrade_client_to_freelance', rpcParams);
-
-      if (rpcError) {
-        console.error("Erreur RPC:", rpcError);
-        throw rpcError;
-      }
-      
-      setSuccess("Votre compte a été mis à niveau avec succès ! Redirection en cours...");
-      
-      // Attendre un peu, puis rediriger vers le dashboard
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 3000);
+        setTimeout(() => {
+            router.push('/login');
+        }, 2000);
 
     } catch (err: any) {
-        setError(err.message || "Une erreur est survenue lors de la mise à niveau.");
+        console.error("Erreur d'inscription:", err);
+        // Affichage plus détaillé de l'erreur pour le débogage
+        setError(err.message || typeof err === 'string' ? err : 'Une erreur est survenue lors de l\'inscription.');
     } finally {
         setIsLoading(false);
     }
   };
 
-const handleScheduleSave = () => {
-  // Générer le texte d'horaires et mettre à jour formData
-  if (selectedDays.length > 0) {
-    const scheduleGroups: Record<string, string[]> = {};
-    
-    selectedDays.forEach(dayKey => {
-      const schedule = daySchedules[dayKey];
-      const timeRange = `${schedule.start}-${schedule.end}`;
-      if (!scheduleGroups[timeRange]) {
-        scheduleGroups[timeRange] = [];
-      }
-      const dayLabel = daysOfWeek.find(d => d.key === dayKey)?.label || dayKey;
-      scheduleGroups[timeRange].push(dayLabel);
-    });
-    
-    const parts = Object.entries(scheduleGroups).map(([timeRange, days]) => {
-      const daysList = days.join(', ');
-      return `${daysList}: ${timeRange}`;
-    });
-    
-    const scheduleText = parts.join(' | ');
-    
-    setFormData(prev => ({ ...prev, opening_hours: scheduleText }));
-  }
-  setShowScheduleModal(false);
-};
+
+  const handleScheduleSave = () => {
+    // Générer le texte d'horaires et mettre à jour formData
+    if (selectedDays.length > 0) {
+      const scheduleGroups: Record<string, string[]> = {};
+      
+      selectedDays.forEach(dayKey => {
+        const schedule = daySchedules[dayKey];
+        const timeRange = `${schedule.start}-${schedule.end}`;
+        if (!scheduleGroups[timeRange]) {
+          scheduleGroups[timeRange] = [];
+        }
+        const dayLabel = daysOfWeek.find(d => d.key === dayKey)?.label || dayKey;
+        scheduleGroups[timeRange].push(dayLabel);
+      });
+      
+      const parts = Object.entries(scheduleGroups).map(([timeRange, days]) => {
+        const daysList = days.join(', ');
+        return `${daysList}: ${timeRange}`;
+      });
+      
+      const scheduleText = parts.join(' | ');
+      
+      setFormData(prev => ({ ...prev, opening_hours: scheduleText }));
+    }
+    setShowScheduleModal(false);
+  };
 
 // Fonction renderStep mise à jour
 const renderStep = () => {
   switch(currentStep) {
-    case 1: return (
+case 1: return (
       <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
         <h3 className="text-xl font-bold text-center mb-6">Quel type de compte souhaitez-vous créer ?</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1224,17 +1183,26 @@ const renderStep = () => {
             { type: 'FREELANCE', icon: <User className="w-8 h-8" />, title: "Freelance", desc: "Individu ou petit commerçant" },
             { type: 'AGENCY', icon: <Building className="w-8 h-8" />, title: "Agence", desc: "Entreprise ou structure" },
             { type: 'LIVREUR', icon: <Truck className="w-8 h-8" />, title: "Livreur", desc: "Je souhaite livrer des colis" }
-          ].map((item) => (
-            <button 
-              key={item.type} 
-              onClick={() => handleAccountTypeSelection(item.type as any)} 
-              className="p-6 border-2 border-gray-200 rounded-xl text-center space-y-3 hover:border-orange-500 hover:bg-orange-50 hover:shadow-md transform hover:-translate-y-1 transition-all duration-200"
-            >
-              <div className="text-orange-500 inline-block">{item.icon}</div>
-              <h4 className="text-lg font-semibold text-gray-800">{item.title}</h4>
-              <p className="text-sm text-gray-600">{item.desc}</p>
-            </button>
-          ))}
+          ].map((item) => {
+            const isHighlighted = highlightedRole === item.type;
+
+            // Ajout du RETURN explicite ici
+            return (
+              <button 
+                key={item.type} 
+                onClick={() => handleAccountTypeSelection(item.type as any)} 
+                className={`p-6 border-2 rounded-xl text-center space-y-3 transition-all duration-300
+                  ${isHighlighted 
+                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 ring-4 ring-orange-500/30 animate-pulse shadow-2xl transform scale-105' 
+                      : 'border-gray-200 dark:border-black bg-white dark:bg-transparent hover:border-orange-500 hover:bg-orange-50 dark:hover:border-orange-700 dark:hover:bg-gray-900 hover:shadow-md hover:-translate-y-1'
+                   }`}
+              >
+                <div className="text-orange-500 dark:text-orange-600 inline-block">{item.icon}</div>
+                <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{item.title}</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{item.desc}</p>
+              </button>
+            );
+          })}
         </div>
       </motion.div>
     );
@@ -1582,7 +1550,7 @@ const renderStep = () => {
       >
         <h3 className="text-xl font-bold text-center mb-4">Vérification et Soumission</h3>
         
-        <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg space-y-2 text-sm">
+        <div className="bg-orange-50 dark:bg-black dark:text-gray-300 dark:border-gray-800 border border-orange-200 p-4 rounded-lg space-y-2 text-sm">
           <p><strong>Type de compte :</strong> {accountType}</p>
           <p><strong>Nom :</strong> {formData.manager_name}</p>
           <p><strong>Email :</strong> {formData.email}</p>
@@ -1609,7 +1577,7 @@ const renderStep = () => {
               required 
               className="mt-1 h-5 w-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 shrink-0" 
             />
-            <label htmlFor="terms" className="text-xs text-gray-700">
+            <label htmlFor="terms" className="text-xs dark:text-gray-300 text-gray-700">
               J'ai lu et j'accepte les{' '}
               <Link href="/policy/terms-of-use" target="_blank" className="font-semibold text-orange-600 hover:underline">
                 Conditions Générales d'Utilisation
@@ -1623,7 +1591,7 @@ const renderStep = () => {
               required 
               className="mt-1 h-5 w-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 shrink-0"
             />
-            <label htmlFor="privacy" className="text-xs text-gray-700">
+            <label htmlFor="privacy" className="text-xs dark:text-gray-300 text-gray-700">
               Je comprends comment mes données sont utilisées conformément à la{' '}
               <Link href="/policy/privacy-policy" target="_blank" className="font-semibold text-orange-600 hover:underline">
                 Politique de Confidentialité
@@ -1642,9 +1610,9 @@ const renderStep = () => {
   const maxStep = accountType === 'CLIENT' ? 3 : 5;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-amber-50 to-orange-50 flex items-center justify-center p-4">
-      <div className="max-w-xl w-full">
-        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6">
+    <div className="min-h-screen bg-orange-50 dark:bg-gray-800 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full">
+        <div className="bg-white/90 dark:bg-gray-900 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 dark:border-black dark:border-2 p-6">
           <Stepper currentStep={currentStep} steps={steps} />
 
           {error && (
@@ -1664,7 +1632,7 @@ const renderStep = () => {
 
           {currentStep > 1 && (
             <div className="flex justify-between items-center pt-6 border-t border-gray-100 mt-6">
-              <button type="button" onClick={handlePrevStep} className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors">
+              <button type="button" onClick={handlePrevStep} className="inline-flex items-center  dark:bg-black  dark:text-gray-300 dark:border-gray-800 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors">
                 <ChevronLeft className="w-4 h-4 mr-1" /> Précédent
               </button>
               {(currentStep === maxStep || (accountType === 'CLIENT' && currentStep === 3)) ? (

@@ -64,7 +64,7 @@ export default function NavbarHome() {
               <div className="bg-orange-500 dark:bg-orange-600 p-2 rounded-lg shadow-md">
                 <Package className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <span className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
+              <span className="text-xl sm:text-2xl font-bold text-gray-300 dark:text-gray-100">
                 PicknDrop
               </span>
             </Link>
@@ -77,7 +77,7 @@ export default function NavbarHome() {
                   <Link 
                     key={item.id}
                     href={item.href} 
-                    className="flex items-center gap-2 text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
+                    className="flex items-center gap-2 text-gray-300 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
                   >
                     <IconComponent className="w-4 h-4 group-hover:scale-110 transition-transform" />
                     <span className="hidden xl:inline">{item.label}</span>
@@ -88,7 +88,7 @@ export default function NavbarHome() {
               {/* Help Link */}
               <Link 
                 href="#how-it-works" 
-                className="flex items-center gap-2 text-gray-600 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
+                className="flex items-center gap-2 text-gray-300 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
               >
                 <HelpCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="hidden xl:inline">Aide</span>

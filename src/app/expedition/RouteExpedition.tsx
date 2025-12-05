@@ -18,6 +18,8 @@ import {
 import dynamic from 'next/dynamic';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { supabase } from '@/lib/supabase';
+// IMPORT DU SERVICE (au lieu de supabase directement, pour respecter l'architecture)
+import { relayPointService, RelayPoint } from '@/services/relayPointService';
 
 // Réutiliser vos données de points relais
 import yaoundePointsRelais, { PointRelais, YAOUNDE_CENTER } from '../emit-package/RelaisData';
@@ -35,8 +37,9 @@ const MapComponent = dynamic(() => import('../emit-package/MapComponent'), {
 });
 
 interface RouteData {
-  departurePointId: number | null;
-  arrivalPointId: number | null;
+  // Modification : Les IDs sont maintenant des string (UUID)
+  departurePointId: string | null;
+  arrivalPointId: string | null;
   departurePointName: string;
   arrivalPointName: string;
   distanceKm: number;
@@ -70,7 +73,8 @@ const haversineDistance = ([lat1, lon1]: [number, number], [lat2, lon2]: [number
 
 export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectionStepProps) {
   const [selectionMode, setSelectionMode] = useState<'origin' | 'destination'>('origin');
-  const [allRelayPoints, setAllRelayPoints] = useState<PointRelais[]>([]);
+    const [allRelayPoints, setAllRelayPoints] = useState<RelayPoint[]>([]);
+  const [filteredPoints, setFilteredPoints] = useState<RelayPoint[]>([]);
   const [routeData, setRouteData] = useState<RouteData>({
     departurePointId: null,
     arrivalPointId: null,
@@ -82,83 +86,85 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [filteredPoints, setFilteredPoints] = useState<PointRelais[]>([]); 
   const [mapRef, setMapRef] = useState<any>(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null);
   
   // Ajout d'un flag pour éviter les re-renders multiples
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // --- CHANGEMENT N°3 : Remplacer l'ancien `useEffect` par un appel à Supabase ---
-  useEffect(() => {
-    const fetchRelayPoints = async () => {
-        setIsLoadingPoints(true);
-        const { data, error } = await supabase
-            .from('relay_points')
-            .select('*');
+  // YAOUNDE par défaut (si pas de données)
+  const DEFAULT_CENTER: [number, number] = [3.8480, 11.5021];
 
-        if (error) {
-            console.error("Erreur lors de la récupération des points relais:", error);
-            // Vous pourriez gérer l'erreur ici, par exemple en affichant un message.
-        } else {
-            setAllRelayPoints(data as PointRelais[]);
-            setFilteredPoints(data as PointRelais[]); // Initialise les points filtrés avec tous les points
-        }
+  // --- CHARGEMENT DES DONNÉES RÉELLES VIA L'API ---
+  useEffect(() => {
+    const fetchPoints = async () => {
+      setIsLoadingPoints(true);
+      try {
+        // Appel au backend pour récupérer les vrais UUIDs
+        const points = await relayPointService.getAllRelayPoints();
+        setAllRelayPoints(points);
+        setFilteredPoints(points);
+      } catch (error) {
+        console.error("Impossible de charger les points relais:", error);
+        // Gestion d'erreur basique : liste vide
+      } finally {
         setIsLoadingPoints(false);
+      }
     };
 
-    fetchRelayPoints();
-  }, []); // Le tableau de dépendances est vide pour n'exécuter qu'une seule fois au montage
+    fetchPoints();
+  }, []);
 
 
-  // Ajouter les marqueurs sur la carte
+  // --- FILTRAGE DE LA LISTE ---
+  useEffect(() => {
+    if (!searchQuery) {
+      setFilteredPoints(allRelayPoints);
+    } else {
+      const lowerQuery = searchQuery.toLowerCase();
+      const filtered = allRelayPoints.filter(p => 
+        p.relayPointName.toLowerCase().includes(lowerQuery) ||
+        p.relay_point_address.toLowerCase().includes(lowerQuery)
+      );
+      setFilteredPoints(filtered);
+    }
+  }, [searchQuery, allRelayPoints]);
+
+  // --- GESTION CARTE & MARQUEURS ---
   useEffect(() => {
     if (!mapRef || !isInitialized) return;
 
-    // Supprimer les anciens marqueurs et sources si ils existent
+    // Nettoyage
     try {
-      if (mapRef.getLayer('points-relais')) {
-        mapRef.removeLayer('points-relais');
-      }
-      if (mapRef.getLayer('points-relais-labels')) {
-        mapRef.removeLayer('points-relais-labels');
-      }
-      if (mapRef.getSource('points-relais')) {
-        mapRef.removeSource('points-relais');
-      }
-    } catch (error) {
-      console.warn('Erreur lors de la suppression des couches:', error);
-    }
+      if (mapRef.getLayer('points-relais')) mapRef.removeLayer('points-relais');
+      if (mapRef.getLayer('points-relais-labels')) mapRef.removeLayer('points-relais-labels');
+      if (mapRef.getSource('points-relais')) mapRef.removeSource('points-relais');
+    } catch (e) { console.warn('Nettoyage carte', e); }
 
-    // Créer les features GeoJSON pour tous les points
-    const features = yaoundePointsRelais.map(point => {
-      const status = getPointStatus(point);
+    // Création GeoJSON avec les vraies données
+    const features = allRelayPoints.map(point => {
+      // Utilisation des props définies dans RelayPoint (voir le service)
+      // latitude/longitude au lieu de lat/lng selon votre définition
       return {
         type: 'Feature',
         properties: {
-          id: point.id,
-          name: point.name,
-          quartier: point.quartier,
-          status: status
+          id: point.id, // UUID
+          name: point.relayPointName,
+          status: getPointStatus(point.id)
         },
         geometry: {
           type: 'Point',
-          coordinates: [point.lng, point.lat]
+          coordinates: [point.longitude, point.latitude]
         }
       };
     });
 
     try {
-      // Ajouter la source des points
       mapRef.addSource('points-relais', {
         type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: features
-        }
+        data: { type: 'FeatureCollection', features }
       });
 
-      // Ajouter la couche des marqueurs
       mapRef.addLayer({
         id: 'points-relais',
         type: 'circle',
@@ -176,97 +182,92 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
             ['==', ['get', 'status'], 'destination'], '#10b981',
             '#6b7280'
           ],
-          'circle-stroke-width': [
-            'case',
-            ['==', ['get', 'status'], 'origin'], 3,
-            ['==', ['get', 'status'], 'destination'], 3,
-            2
-          ],
+          'circle-stroke-width': 2,
           'circle-stroke-color': '#ffffff'
         }
       });
 
-      // Ajouter les labels
-      mapRef.addLayer({
-        id: 'points-relais-labels',
-        type: 'symbol',
-        source: 'points-relais',
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Regular'],
-          'text-offset': [0, 2],
-          'text-anchor': 'top',
-          'text-size': 12
-        },
-        paint: {
-          'text-color': '#374151',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
-      });
-
-      // Gérer les clics sur les points
-    const handlePointClick = (e: any) => {
+      // Interaction
+      const handlePointClick = (e: any) => {
         const features = mapRef.queryRenderedFeatures(e.point, { layers: ['points-relais'] });
         if (features.length > 0) {
-            const pointId = features[0].properties.id;
-            const point = allRelayPoints.find(p => p.id === pointId); // Cherche dans les données de la DB
+            const pointId = features[0].properties.id; // UUID
+            const point = allRelayPoints.find(p => p.id === pointId);
             if (point) handlePointSelect(point);
         }
-    };
+      };
 
       mapRef.on('click', 'points-relais', handlePointClick);
+      mapRef.on('mouseenter', 'points-relais', () => mapRef.getCanvas().style.cursor = 'pointer');
+      mapRef.on('mouseleave', 'points-relais', () => mapRef.getCanvas().style.cursor = '');
 
-      // Changer le curseur sur hover
-      mapRef.on('mouseenter', 'points-relais', () => {
-        mapRef.getCanvas().style.cursor = 'pointer';
-      });
-
-      mapRef.on('mouseleave', 'points-relais', () => {
-        mapRef.getCanvas().style.cursor = '';
-      });
-
-      // Cleanup function
-      return () => {
-        try {
-          mapRef.off('click', 'points-relais', handlePointClick);
-          mapRef.off('mouseenter', 'points-relais');
-          mapRef.off('mouseleave', 'points-relais');
-        } catch (error) {
-          console.warn('Erreur lors du nettoyage des événements:', error);
-        }
-      };
     } catch (error) {
-      console.error('Erreur lors de l\'ajout des couches de la carte:', error);
+      console.error('Erreur carte:', error);
     }
-  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId, isInitialized, isLoadingPoints, allRelayPoints]);
+  }, [mapRef, isInitialized, allRelayPoints, routeData.departurePointId, routeData.arrivalPointId]);
 
-  // Dessiner l'itinéraire
+  // --- GESTION ITINÉRAIRE (inchangée dans la logique mais adaptée aux types) ---
   useEffect(() => {
-    if (!mapRef || !routeData.departurePointId || !routeData.arrivalPointId) {
-      // Supprimer l'itinéraire existant
-      try {
-        if (mapRef && mapRef.getLayer('route')) {
-          mapRef.removeLayer('route');
-        }
-        if (mapRef && mapRef.getSource('route')) {
-          mapRef.removeSource('route');
-        }
-      } catch (error) {
-        console.warn('Erreur lors de la suppression de la route:', error);
-      }
-      return;
-    }
+     if (!mapRef || !routeData.departurePointId || !routeData.arrivalPointId) {
+        // Nettoyage route si incomplète
+        try {
+            if (mapRef.getLayer('route')) mapRef.removeLayer('route');
+            if (mapRef.getSource('route')) mapRef.removeSource('route');
+        } catch (e) {}
+        return;
+     }
 
-    const originPoint = allRelayPoints.find(p => p.id === routeData.departurePointId);
-    const destinationPoint = allRelayPoints.find(p => p.id === routeData.arrivalPointId);
+     const origin = allRelayPoints.find(p => p.id === routeData.departurePointId);
+     const dest = allRelayPoints.find(p => p.id === routeData.arrivalPointId);
 
-    if (originPoint && destinationPoint) {
-      // Utiliser l'API de routing (exemple avec OSRM ou MapBox)
-      fetchRoute(originPoint, destinationPoint);
-    }
-  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId, allRelayPoints]);
+     if (origin && dest) {
+         drawStraightLine(origin, dest); // Utilisation de ligne droite pour simplification
+         // Optionnel : appeler OSRM ici si besoin d'itinéraire réel
+     }
+  }, [mapRef, routeData.departurePointId, routeData.arrivalPointId]);
 
+  // Trace une ligne pointillée simple
+  const drawStraightLine = (origin: RelayPoint, destination: RelayPoint) => {
+     try {
+        if (mapRef.getLayer('route')) mapRef.removeLayer('route');
+        if (mapRef.getSource('route')) mapRef.removeSource('route');
+
+        mapRef.addSource('route', {
+            type: 'geojson',
+            data: {
+                type: 'Feature',
+                properties: {},
+                geometry: {
+                    type: 'LineString',
+                    coordinates: [
+                        [origin.longitude, origin.latitude],
+                        [destination.longitude, destination.latitude]
+                    ]
+                }
+            }
+        });
+
+        mapRef.addLayer({
+            id: 'route',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+                'line-color': '#10b981',
+                'line-width': 4,
+                'line-opacity': 0.6,
+                'line-dasharray': [2, 4]
+            }
+        });
+        
+        // Ajuster la vue
+        const bounds = new maplibregl.LngLatBounds();
+        bounds.extend([origin.longitude, origin.latitude]);
+        bounds.extend([destination.longitude, destination.latitude]);
+        mapRef.fitBounds(bounds, { padding: 50 });
+
+     } catch (e) { console.error("Erreur tracé route", e); }
+  };
   const fetchRoute = async (origin: PointRelais, destination: PointRelais) => {
     try {
       // Exemple avec OSRM (service de routing open source)
@@ -346,118 +347,67 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
     }
   };
 
-  const drawStraightLine = (origin: PointRelais, destination: PointRelais) => {
-    try {
-      // Supprimer l'ancienne route
-      if (mapRef.getLayer('route')) {
-        mapRef.removeLayer('route');
-      }
-      if (mapRef.getSource('route')) {
-        mapRef.removeSource('route');
-      }
-
-      // Dessiner une ligne droite
-      mapRef.addSource('route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [origin.lng, origin.lat],
-              [destination.lng, destination.lat]
-            ]
-          }
-        }
-      });
-
-      mapRef.addLayer({
-        id: 'route',
-        type: 'line',
-        source: 'route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#10b981',
-          'line-width': 4,
-          'line-opacity': 0.6,
-          'line-dasharray': [2, 2]
-        }
-      });
-    } catch (error) {
-      console.error('Erreur lors du dessin de la ligne droite:', error);
-    }
-  };
-
   const handleMapReady = (map: any) => {
     setMapRef(map);
-    // Ajouter un délai pour s'assurer que la carte est complètement initialisée
-    setTimeout(() => {
-      setIsInitialized(true);
-    }, 100);
+    setTimeout(() => setIsInitialized(true), 100);
   };
 
-  const handlePointSelect = (point: PointRelais) => {
+  const handlePointSelect = (point: RelayPoint) => {
     if (selectionMode === 'origin') {
-      setRouteData(prev => ({
-        ...prev,
-        departurePointId: point.id,
-        departurePointName: point.name
-      }));
-      setSelectionMode('destination');
-    } else {
-      if (point.id === routeData.departurePointId) {
-        alert("Le point d'arrivée doit être différent du point de départ.");
-        return;
-      }
-      
-      const originPoint = allRelayPoints.find(p => p.id === routeData.departurePointId);
-      if (originPoint) {
-        const distance = haversineDistance(
-          [originPoint.lat, originPoint.lng],
-          [point.lat, point.lng]
-        );
         setRouteData(prev => ({
-          ...prev,
-          arrivalPointId: point.id,
-          arrivalPointName: point.name,
-          distanceKm: distance
+            ...prev,
+            departurePointId: point.id, // C'est un UUID string maintenant
+            departurePointName: point.relayPointName
         }));
-        setTravelPrice(calculateTravelPrice(distance));
-      }
+        setSelectionMode('destination');
+    } else {
+        // Mode destination
+        if (point.id === routeData.departurePointId) {
+            alert("Le point d'arrivée doit être différent du départ.");
+            return;
+        }
+        
+        const origin = allRelayPoints.find(p => p.id === routeData.departurePointId);
+        if (origin) {
+            const dist = haversineDistance(
+                [origin.latitude, origin.longitude],
+                [point.latitude, point.longitude]
+            );
+            
+            setRouteData(prev => ({
+                ...prev,
+                arrivalPointId: point.id,
+                arrivalPointName: point.relayPointName,
+                distanceKm: dist
+            }));
+            
+            setTravelPrice(calculateTravelPrice(dist));
+        }
     }
-    
-    // Fermer la sidebar sur mobile après sélection
-    setIsSidebarOpen(false);
+    setIsSidebarOpen(false); // Fermer sur mobile
   };
 
   const handleSubmit = () => {
     if (routeData.departurePointId && routeData.arrivalPointId) {
-      onContinue(routeData, travelPrice);
+        onContinue(routeData, travelPrice);
     }
   };
 
   const handleReset = () => {
     setRouteData({
-      departurePointId: null,
-      arrivalPointId: null,
-      departurePointName: '',
-      arrivalPointName: '',
-      distanceKm: 0
+        departurePointId: null, arrivalPointId: null,
+        departurePointName: '', arrivalPointName: '', distanceKm: 0
     });
     setTravelPrice(0);
     setSelectionMode('origin');
-    setSearchQuery('');
   };
 
-  const getPointStatus = (point: PointRelais) => {
-    if (routeData.departurePointId === point.id) return 'origin';
-    if (routeData.arrivalPointId === point.id) return 'destination';
-    return 'available';
+  const getPointStatus = (id: string) => {
+      if (routeData.departurePointId === id) return 'origin';
+      if (routeData.arrivalPointId === id) return 'destination';
+      return 'available';
   };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -546,53 +496,35 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
                 </div>
 
                 {/* Points list */}
-                <div className="flex-1 overflow-y-auto p-2">
-                  <div className="space-y-2">
-                    {filteredPoints.map(point => {
-                      const status = getPointStatus(point);
-                      return (
-                        <motion.div
-                          key={point.id}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handlePointSelect(point)}
-                          className={`p-3 rounded-lg cursor-pointer border transition-all ${
-                            status === 'origin' 
-                              ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 shadow-md' :
-                            status === 'destination' 
-                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-md' : 
-                              'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/30'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-1">
-                              {status === 'origin' ? (
-                                <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
-                              ) : status === 'destination' ? (
-                                <div className="w-3 h-3 bg-green-500 rounded-full" />
-                              ) : (
-                                <MapPin className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 truncate">
-                                {point.name}
-                              </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                {point.quartier}
-                              </p>
-                              {status !== 'available' && (
-                                <p className="text-xs font-medium mt-1 text-orange-600 dark:text-orange-400">
-                                  {status === 'origin' ? 'Point de départ' : 'Point d\'arrivée'}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
+                <div className="flex-1 overflow-y-auto">
+                    {isLoadingPoints ? (
+                        <div className="flex justify-center py-8"><Loader2 className="animate-spin text-orange-500"/></div>
+                    ) : filteredPoints.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500 text-sm">Aucun point relais trouvé.</div>
+                    ) : (
+                        filteredPoints.map(point => {
+                            const status = getPointStatus(point.id);
+                            return (
+                              <div 
+                                  key={point.id}
+                                  onClick={() => handlePointSelect(point)}
+                                  className={`p-4 border-b dark:border-gray-700 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors ${status === 'origin' ? 'bg-orange-100 dark:bg-orange-900/40' : status === 'destination' ? 'bg-green-100 dark:bg-green-900/40' : ''}`}
+                              >
+                                  <div className="flex gap-3">
+                                      <MapPin className={`w-5 h-5 flex-shrink-0 mt-0.5 ${status === 'origin' ? 'text-orange-600' : status === 'destination' ? 'text-green-600' : 'text-gray-400'}`} />
+                                      <div>
+                                          {/* C'EST ICI LA CORRECTION IMPORTANTE DE L'AFFICHAGE */}
+                                          <h4 className="font-semibold text-sm text-gray-800 dark:text-gray-200">{point.relayPointName}</h4>
+                                          <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{point.address || "Adresse non spécifiée"}</p>
+                                          {point.locality && <span className="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded mt-1 inline-block">{point.locality}</span>}
+                                      </div>
+                                  </div>
+                              </div>
+                            )
+                        })
+                    )}
                 </div>
+
 
                 {/* Progress indicator */}
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">

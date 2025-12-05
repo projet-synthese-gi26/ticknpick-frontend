@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Icônes (importations existantes et nouvelles)
@@ -27,55 +26,46 @@ import FreelanceOverview from './FreelanceOverview';
 import CreditPage from './Credit';
 import LivreurOverview from './LivreurOverview';
 import LivreurServiceCardPage from './LivreurServiceCard'; 
+import { useAuth } from '@/context/AuthContext';
+import { userService } from '@/services/userservice';
 
-// Pour plus de clarté, unifions les cas (majuscules)
-type AccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+export type UIAccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'ADMIN';
 
-// L'interface UserProfile est maintenant unifiée et complète pour être compatible partout
 export interface UserProfile {
   id: string;
-  account_type: AccountType;
-  manager_name: string | null;
-  email?: string | null;
-  name: string;
+  account_type: UIAccountType; // Type unifié pour le frontend
+  manager_name: string; 
+  email: string;
+  name: string; 
   role: string;
   
-  // -- NOUVEAUX Champs de base ajoutés depuis Profil.tsx (optionnels) --
-  created_at?: string;
+  // -- Champs Optionnels Unifiés --
   phone_number?: string | null;
-  birth_date?: string | null;
-  nationality?: string | null;
+  created_at?: string;
   home_address?: string | null;
   id_card_number?: string | null;
   
-  // -- Champs PRO existants (optionnels) --
+  // -- Champs Business --
+  businessActorType?: 'FREELANCE' | 'AGENCY' | 'DELIVERER' | 'EMPLOYEE';
+  businessName?: string;
+  businessAddress?: string;
+  businessLocality?: string;
+
+  // -- Champs PRO/Relais --
   identity_photo_url?: string | null;
-  id_card_url?: string | null;
-  tax_id?: string | null;
-  professional_experience?: string | null;
   relay_point_name?: string | null;
   relay_point_address?: string | null;
-  relay_point_gps?: string | null;
-  opening_hours?: string | null;
-  storage_capacity?: string | null;
-  service_card_details?: any;
-  business_name?: string;
-  business_type?: string;
-
-  // -- Champs LIVREUR existants (optionnels) --
+  
+  // -- Champs LIVREUR --
   vehicle_type?: string | null;
   vehicle_brand?: string | null;
   vehicle_registration?: string | null;
-  vehicle_color?: string | null;
-  trunk_dimensions?: string | null;
 
-  // -- Permet toute autre propriété non explicitement définie --
-  [key: string]: any;
+  [key: string]: any; // Permet d'autres champs API bruts
 }
 
-// Le profil PRO est un UserProfile mais avec un type de compte RESTREINT
 export interface ProProfile extends UserProfile {
-  account_type: 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY';
+  account_type: 'LIVREUR' | 'FREELANCE' | 'AGENCY';
 }
 
 export interface RelayPointInfo {
@@ -108,14 +98,57 @@ export interface Shipment {
   service_type?: string; // Type de service (Standard, Express, etc.)
 }
 
-// Helper function to normalize profile data
-const normalizeProfile = (profile: any): UserProfile => {
+// === FONCTION CRUCIALE : NORMALISATION DES DONNÉES ===
+// Cette fonction transforme la réponse de l'API (qui peut varier) en un format standard pour ton UI.
+const normalizeProfile = (apiData: any): UserProfile => {
+  console.log(">>> Données brutes reçues de /api/users/me :", apiData); 
+
+  let finalAccountType: UIAccountType = 'CLIENT';
+  const rawType = apiData.account_type || 'CLIENT';
+
+  // LOGIQUE INTELLIGENTE POUR DÉTECTER LE RÔLE RÉEL
+  // Si l'API dit "BUSINESS_ACTOR", on doit regarder "business_actor_type" pour savoir si c'est un Freelance, un Livreur, etc.
+  if (rawType === 'BUSINESS_ACTOR') {
+      const subType = (apiData.business_actor_type || '').toUpperCase();
+      
+      if (subType === 'DELIVERER') finalAccountType = 'LIVREUR';
+      else if (subType === 'AGENCY_OWNER') finalAccountType = 'AGENCY';
+      else if (subType === 'FREELANCE') finalAccountType = 'FREELANCE';
+      else if (subType === 'EMPLOYEE') finalAccountType = 'AGENCY'; 
+      else {
+          console.warn("Business Actor sans sous-type clair, fallback sur FREELANCE");
+          finalAccountType = 'FREELANCE';
+      }
+  } else if (rawType === 'ADMIN' || rawType === 'SUPERADMIN') {
+      finalAccountType = 'ADMIN';
+  } else {
+      finalAccountType = 'CLIENT';
+  }
+
+  console.log(`>>> Rôle détecté : ${finalAccountType}`);
+
   return {
-    ...profile,
-    name: profile.name || profile.manager_name || 'Utilisateur',
-    role: profile.role || profile.account_type || 'user',
+    // On garde toutes les données brutes au cas où
+    ...apiData,
+    
+    // Champs standardisés
+    id: apiData.id,
+    account_type: finalAccountType, 
+    email: apiData.email,
+    
+    // Gestion des Noms : On privilégie le nom business, sinon le nom, sinon l'email
+    manager_name: apiData.business_name || apiData.name || apiData.manager_name || apiData.email?.split('@')[0],
+    name: apiData.name || apiData.manager_name || 'Utilisateur',
+    
+    // Champs clés pour les formulaires
+    businessActorType: apiData.business_actor_type,
+    phone_number: apiData.phone_number || apiData.phoneNumber, // Gestion Snake/Camel case selon backend
+    home_address: apiData.home_address || apiData.homeAddress,
+    businessName: apiData.business_name,
+    businessAddress: apiData.business_address
   };
 };
+
 
 interface NavItem {
   id: string;
@@ -149,21 +182,22 @@ const Sidebar: React.FC<SidebarProps> = ({
   isSidebarOpen, 
   setIsSidebarOpen, 
   userProfile 
-}) => {
+}: any) => {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    router.push('/login');
   };
 
   const getAccountTypeColor = (type: string) => {
-    switch(type.toLowerCase()) {
-      case 'client': return 'bg-gradient-to-r from-blue-500 to-cyan-500';
+    switch(type?.toLowerCase()) {
+      case 'client': return 'bg-gradient-to-r from-orange-500 to-amber-500';
       case 'livreur': return 'bg-gradient-to-r from-green-500 to-emerald-500';
-      case 'agence': return 'bg-gradient-to-r from-purple-500 to-violet-500';
-      case 'freelance': return 'bg-gradient-to-r from-orange-500 to-amber-500';
-      default: return 'bg-gradient-to-r from-orange-500 to-amber-500';
+      case 'agence': return 'bg-gradient-to-r from-purple-500 to-indigo-500';
+      case 'freelance': return 'bg-gradient-to-r from-blue-500 to-cyan-500';
+      default: return 'bg-gradient-to-r from-gray-500 to-slate-500';
     }
   };
 
@@ -189,42 +223,38 @@ const Sidebar: React.FC<SidebarProps> = ({
           x: isSidebarOpen || (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 0 : '-100%' 
         }} 
         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-        className="fixed top-0 left-0 z-50 w-72 h-screen bg-white/95 backdrop-blur-xl border-r border-orange-100 shadow-xl lg:shadow-2xl flex flex-col"
+        className="fixed top-0 left-0 z-50 w-72 h-screen bg-white/95 dark:bg-gray-900 backdrop-blur-xl border-r border-orange-100 dark:border-gray-800 shadow-xl lg:shadow-2xl flex flex-col"
       >
-        {/* Header Sidebar - Plus compact */}
-        <div className="px-5 py-6 border-b border-orange-100/50 relative overflow-hidden flex-shrink-0">
-          {/* Background Pattern */}
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 opacity-50" />
-          <div className="absolute -top-8 -right-8 w-24 h-24 bg-orange-200/30 rounded-full blur-2xl" />
-          
+        {/* Header Sidebar */}
+        <div className="px-5 py-6 border-b border-orange-100/50 dark:border-gray-800 relative overflow-hidden flex-shrink-0">
           <div className="relative flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <div className={`${getAccountTypeColor(userProfile?.account_type || 'freelance')} p-3 rounded-xl shadow-md transform rotate-2 hover:rotate-0 transition-all duration-300`}>
                 <Package className="h-6 w-6 text-white drop-shadow-sm"/>
               </div>
               <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent dark:text-white">
                   Dashboard
                 </h1>
                 <div className="flex items-center mt-1">
                   <div className={`w-1.5 h-1.5 rounded-full ${getAccountTypeColor(userProfile?.account_type || 'freelance')} mr-2`} />
-                  <p className="text-orange-600 text-xs font-medium capitalize tracking-wide">
-                    {userProfile?.account_type.toLowerCase()}
+                  <p className="text-orange-600 dark:text-orange-400 text-xs font-medium capitalize tracking-wide">
+                    {userProfile?.account_type?.toLowerCase()}
                   </p>
                 </div>
               </div>
             </div>
             <button 
               onClick={() => setIsSidebarOpen(false)} 
-              className="lg:hidden p-2 hover:bg-orange-100 rounded-lg transition-all duration-200 text-orange-600"
+              className="lg:hidden p-2 hover:bg-orange-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 text-orange-600 dark:text-gray-400"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
         
-        {/* Navigation - Scrollable */}
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent">
+        {/* Navigation */}
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-orange-200 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {navigationItems.map((item: NavItem, index: number) => (
             <motion.div
               key={item.id}
@@ -240,14 +270,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                 className={`w-full group flex items-center justify-between px-3 py-3 rounded-xl font-medium transition-all duration-200 ${
                   activeTab === item.id
                     ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 hover:text-orange-700'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-gray-800 hover:text-orange-700 dark:hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-3">
                   <div className={`p-1.5 rounded-lg transition-all duration-200 ${
                     activeTab === item.id 
                       ? 'bg-white/20' 
-                      : 'bg-orange-100/50 group-hover:bg-orange-200/50'
+                      : 'bg-orange-100/50 dark:bg-gray-800 group-hover:bg-orange-200/50 dark:group-hover:bg-gray-700'
                   }`}>
                     <item.icon className="h-4 w-4" />
                   </div>
@@ -263,37 +293,36 @@ const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </nav>
         
-        {/* Footer Sidebar - Plus compact */}
-        <div className="px-4 py-4 border-t border-orange-100/50 bg-gradient-to-r from-orange-50/50 to-amber-50/50 flex-shrink-0">
+        {/* Footer Sidebar */}
+        <div className="px-4 py-4 border-t border-orange-100/50 dark:border-gray-800 bg-orange-50/30 dark:bg-gray-800/30 flex-shrink-0">
           <div className="space-y-2">
             <button 
-              onClick={() => router.push('/home')} 
-              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 group"
+              onClick={() => router.push('/')} 
+              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm rounded-lg transition-all duration-200 group"
             >
-              <Home className="h-4 w-4 group-hover:text-orange-600 transition-colors" />
+              <Home className="h-4 w-4 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors" />
               <span className="font-medium text-sm">Retour accueil</span>
             </button>
             <button 
               onClick={handleLogout} 
-              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200 group"
+              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-all duration-200 group"
             >
               <LogOut className="h-4 w-4 group-hover:text-red-600 transition-colors" />
               <span className="font-medium text-sm">Déconnexion</span>
             </button>
           </div>
           
-          {/* User Info - Plus compact */}
-          <div className="mt-3 p-3 bg-white/60 backdrop-blur-sm rounded-xl border border-orange-100/50">
+          <div className="mt-3 p-3 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl border border-orange-100/50 dark:border-gray-700">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                 <User className="h-4 w-4 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-900 truncate">
+                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">
                   {userProfile?.manager_name || 'Utilisateur'}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {userProfile?.email || 'email@example.com'}
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {userProfile?.email || 'email@exemple.com'}
                 </p>
               </div>
             </div>
@@ -304,68 +333,58 @@ const Sidebar: React.FC<SidebarProps> = ({
   );
 };
 
-// --- Header Moderne et Élégant ---
-const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
+// --- Header ---
+const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }: any) => {
   const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
 
   return (
     <>
-      <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white border-b border-orange-100 z-30 h-20 shadow-sm">
+      <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/95 dark:bg-gray-900/95 border-b border-orange-100 dark:border-gray-800 z-30 h-20 shadow-sm backdrop-blur-md">
         <div className="px-6 h-full">
           <div className="flex justify-between items-center h-full">
             {/* Left Section - Greeting & Menu */}
             <div className="flex items-center space-x-4">
               <button 
                 onClick={() => setIsSidebarOpen(true)} 
-                className="lg:hidden p-3 hover:bg-orange-50 rounded-xl transition-all duration-200 text-orange-500 border border-orange-100"
+                className="lg:hidden p-3 hover:bg-orange-50 dark:hover:bg-gray-800 rounded-xl transition-all duration-200 text-orange-500 border border-orange-100 dark:border-gray-700"
               >
                 <Menu className="h-5 w-5" />
               </button>
               
               <div className="flex items-center space-x-4">
-
                 {/* Greeting */}
-                <div>
-                  <h2 className="text-4xl font-bold text-gray-900 flex items-center space-x-2">
+                <div className="hidden sm:block">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
                     <span>Bonjour,</span>
-                    <span className="text-orange-600">{user?.manager_name || 'Utilisateur'}</span>
-                    <span className="text-4xl">😊</span>
+                    <span className="text-orange-600 dark:text-orange-500">{user?.manager_name?.split(' ')[0] || 'Utilisateur'}</span>
+                    <span className="text-2xl">👋</span>
                   </h2>
-                  <p className="text-gray-500 text-sm font-medium">
-                    {new Date().toLocaleDateString('fr-FR', { 
-                      weekday: 'long', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </p>
                 </div>
               </div>
             </div>
 
             {/* Right Section - Actions */}
-            <div className="flex items-center space-x-2">
-              {/* Package Tracking Button */}
+            <div className="flex items-center space-x-3">
               <button 
                 onClick={() => setShowTrackingModal(true)}
-                className="relative bg-orange-50 border border-orange-200 hover:bg-orange-100 px-4 py-3 rounded-xl transition-all duration-200 group flex items-center space-x-2"
+                className="hidden md:flex relative bg-orange-50 dark:bg-gray-800 border border-orange-200 dark:border-gray-700 hover:bg-orange-100 dark:hover:bg-gray-700 px-4 py-2.5 rounded-xl transition-all duration-200 group items-center space-x-2"
                 title="Suivi de colis"
               >
-                <Search className="h-5 w-5 text-orange-600 group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-orange-700 font-medium text-sm hidden sm:block">Rechercher un colis</span>
+                <Search className="h-5 w-5 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform duration-200" />
+                <span className="text-orange-700 dark:text-orange-400 font-medium text-sm">Rechercher</span>
               </button>
 
-              {/* Profile Section */}
-              <div className="flex items-center space-x-3 bg-transparent  px-4 py-2 rounded-xl">
+              <div className="flex items-center space-x-3 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-xl border border-transparent hover:border-orange-200 dark:hover:border-gray-600 transition-all">
                 <div className="text-right hidden md:block">
-                  <p className="text-sm font-semibold text-gray-900">{user?.manager_name || 'Utilisateur'}</p>
-                  <p className="text-xs text-orange-600 font-medium capitalize">{user?.account_type.toLowerCase()}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{user?.manager_name || 'Utilisateur'}</p>
+                  <p className="text-xs text-orange-600 dark:text-orange-400 font-medium capitalize">{user?.account_type?.toLowerCase()}</p>
                 </div>
                 
                 <div className="relative">
-                  <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group">
+                  <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl flex items-center justify-center shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group">
                     <User className="h-5 w-5 text-white group-hover:scale-110 transition-transform duration-200"/>
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                  <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
                 </div>
               </div>
             </div>
@@ -377,7 +396,6 @@ const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
       <AnimatePresence>
         {showTrackingModal && (
           <>
-            {/* Overlay */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -385,8 +403,6 @@ const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
               onClick={() => setShowTrackingModal(false)}
             />
-            
-            {/* Modal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -399,7 +415,7 @@ const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
                 onClose={() => setShowTrackingModal(false)}
                 onOpenFullTracker={() => {
                   setShowTrackingModal(false);
-                  window.open('/track-package', '_blank');
+                  // Ouvrir la page complete
                 }}
               />
             </motion.div>
@@ -412,7 +428,7 @@ const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }) => {
 
 // --- Loading Component ---
 const LoadingScreen: React.FC = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-700">
     <div className="text-center">
       <div className="relative mb-6">
         <div className="w-16 h-16 border-4 border-orange-200 rounded-full animate-spin" />
@@ -421,8 +437,8 @@ const LoadingScreen: React.FC = () => (
           <Package className="h-6 w-6 text-white animate-pulse" />
         </div>
       </div>
-      <h3 className="text-xl font-bold text-gray-900 mb-2">Chargement de votre espace</h3>
-      <p className="text-gray-600 text-sm">Préparation de votre dashboard personnalisé...</p>
+      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-300 mb-2">Chargement de votre espace</h3>
+      <p className="text-gray-600 dark:text-gray-400 text-sm">Préparation de votre dashboard personnalisé...</p>
       <div className="mt-4 flex justify-center space-x-1">
         {[...Array(3)].map((_, i) => (
           <div
@@ -444,53 +460,65 @@ const DashboardSwitcher: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
-  
+  const { isAuthenticated, isLoading: isAuthLoading, logout, user: authUser } = useAuth();
   
 
-  // --- Logique de récupération de l'utilisateur ---
   useEffect(() => {
-    const fetchUserProfile = async () => {
+    if (isAuthLoading) return;
+
+    if (!isAuthenticated || !authUser) {
+        console.log("Non authentifié, redirection login.");
+        router.push('/login');
+        return;
+    }
+
+    const fetchUserData = async () => {
       setIsLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          router.push('/');
-          return;
+        // RÉCUPÉRATION DE L'ID DEPUIS LE CONTEXTE D'AUTHENTIFICATION
+        // Le AuthContext stocke déjà l'ID utilisateur lors du login
+        const userId = authUser.id; 
+        
+        if (!userId) {
+             throw new Error("ID Utilisateur introuvable dans la session locale");
         }
 
-        let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-        if (!profile) {
-          let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
-          if (!profilePro) {
-            console.error("Aucun profil trouvé.");
-            await supabase.auth.signOut();
-            router.push('/');
-            return;
-          }
-          profile = profilePro;
+        console.log(`Chargement profil pour ID: ${userId} via /api/users/{id}...`);
+        
+        // APPEL DE LA ROUTE PAR ID AU LIEU DE /ME
+        const apiProfile = await userService.getProfileById(userId);
+        
+        if (!apiProfile) {
+            throw new Error("Profil vide reçu de l'API");
         }
-        
-        // Normaliser le profil pour s'assurer que toutes les propriétés requises sont présentes
-        const normalizedProfile = normalizeProfile(profile);
-        setUserProfile(normalizedProfile);
 
-        
-      } catch (error) {
-        console.error('Erreur lors de la récupération du profil:', error);
-        router.push('/');
+        const profile = normalizeProfile(apiProfile);
+        setUserProfile(profile);
+
+        if (profile.account_type === 'ADMIN') {
+            router.push('/superadmin');
+        }
+
+      } catch (error: any) {
+        console.error("Erreur Dashboard:", error);
+        // Si l'erreur est critique (ex: token invalide), on déconnecte
+        if (error.message?.includes('401') || error.message?.includes('403')) {
+             logout();
+        }
       } finally {
         setIsLoading(false);
       }
     };
-    
-    fetchUserProfile();
-  }, [router]);
+
+    fetchUserData();
+  }, [isAuthLoading, isAuthenticated, authUser, router, logout]);
 
   // --- Définition dynamique des onglets de navigation ---
   const navigationItems = useMemo((): NavItem[] => {
     if (!userProfile) return [];
     
     const accountType = userProfile.account_type?.toLowerCase();
+    const type = userProfile.account_type;
     
     switch (accountType) {
       case 'client':
@@ -526,7 +554,6 @@ const DashboardSwitcher: React.FC = () => {
           { id: 'inventory', label: 'Inventaire', icon: Package },
           { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
           { id: 'profile', label: 'Profil Pro', icon: Briefcase },
-          { id: 'service-card', label: 'Carte de Service', icon: User },
           { id: 'settings', label: 'Paramètres', icon: Settings },
         ];
     }
@@ -539,29 +566,13 @@ const DashboardSwitcher: React.FC = () => {
     }
   }, [navigationItems, activeTab]);
 
-  // --- Fonction de mise à jour du profil ---
+  // --- NOUVELLE FONCTION de mise à jour (pour l'onglet Profil) ---
   const handleProfileUpdate = async () => {
-    // Logic to re-fetch profile data
-    if (userProfile) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          let { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-          if (!profile) {
-            let { data: profilePro } = await supabase.from('profiles_pro').select('*').eq('id', session.user.id).single();
-            if (profilePro) {
-              profile = profilePro;
-            }
-          }
-          if (profile) {
-            const normalizedProfile = normalizeProfile(profile);
-            setUserProfile(normalizedProfile);
-          }
-        }
-      } catch (error) {
-        console.error('Erreur lors de la mise à jour du profil:', error);
-      }
-    }
+    // Fonction simple pour recharger les données après une modif dans l'onglet Profil
+    try {
+        const apiProfile = await userService.getMyProfile();
+        setUserProfile(normalizeProfile(apiProfile));
+    } catch (e) { console.error(e); }
   };
 
   // --- Rendu du contenu de l'onglet actif ---
@@ -614,9 +625,10 @@ const DashboardSwitcher: React.FC = () => {
   if (isLoading || !userProfile) {
     return <LoadingScreen />;
   }
+  if (!userProfile) return null;
 
   return (
-    <div className="bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/30 min-h-screen">
+    <div className="bg-white dark:bg-gray-800 min-h-screen">
       {/* Background Pattern */}
       <div className="fixed inset-0 opacity-[0.02] pointer-events-none">
         <div 

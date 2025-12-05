@@ -253,7 +253,7 @@ export default function SettingsPage({ profile, onUpdate }: SettingsPageProps) {
     ];
 
     return (
-        <div className="space-y-8 max-w-6xl mx-auto">
+        <div className="space-y-8 max-w-6xl p-4 mx-auto">
             {/* En-tête modernisé */}
             <motion.div 
                 className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-6 mb-8"

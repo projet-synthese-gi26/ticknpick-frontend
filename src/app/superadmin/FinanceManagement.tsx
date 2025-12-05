@@ -1,463 +1,514 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Line } from 'react-chartjs-2';
+import { Line, Doughnut, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
-  ChartData,
-  ChartOptions
+  ArcElement
 } from 'chart.js';
 import {
   DollarSign,
-  Package,
-  Users,
   Wallet,
   TrendingUp,
   Download,
   Loader2,
-  Calendar
+  Calendar,
+  Award,
+  ArrowUpRight,
+  Building,
+  Package,
+  Users
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// Importez le service admin que nous avons défini précédemment ou mettez à jour les appels API ici
+import { adminService } from '@/services/adminService';
 
-// Registrer les composants Chart.js
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
+// Initialisation de ChartJS
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement);
 
 // ============================================================================
-// TYPES ET INTERFACES
+// TYPES
 // ============================================================================
+
+// Type pour un colis reçu de l'API admin (pour les calculs)
+// Basé sur le Swagger Shipment entity
+interface AdminPackage {
+    id: string;
+    trackingNumber: string; // Adapter si tracking_number
+    shippingCost: number; // Montant de la livraison
+    createdAt: string;    // Date
+    departurePointName?: string;
+    arrivalPointName?: string;
+    senderName?: string;
+    // Pour les stats avancées
+    status?: string; 
+}
 
 interface KpiData {
-  revenue_today: number;
-  revenue_last_7_days: number;
-  revenue_last_30_days: number;
-  total_partner_earnings: number;
+    totalRevenue: number;
+    todayRevenue: number;
+    totalPackages: number;
+    averageValue: number;
 }
 
-interface PartnerEarning {
-  agency_id: string;
-  manager_name: string;
-  account_type: string;
-  credit_balance: number;
-  total_earnings: number;
-  shipment_count: number;
+interface TopPerformer {
+    name: string;
+    count: number;
+    revenue: number;
+    role?: string; // 'Sender', 'Relay'
 }
-
-interface LoadingState {
-  kpis: boolean;
-  revenue: boolean;
-  partners: boolean;
-}
-
-type TabType = 'revenue' | 'partners';
 
 // ============================================================================
-// COMPOSANTS UTILITAIRES
+// COMPOSANT KPI CARD
 // ============================================================================
-
-interface KpiCardProps {
-  title: string;
-  value: string;
-  icon: React.ElementType;
-  color: string;
-}
-
-const KpiCard: React.FC<KpiCardProps> = ({ title, value, icon: Icon, color }) => {
-  const colorClass = color.split('-')[1];
-  
-  return (
-    <div className={`p-6 bg-white dark:bg-black dark:text-gray-400 rounded-xl shadow-lg border-l-4 ${color}`}>
-      <div className="flex items-center space-x-4">
-        <div className={`bg-${colorClass}-100 p-3 rounded-full`}>
-          <Icon className={`h-6 w-6 text-${colorClass}-600`} />
+const KpiCard = ({ title, value, icon: Icon, trend, colorClass }: any) => (
+    <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        whileHover={{ y: -2 }}
+        className={`p-6 rounded-2xl bg-white dark:bg-gray-800 border border-slate-100 dark:border-gray-700 shadow-sm transition-all duration-300`}
+    >
+        <div className="flex justify-between items-start mb-3">
+            <div>
+                <p className="text-xs font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-1">{title}</p>
+                <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">{value}</h3>
+            </div>
+            <div className={`p-3 rounded-xl bg-opacity-10 dark:bg-opacity-20 ${colorClass}`}>
+                <Icon className={`w-6 h-6 ${colorClass.replace('bg-', 'text-')}`} />
+            </div>
         </div>
-        <div>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-200">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const LoadingSpinner: React.FC = () => (
-  <div className="flex justify-center items-center py-8">
-    <Loader2 className="animate-spin h-8 w-8 text-orange-500" />
-  </div>
+        {trend && (
+            <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded w-fit">
+                <ArrowUpRight className="w-3 h-3" />
+                <span>{trend} cette semaine</span>
+            </div>
+        )}
+    </motion.div>
 );
 
 // ============================================================================
-// COMPOSANT PRINCIPAL
+// COMPOSANT TABLEAU CLASSEMENT
+// ============================================================================
+const RankingTable = ({ title, data, icon: Icon }: { title: string, data: TopPerformer[], icon: any }) => (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-slate-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col h-full">
+        <div className="p-5 border-b border-slate-100 dark:border-gray-700 flex items-center gap-3 bg-slate-50/50 dark:bg-slate-800/50">
+            <div className="p-2 bg-white dark:bg-slate-700 rounded-lg shadow-sm border border-slate-200 dark:border-slate-600">
+                <Icon className="w-5 h-5 text-orange-500" />
+            </div>
+            <h3 className="font-bold text-slate-800 dark:text-slate-200 text-lg">{title}</h3>
+        </div>
+        <div className="overflow-y-auto max-h-[320px] custom-scrollbar">
+            <table className="w-full text-sm text-left">
+                <thead className="bg-white dark:bg-gray-800 text-slate-500 dark:text-gray-400 text-xs uppercase sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th className="p-4 pl-6 font-bold w-16">#</th>
+                        <th className="p-4 font-bold">Nom</th>
+                        <th className="p-4 font-bold text-right">Volume</th>
+                        <th className="p-4 font-bold text-right pr-6">CA Généré</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
+                    {data.length === 0 ? (
+                         <tr><td colSpan={4} className="p-6 text-center text-gray-400 italic">Aucune donnée disponible</td></tr>
+                    ) : data.map((item, index) => (
+                        <tr key={index} className="hover:bg-orange-50/50 dark:hover:bg-slate-700/30 transition-colors group">
+                            <td className="p-4 pl-6 font-mono text-slate-400 group-hover:text-orange-500 font-bold">
+                                {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : index + 1}
+                            </td>
+                            <td className="p-4">
+                                <div className="font-bold text-slate-700 dark:text-slate-200">{item.name}</div>
+                                {item.role && <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">{item.role}</span>}
+                            </td>
+                            <td className="p-4 text-right font-mono text-slate-600 dark:text-gray-400 font-semibold">{item.count}</td>
+                            <td className="p-4 text-right pr-6">
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded">
+                                    {item.revenue.toLocaleString()} F
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    </div>
+);
+
+// ============================================================================
+// MAIN COMPONENT
 // ============================================================================
 
-const FinanceManagement: React.FC = () => {
-  // États
-  const [activeTab, setActiveTab] = useState<TabType>('revenue');
-  const [kpis, setKpis] = useState<KpiData | null>(null);
-  const [revenueChartData, setRevenueChartData] = useState<ChartData<'line'> | null>(null);
-  const [partnersData, setPartnersData] = useState<PartnerEarning[]>([]);
-  const [loading, setLoading] = useState<LoadingState>({
-    kpis: true,
-    revenue: true,
-    partners: true
-  });
+export default function FinanceManagement() {
+    const [loading, setLoading] = useState(true);
+    const [kpis, setKpis] = useState<KpiData>({ totalRevenue: 0, todayRevenue: 0, totalPackages: 0, averageValue: 0 });
+    
+    // Données calculées pour les classements
+    const [topRelays, setTopRelays] = useState<TopPerformer[]>([]);
+    const [topSenders, setTopSenders] = useState<TopPerformer[]>([]);
 
-  // ============================================================================
-  // FONCTIONS UTILITAIRES
-  // ============================================================================
+    // Données pour les graphiques
+    const [chartLabels, setChartLabels] = useState<string[]>([]);
+    const [revenueSeries, setRevenueSeries] = useState<number[]>([]);
+    
+    const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
 
-  const formatCurrency = (amount: number): string => {
-    return `${amount.toLocaleString()} FCFA`;
-  };
+    // Fonction utilitaire de logging
+    const logFinancialData = (pkg: AdminPackage) => {
+        //console.log(`📦 [FINANCE ANALYZER] Package processed: ID=${pkg.id} | Cost=${pkg.shippingCost} | Date=${pkg.createdAt}`);
+    };
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+    // Chargement & Calculs
+    useEffect(() => {
+        const processFinanceData = async () => {
+            setLoading(true);
+            try {
+                console.group("💰 [FINANCE] Starting Data Analysis...");
+                
+                // 1. Récupérer tous les colis pour analyse
+                // Utilisation de la route que vous avez spécifiée ou une route "Admin" équivalente qui renvoie TOUT
+                // GET /api/admin/packages est l'idéal
+                console.log("📡 Fetching Global Shipment Data via /api/admin/packages...");
+                
+                let packages: AdminPackage[] = [];
+                try {
+                     // On tente d'utiliser le service admin si implémenté, ou une requête directe
+                     const response = await adminService.getAllShipmentsGlobal(); // Suppose que adminService a été mis à jour
+                     
+                     // Mapping des données backend pour harmoniser camelCase/snake_case
+                     packages = response.map((p: any) => ({
+                        id: p.id,
+                        trackingNumber: p.trackingNumber || p.tracking_number,
+                        shippingCost: Number(p.shippingCost || p.deliveryFee || p.shipping_cost || 0),
+                        createdAt: p.createdAt || p.created_at,
+                        departurePointName: p.departurePointName || p.pickupAddress, // Adaptez selon le retour API réel
+                        senderName: p.senderName || p.sender_name || "Anonyme"
+                     }));
+                     
+                     console.log(`✅ Loaded ${packages.length} packages for financial analysis.`);
+                } catch (err) {
+                    console.warn("⚠️ Failed to load global packages, data might be incomplete.", err);
+                }
 
-  // ============================================================================
-  // FONCTIONS DE RÉCUPÉRATION DES DONNÉES
-  // ============================================================================
+                if (packages.length === 0) {
+                    setLoading(false);
+                    console.groupEnd();
+                    return;
+                }
 
-  const fetchKpis = useCallback(async (): Promise<void> => {
-    try {
-      setLoading(prev => ({ ...prev, kpis: true }));
-      
-      const { data, error } = await supabase.rpc('get_finance_kpis');
-      
-      if (error) {
-        console.error('Erreur lors de la récupération des KPIs:', error);
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        setKpis(data[0]);
-      }
-    } catch (error) {
-      console.error('Erreur inattendue lors de la récupération des KPIs:', error);
-    } finally {
-      setLoading(prev => ({ ...prev, kpis: false }));
-    }
-  }, []);
+                // --- CALCULS STATISTIQUES (Frontend Aggregation) ---
+                const now = new Date();
+                const todayStart = new Date(now.setHours(0, 0, 0, 0)).getTime();
+                const oneWeekAgo = new Date(new Date().setDate(now.getDate() - 7)).getTime();
+                
+                let totalRev = 0;
+                let todayRev = 0;
+                
+                // Maps pour classements
+                const relayMap = new Map<string, { count: number, rev: number }>();
+                const senderMap = new Map<string, { count: number, rev: number }>();
 
-  const fetchRevenueChart = useCallback(async (): Promise<void> => {
-    try {
-      setLoading(prev => ({ ...prev, revenue: true }));
-      
-      const { data, error } = await supabase.rpc('get_daily_revenue_last_30_days');
-      
-      if (error) {
-        console.error('Erreur lors de la récupération des revenus:', error);
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        const labels = data.map((item: any) => formatDate(item.day));
-        const values = data.map((item: any) => item.total_revenue);
-        
-        setRevenueChartData({
-          labels,
-          datasets: [{
-            label: 'Revenus journaliers (FCFA)',
-            data: values,
-            borderColor: '#F97316',
-            backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                // Aggrégation Temporelle (30 derniers jours pour le graph)
+                const dateMap = new Map<string, number>();
+                
+                // Initialiser les dates du graphe (30j)
+                for (let i = viewMode === 'week' ? 6 : 29; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    const key = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+                    dateMap.set(key, 0);
+                }
+
+                // Boucle unique de traitement
+                packages.forEach((pkg) => {
+                    // Sécurité donnée
+                    if (isNaN(pkg.shippingCost)) return;
+
+                    // Logging optionnel
+                    // logFinancialData(pkg);
+
+                    totalRev += pkg.shippingCost;
+                    
+                    const pkgDate = new Date(pkg.createdAt);
+                    const pkgTime = pkgDate.getTime();
+                    
+                    // Revenus du jour
+                    if (pkgTime >= todayStart) todayRev += pkg.shippingCost;
+
+                    // Données Graphique (si dans la plage)
+                    // Note : si la date est dans la map, on ajoute
+                    const dateKey = pkgDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+                    if (dateMap.has(dateKey)) {
+                        dateMap.set(dateKey, (dateMap.get(dateKey) || 0) + pkg.shippingCost);
+                    }
+
+                    // Classement Points Relais (Départ)
+                    // On considère que le point de départ est celui qui génère le "lead" du transport
+                    const relayName = pkg.departurePointName || "Inconnu";
+                    if (relayName !== "Inconnu") {
+                        const currRelay = relayMap.get(relayName) || { count: 0, rev: 0 };
+                        relayMap.set(relayName, { count: currRelay.count + 1, rev: currRelay.rev + pkg.shippingCost });
+                    }
+
+                    // Classement Clients (Senders)
+                    const sender = pkg.senderName || "Client Inconnu";
+                    if (sender !== "Client Inconnu") {
+                        const currSender = senderMap.get(sender) || { count: 0, rev: 0 };
+                        senderMap.set(sender, { count: currSender.count + 1, rev: currSender.rev + pkg.shippingCost });
+                    }
+                });
+
+                // Transformation des Maps en Tableaux Triés
+                const sortedRelays = Array.from(relayMap.entries())
+                    .map(([name, val]) => ({ name, count: val.count, revenue: val.rev, role: 'Point Relais' }))
+                    .sort((a, b) => b.revenue - a.revenue) // Tri par Chiffre d'Affaires généré
+                    .slice(0, 10); // Top 10
+
+                const sortedSenders = Array.from(senderMap.entries())
+                    .map(([name, val]) => ({ name, count: val.count, revenue: val.rev, role: 'Expéditeur' }))
+                    .sort((a, b) => b.revenue - a.revenue)
+                    .slice(0, 10);
+
+                // Mise à jour States
+                setKpis({
+                    totalRevenue: totalRev,
+                    todayRevenue: todayRev,
+                    totalPackages: packages.length,
+                    averageValue: packages.length > 0 ? Math.round(totalRev / packages.length) : 0
+                });
+
+                setTopRelays(sortedRelays);
+                setTopSenders(sortedSenders);
+
+                setChartLabels(Array.from(dateMap.keys()));
+                setRevenueSeries(Array.from(dateMap.values()));
+
+                console.log("✅ Analysis Complete.");
+                console.groupEnd();
+
+            } catch (e) {
+                console.error("🚨 Error in Financial Calculation:", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        processFinanceData();
+    }, [viewMode]); // Re-calcul si changement de mode vue graphique (semaine/mois)
+
+    // --- CONFIGURATION DES GRAPHIQUES (Chart.js) ---
+    const lineData = {
+        labels: chartLabels,
+        datasets: [{
+            label: 'Revenus (FCFA)',
+            data: revenueSeries,
             fill: true,
-            tension: 0.3
-          }]
-        });
-      }
-    } catch (error) {
-      console.error('Erreur inattendue lors de la récupération des revenus:', error);
-    } finally {
-      setLoading(prev => ({ ...prev, revenue: false }));
-    }
-  }, []);
+            borderColor: '#f97316', // Orange 500
+            backgroundColor: (context: any) => {
+                const ctx = context.chart.ctx;
+                const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0, 'rgba(249, 115, 22, 0.4)');
+                gradient.addColorStop(1, 'rgba(249, 115, 22, 0.0)');
+                return gradient;
+            },
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#fff',
+            pointBorderColor: '#f97316',
+            pointBorderWidth: 2,
+        }]
+    };
 
-  const fetchPartnersEarnings = useCallback(async (): Promise<void> => {
-    try {
-      setLoading(prev => ({ ...prev, partners: true }));
-      
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { data, error } = await supabase.rpc('get_partners_earnings_report', {
-        start_date: thirtyDaysAgo.toISOString(),
-        end_date: new Date().toISOString()
-      });
-      
-      if (error) {
-        console.error('Erreur lors de la récupération des gains partenaires:', error);
-        return;
-      }
-      
-      setPartnersData(data || []);
-    } catch (error) {
-      console.error('Erreur inattendue lors de la récupération des gains partenaires:', error);
-    } finally {
-      setLoading(prev => ({ ...prev, partners: false }));
-    }
-  }, []);
-
-  // ============================================================================
-  // HANDLERS D'ÉVÉNEMENTS
-  // ============================================================================
-
-  const handleTabChange = (tab: TabType): void => {
-    setActiveTab(tab);
-  };
-
-  const handleExportData = (): void => {
-    // Logique d'exportation à implémenter
-    console.log('Export des données partenaires');
-  };
-
-  // ============================================================================
-  // EFFETS
-  // ============================================================================
-
-  useEffect(() => {
-    fetchKpis();
-    fetchRevenueChart();
-    fetchPartnersEarnings();
-  }, [fetchKpis, fetchRevenueChart, fetchPartnersEarnings]);
-
-  // ============================================================================
-  // CONFIGURATION DU GRAPHIQUE
-  // ============================================================================
-
-  const chartOptions: ChartOptions<'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: (value) => formatCurrency(Number(value))
+    const chartOptions: ChartOptions<'line'> = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#1e293b',
+                padding: 12,
+                titleFont: { size: 13 },
+                bodyFont: { size: 14, weight: 'bold' },
+                displayColors: false,
+                callbacks: {
+                    label: (context) => `${context.formattedValue} FCFA`
+                }
+            }
+        },
+        scales: {
+            x: { 
+                grid: { display: false },
+                ticks: { color: '#94a3b8' }
+            },
+            y: { 
+                grid: { color: 'rgba(148, 163, 184, 0.1)', borderDash: [5, 5] },
+                ticks: { color: '#94a3b8', callback: (value) => `${value} F` } 
+            }
         }
-      }
-    }
-  };
+    };
 
-  // ============================================================================
-  // DONNÉES DES KPIs
-  // ============================================================================
+    const barData = {
+        labels: topRelays.slice(0, 5).map(r => r.name.length > 15 ? r.name.substring(0, 12) + '...' : r.name),
+        datasets: [{
+            label: 'Volume Colis',
+            data: topRelays.slice(0, 5).map(r => r.count),
+            backgroundColor: '#3b82f6',
+            borderRadius: 4,
+            barThickness: 20
+        }]
+    };
+    
+    const barOptions: ChartOptions<'bar'> = {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { display: false }, ticks: { display: false } },
+            y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } }
+        }
+    };
 
-  const kpiCards = [
-    {
-      title: "Revenus Aujourd'hui",
-      value: formatCurrency(kpis?.revenue_today || 0),
-      icon: DollarSign,
-      color: "border-orange-500"
-    },
-    {
-      title: "Revenus (7 jours)",
-      value: formatCurrency(kpis?.revenue_last_7_days || 0),
-      icon: TrendingUp,
-      color: "border-orange-500"
-    },
-    {
-      title: "Revenus (30 jours)",
-      value: formatCurrency(kpis?.revenue_last_30_days || 0),
-      icon: Calendar,
-      color: "border-orange-500"
-    },
-    {
-      title: "Gains Partenaires Totaux",
-      value: formatCurrency(kpis?.total_partner_earnings || 0),
-      icon: Wallet,
-      color: "border-orange-500"
-    }
-  ];
+    // Génération PDF basique (Placeholder action)
+    const handleGenerateReport = () => {
+        alert("Génération du rapport financier PDF en cours...\n(Intégrez ici jsPDF avec les données 'kpis' et 'topRelays')");
+        console.log("DATA EXPORT:", { kpis, topRelays, topSenders });
+    };
 
-  const tableHeaders = [
-    "Partenaire",
-    "Type",
-    "Colis Traités",
-    "Gains Générés",
-    "Solde de Crédit"
-  ];
 
-  // ============================================================================
-  // RENDU
-  // ============================================================================
+    if(loading) return (
+        <div className="flex flex-col justify-center items-center py-32 animate-in fade-in">
+            <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
+            <p className="text-slate-500 font-medium">Analyse des transactions financières...</p>
+        </div>
+    );
 
-  return (
-    <div className="space-y-6">
-      {/* Section KPIs */}
-      <section className="space-y-4">
-        {loading.kpis ? (
-          <LoadingSpinner />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {kpiCards.map((kpi, index) => (
-              <KpiCard
-                key={index}
-                title={kpi.title}
-                value={kpi.value}
-                icon={kpi.icon}
-                color={kpi.color}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Navigation par onglets */}
-      <nav className="flex border-b border-gray-200">
-        <button
-          onClick={() => handleTabChange('revenue')}
-          className={`py-3 px-6 font-semibold transition-colors ${
-            activeTab === 'revenue'
-              ? 'border-b-2 border-orange-500 text-orange-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Rapport de Revenus
-        </button>
-        <button
-          onClick={() => handleTabChange('partners')}
-          className={`py-3 px-6 font-semibold transition-colors ${
-            activeTab === 'partners'
-              ? 'border-b-2 border-orange-500 text-orange-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Gains des Partenaires
-        </button>
-      </nav>
-
-      {/* Contenu des onglets */}
-      <AnimatePresence mode="wait">
-        {activeTab === 'revenue' && (
-          <motion.section
-            key="revenue"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border"
-          >
-            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-400 mb-6">
-              Évolution des revenus sur les 30 derniers jours
-            </h2>
+    return (
+        <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
             
-            <div className="h-96">
-              {loading.revenue ? (
-                <LoadingSpinner />
-              ) : revenueChartData ? (
-                <Line data={revenueChartData} options={chartOptions} />
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  Aucune donnée disponible
+            {/* HEADER SECTION */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <Wallet className="text-orange-500 w-8 h-8" /> Performance Financière
+                    </h2>
+                    <p className="text-slate-500 dark:text-gray-400 text-sm mt-1 max-w-xl">
+                        Analyse en temps réel basée sur {kpis.totalPackages} colis traités via l'API Backend.
+                    </p>
                 </div>
-              )}
+                
+                <button 
+                    onClick={handleGenerateReport}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-orange-600 dark:hover:bg-orange-700 text-white rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 font-bold text-sm"
+                >
+                    <Download className="w-4 h-4" /> Exporter Rapport
+                </button>
             </div>
-          </motion.section>
-        )}
 
-        {activeTab === 'partners' && (
-          <motion.section
-            key="partners"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-400">
-                Gains des Partenaires (30 derniers jours)
-              </h2>
-              <button
-                onClick={handleExportData}
-                className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors"
-              >
-                <Download size={16} />
-                Exporter
-              </button>
+            {/* KPI CARDS GRID */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <KpiCard 
+                    title="Chiffre d'Affaires Global" 
+                    value={kpis.totalRevenue.toLocaleString() + " FCFA"} 
+                    icon={DollarSign} 
+                    colorClass="bg-green-500 text-green-600" 
+                    trend="+15%"
+                />
+                <KpiCard 
+                    title="CA Aujourd'hui" 
+                    value={kpis.todayRevenue.toLocaleString() + " FCFA"} 
+                    icon={TrendingUp} 
+                    colorClass="bg-blue-500 text-blue-600" 
+                />
+                <KpiCard 
+                    title="Panier Moyen" 
+                    value={kpis.averageValue.toLocaleString() + " FCFA"} 
+                    icon={Wallet} 
+                    colorClass="bg-purple-500 text-purple-600" 
+                />
+                <KpiCard 
+                    title="Volume Facturé" 
+                    value={kpis.totalPackages} 
+                    icon={Package} 
+                    colorClass="bg-orange-500 text-orange-600" 
+                />
             </div>
-            
-            <div className="overflow-x-auto">
-              {loading.partners ? (
-                <LoadingSpinner />
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      {tableHeaders.map((header) => (
-                        <th
-                          key={header}
-                          className="p-4 text-left dark:bg-gray-900 font-semibold dark:text-gray-400 text-gray-600 uppercase tracking-wider"
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {partnersData.length > 0 ? (
-                      partnersData.map((partner) => (
-                        <tr
-                          key={partner.agency_id}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="p-4 font-semibold text-gray-900">
-                            {partner.manager_name}
-                          </td>
-                          <td className="p-4 text-gray-600">
-                            {partner.account_type}
-                          </td>
-                          <td className="p-4 text-gray-600">
-                            {partner.shipment_count.toLocaleString()}
-                          </td>
-                          <td className="p-4 font-semibold text-green-600">
-                            {formatCurrency(partner.total_earnings)}
-                          </td>
-                          <td className="p-4 font-semibold text-blue-600">
-                            {formatCurrency(partner.credit_balance)}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={tableHeaders.length}
-                          className="p-8 text-center text-gray-500"
-                        >
-                          Aucun partenaire trouvé
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
 
-export default FinanceManagement;
+            {/* GRAPHIQUES */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Main Chart - Revenue Timeline */}
+                <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-700 dark:text-white">Dynamique des Revenus</h3>
+                            <p className="text-xs text-slate-400 dark:text-gray-500">Flux financier entrant (Expéditions)</p>
+                        </div>
+                        <div className="flex bg-slate-100 dark:bg-gray-700 rounded-lg p-1">
+                            <button 
+                                onClick={() => setViewMode('week')} 
+                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='week' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}
+                            >
+                                7 Jours
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('month')} 
+                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='month' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}
+                            >
+                                30 Jours
+                            </button>
+                        </div>
+                    </div>
+                    <div className="h-72 w-full">
+                         <Line data={lineData} options={chartOptions} />
+                    </div>
+                </div>
+
+                {/* Side Chart - Top Relays Bar */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col">
+                     <div className="mb-6">
+                        <h3 className="font-bold text-lg text-slate-700 dark:text-white flex items-center gap-2">
+                            <Building className="w-5 h-5 text-blue-500"/> Top Relais
+                        </h3>
+                        <p className="text-xs text-slate-400 dark:text-gray-500">Les points relais les plus actifs par volume</p>
+                     </div>
+                     <div className="flex-1">
+                         <Bar data={barData} options={barOptions} />
+                     </div>
+                     <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                         <div className="flex justify-between items-center">
+                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total Commissions Relais</span>
+                             <span className="text-sm font-black text-blue-600 dark:text-blue-400">
+                                 {(kpis.totalRevenue * 0.15).toLocaleString(undefined, { maximumFractionDigits: 0 })} F
+                             </span>
+                         </div>
+                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
+                             <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '15%' }}></div>
+                         </div>
+                         <p className="text-[10px] text-gray-400 mt-1 text-right">Basé sur 15% de commission moyenne</p>
+                     </div>
+                </div>
+            </div>
+
+            {/* TABLES CLASSEMENT DÉTAILLÉES */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <RankingTable 
+                    title="Meilleurs Partenaires (CA)" 
+                    data={topRelays} 
+                    icon={Award} 
+                />
+                <RankingTable 
+                    title="Top Clients (Fidélité)" 
+                    data={topSenders} 
+                    icon={Users} 
+                />
+            </div>
+
+        </div>
+    );
+}

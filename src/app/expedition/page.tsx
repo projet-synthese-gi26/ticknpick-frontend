@@ -32,6 +32,8 @@ import { CheckCircleIcon, PrinterIcon } from '@heroicons/react/24/outline';
 import { UserPlusIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode';
+import { useAuth } from '@/context/AuthContext';
+import { packageService, PackageCreationPayload } from '@/services/packageService';
 
 const EXPEDITION_FORM_STORAGE_KEY = 'expedition_form_in_progress';
 
@@ -460,6 +462,7 @@ const handleCreateAccount = () => {
         />;
       case 6:
         const fullDataForPayment = {
+          
           ...formData.senderData,
           ...formData.recipientData,
           ...formData.packageData,

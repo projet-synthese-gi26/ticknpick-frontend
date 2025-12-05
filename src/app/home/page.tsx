@@ -1,20 +1,22 @@
 // FICHIER : src/app/home/page.tsx
 'use client';
 
-// --- MODIFIÉ : Import des icônes supplémentaires nécessaires pour les nouveaux services ---
-import { PackagePlus, PackageOpen, User, MapPinHouse, Truck, Search, Archive, Package } from 'lucide-react';
+import { PackagePlus, PackageOpen, User, MapPinHouse, Truck, Search, Archive, Package, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { userService } from '@/services/userservice';
 
-// --- MODIFIÉ : Définition des types pour plus de clarté ---
-type UserRole = 'client' | 'livreur' | 'freelance' | 'agence';
+// --- TYPES ET INTERFACES ---
 
+type UIAccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'ADMIN';
+
+// Interface utilisée pour l'état local de la page Home
 interface CurrentUser {
   name: string;
   email?: string;
-  role: UserRole;
+  role: UIAccountType;
 }
 
 interface Service {
@@ -32,114 +34,119 @@ interface PageConfig {
   mainIcon: ReactNode;
 }
 
-// --- MODIFIÉ : Le composant principal de la page ---
+// === FONCTION CRUCIALE : NORMALISATION DES DONNÉES ===
+const normalizeProfile = (apiData: any) => {
+  console.log(">>> Données Reçues pour Normalisation :", apiData); 
+
+  let finalAccountType: UIAccountType = 'CLIENT';
+  const rawType = apiData.account_type || apiData.accountType || 'CLIENT';
+
+  // Recherche du sous-type dans toutes les orthographes possibles
+  const rawSubType = apiData.businessActorType || apiData.business_actor_type || '';
+  const subType = rawSubType.toUpperCase();
+
+  console.log(`>>> Analyse Type: ${rawType}, Sous-Type: ${subType}`);
+
+  // LOGIQUE INTELLIGENTE POUR DÉTECTER LE RÔLE RÉEL
+  if (rawType === 'BUSINESS_ACTOR') {
+      if (subType === 'DELIVERER') finalAccountType = 'LIVREUR';
+      else if (subType === 'AGENCY_OWNER') finalAccountType = 'AGENCY'; // Le propriétaire devient "AGENCY" pour le dashboard
+      else if (subType === 'AGENCY') finalAccountType = 'AGENCY'; 
+      else if (subType === 'FREELANCE') finalAccountType = 'FREELANCE';
+      else if (subType === 'EMPLOYEE') finalAccountType = 'AGENCY'; // Employé d'agence voit le dashboard Agence
+      else {
+          console.warn("⚠️ Business Actor sans sous-type reconnu. Valeur reçue:", rawSubType);
+          // Fallback : Si le nom sonne comme une entreprise, c'est peut-être une Agence
+          if (apiData.businessName || apiData.business_name) finalAccountType = 'AGENCY'; 
+          else finalAccountType = 'FREELANCE';
+      }
+  } else if (rawType === 'ADMIN' || rawType === 'SUPERADMIN') {
+      finalAccountType = 'ADMIN';
+  } else {
+      finalAccountType = 'CLIENT';
+  }
+
+  return {
+    ...apiData,
+    id: apiData.id,
+    account_type: finalAccountType, 
+    email: apiData.email,
+    // Priorité au nom commercial, sinon nom personnel, sinon partie email
+    manager_name: apiData.businessName || apiData.business_name || apiData.name || apiData.email?.split('@')[0],
+    name: apiData.name || apiData.manager_name || 'Utilisateur',
+  };
+};
+
+// --- COMPOSANT PRINCIPAL ---
 export default function HomePage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading, logout, user: authUser } = useAuth();
+
   const [isVisible, setIsVisible] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // --- FIX : Hook useEffect pour récupérer les informations avec la même logique que login ---
   useEffect(() => {
+    if (isAuthLoading) return;
+
+    if (!isAuthenticated || !authUser) {
+      // Optionnel: rediriger si pas connecté, mais ici on laisse le template gérer
+      return;
+    }
+
     const fetchUserData = async () => {
         try {
-            console.log('🔍 Vérification de la session...');
-            const { data: { session } } = await supabase.auth.getSession();
+            console.log(`🔍 Session valide pour l'utilisateur ID: ${authUser.id}`);
+            
+            // 1. Appel API
+            const rawProfile = await userService.getProfileById(authUser.id);
+            
+            // 2. Normalisation des données
+            const profile = normalizeProfile(rawProfile);
 
-            if (!session) {
-                console.log('❌ Pas de session, redirection vers login');
-                router.push('/');
+            const userRole = profile.account_type;
+            
+            // Redirection Admin
+            if (userRole === 'ADMIN') {
+                console.log('👑 Admin détecté, redirection vers /superadmin...');
+                router.push('/superadmin');
                 return;
             }
 
-            console.log('✅ Session trouvée, ID utilisateur:', session.user.id);
-            console.log('📧  Email utilisateur:', session.user.email);
-
-            // --- FIX : Même logique que dans page.tsx - essayer 'profiles' d'abord ---
-            console.log('👤 Récupération du profil depuis profiles...');
-            const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select('manager_name, account_type, email')
-                .eq('id', session.user.id)
-                .single();
-
-            console.log('📋 Résultat profiles:', { profile, error: profileError });
-
-            let finalProfile = profile;
+            console.log('✅ Profil chargé et normalisé:', profile.manager_name);
             
-            // Si pas trouvé dans 'profiles', essayer 'profiles_pro'
-            if (profileError && profileError.code === 'PGRST116') {
-                console.log('🔄 Profil non trouvé dans profiles, tentative profiles_pro...');
-                const { data: profilePro, error: profileProError } = await supabase
-                    .from('profiles_pro')
-                    .select('manager_name, account_type, email')
-                    .eq('id', session.user.id)
-                    .single();
-                
-                console.log('📋 Résultat profiles_pro:', { profilePro, error: profileProError });
-                
-                if (profileProError || !profilePro) {
-                    console.error("❌ Aucun profil trouvé dans les deux tables");
-                    throw new Error("Aucun profil trouvé pour ce compte. Veuillez vous reconnecter.");
-                }
-                
-                finalProfile = profilePro;
-                console.log('✅ Profil trouvé dans profiles_pro');
-            } else if (profileError) {
-                console.error("❌ Erreur lors de la récupération du profil:", profileError);
-                throw new Error(`Erreur profil: ${profileError.message}`);
-            }
-
-            if (!finalProfile) {
-                throw new Error("Profil introuvable.");
-            }
-
-            console.log('✅ Profil final chargé:', finalProfile.manager_name);
-            console.log('🎭 Type de compte:', finalProfile.account_type);
-            
-            // --- Stockage des informations complètes ---
             setUser({ 
-                name: finalProfile.manager_name, 
-                email: session.user.email!, 
-                role: finalProfile.account_type.toLowerCase() as UserRole 
+                // On utilise manager_name qui contient le "Business Name" pour les Pros, ou le Nom pour les Clients
+                name: profile.manager_name, 
+                email: profile.email, 
+                role: userRole 
             });
             
             setIsVisible(true);
             
         } catch (error: any) {
-            console.error('💥 Erreur complète lors du chargement:', error);
-            // En cas d'erreur, déconnecter et rediriger
-            await supabase.auth.signOut();
-            router.push('/');
+            console.error('💥 Erreur lors de la récupération du profil via le backend:', error);
+            // En cas d'erreur API, on évite de logout brutalement pour l'UX, on peut laisser l'utilisateur réessayer ou voir un état d'erreur
+            // logout(); 
         } finally {
             setIsLoading(false);
         }
     };
 
     fetchUserData();
-  }, [router]);
+  }, [isAuthLoading, isAuthenticated, authUser, router, logout]);
   
-  // --- NOUVEAU : Logique pour définir dynamiquement le contenu de la page ---
+  
+  // --- CONFIGURATION DYNAMIQUE DU CONTENU ---
   const pageConfig: PageConfig | null = useMemo(() => {
     if (!user) return null;
 
     console.log('🎯 Configuration de la page pour le rôle:', user.role);
 
-    // Configuration par défaut (Freelance & Agence)
-    let config: PageConfig = {
-      title: "PicknDrop Point",
-      welcomeMessage: "dans le système de gestion de votre point relais.",
-      mainIcon: <MapPinHouse className='text-white h-12 w-12' />,
-      services: [
-        { title: "Dépôt de colis", description: "Enregistrez un nouveau colis à expédier.", href: "/depot", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-500" },
-        { title: "Retrait de colis", description: "Finalisez le retrait d'un colis arrivé.", href: "/withdraw-package", icon: <PackageOpen className="h-8 w-8 text-white" />, color: "from-amber-400 to-amber-500" },
-        { title: "Mon Compte", description: "Consultez les statistiques de votre point relais.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-orange-500 to-amber-600" },
-      ]
-    };
-    
-    // Surcharge de la configuration en fonction du rôle
+    let config: PageConfig;
+
     switch (user.role) {
-      case 'client':
+      case 'CLIENT':
         config = {
           title: "PicknDrop Link",
           welcomeMessage: "votre espace personnel pour gérer vos envois.",
@@ -152,7 +159,7 @@ export default function HomePage() {
         };
         break;
       
-      case 'livreur':
+      case 'LIVREUR':
         config = {
           title: "PicknDrop Deliver",
           welcomeMessage: "dans votre espace de gestion des livraisons.",
@@ -164,17 +171,44 @@ export default function HomePage() {
           ]
         };
         break;
+
+      case 'AGENCY':
+        config = {
+          title: "PicknDrop Agency", // Titre spécifique Agence
+          welcomeMessage: "dans votre centre de gestion logistique.",
+          mainIcon: <Building2 className='text-white h-12 w-12' />,
+          services: [
+            { title: "Gestion Flotte", description: "Gérez vos véhicules et livreurs.", href: "/dashboard", icon: <Truck className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-600" },
+            { title: "Opérations", description: "Supervisez les flux de colis de votre agence.", href: "/dashboard", icon: <MapPinHouse className="h-8 w-8 text-white" />, color: "from-amber-500 to-red-500" },
+            { title: "Administration", description: "Paramètres et gestion du personnel.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-orange-500 to-amber-600" },
+          ]
+        };
+        break;
+
+      // Cas par défaut : FREELANCE (Point Relais Indépendant)
+      case 'FREELANCE':
+      default:
+        config = {
+          title: "PicknDrop Point", // Titre spécifique Freelance
+          welcomeMessage: "dans le système de gestion de votre point relais.",
+          mainIcon: <MapPinHouse className='text-white h-12 w-12' />,
+          services: [
+            { title: "Dépôt de colis", description: "Enregistrez un nouveau colis à expédier.", href: "/depot", icon: <PackagePlus className="h-8 w-8 text-white" />, color: "from-orange-400 to-orange-500" },
+            { title: "Retrait de colis", description: "Finalisez le retrait d'un colis arrivé.", href: "/withdraw-package", icon: <PackageOpen className="h-8 w-8 text-white" />, color: "from-amber-400 to-amber-500" },
+            { title: "Mon Compte", description: "Consultez les statistiques de votre point relais.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: "from-orange-500 to-amber-600" },
+          ]
+        };
+        break;
     }
     
     return config;
   }, [user]);
 
-  // Affiche un écran de chargement tant que les données ne sont pas prêtes
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
           <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-600">Chargement de votre espace...</p>
+          <p className="text-gray-600  dark:text-gray-300 ">Chargement de votre espace...</p>
       </div>
     );
   }
@@ -183,39 +217,38 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
           <div className="text-center">
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Erreur de chargement</h2>
-              <p className="text-gray-600 mb-4">Impossible de charger votre profil.</p>
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">Non connecté</h2>
+              <p className="text-gray-600 mb-4">Veuillez vous connecter pour accéder à votre espace.</p>
               <button 
-                  onClick={() => router.push('/')}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                  onClick={() => router.push('/login')}
+                  className="px-6 py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors shadow-lg"
               >
-                  Retour à la connexion
+                  Aller à la connexion
               </button>
           </div>
       </div>
     );
   }
 
-  // --- Le JSX utilise maintenant `pageConfig` pour afficher les bonnes informations ---
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-orange-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-orange-50 dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-orange-900">
       <div className="relative overflow-hidden">
         {/* Décorations */}
-        <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-32 w-80 h-80 bg-gradient-to-r from-orange-200 to-amber-200 rounded-full opacity-20"></div>
           <div className="absolute -bottom-32 -left-40 w-96 h-96 bg-gradient-to-r from-orange-100 to-amber-200 rounded-full opacity-20"></div>
         </div>
 
         <div className="relative container mx-auto px-4 py-16 sm:px-6">
           <div className={`text-center transform transition-all duration-1000 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-            <h1 className="text-5xl sm:text-6xl font-bold bg-gradient-to-r from-gray-800 via-orange-600 to-amber-700 bg-clip-text text-transparent mb-4">
+            <h1 className="text-5xl sm:text-6xl font-bold bg-gradient-to-r from-gray-800 via-orange-600 to-amber-700 bg-clip-text text-transparent mb-4 pb-2">
               {pageConfig.title}
             </h1>
-            <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto mb-6 leading-relaxed">
+            <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-6 leading-relaxed">
               Bienvenue, <span className="font-bold text-orange-700">{user.name}</span>, {pageConfig.welcomeMessage}
             </p>
             <div className="flex justify-center mb-0">
-                <div className="w-20 h-20 bg-gradient-to-r from-orange-400 to-amber-500 rounded-full flex items-center justify-center text-white shadow-lg">
+                <div className="w-24 h-24 bg-gradient-to-r from-orange-400 to-amber-500 rounded-full flex items-center justify-center text-white shadow-xl ring-4 ring-white dark:ring-gray-800">
                   {pageConfig.mainIcon}
                 </div>
             </div>
@@ -225,23 +258,22 @@ export default function HomePage() {
 
       <div className="container mx-auto px-4 sm:px-6 pb-16">
         <div className={`transform transition-all duration-1000 delay-300 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-3">Nos Services</h2>
-          <div className="w-20 h-1 bg-gradient-to-r from-orange-400 to-amber-500 mx-auto mb-8 rounded-full"></div>
-
+          <h2 className="text-2xl sm:text-3xl font-bold text-center text-gray-800 dark:text-gray-200 mb-3">Nos Services</h2>
+          <div className="w-20 h-1.5 bg-gradient-to-r from-orange-400 to-amber-500 mx-auto mb-10 rounded-full"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {pageConfig.services.map((service, index) => (
               <Link key={index} href={service.href}
                 className="group transform transition-all duration-300 hover:scale-105"
                 style={{ transitionDelay: `${300 + index * 100}ms` }}>
-                <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 h-full">
+                <div className="bg-white/80 dark:bg-gray-900/70 backdrop-blur-sm rounded-xl shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100 dark:border-gray-800 h-full">
                   <div className="p-6">
                     <div className={`w-16 h-16 bg-gradient-to-r ${service.color} rounded-xl flex items-center justify-center mb-4 group-hover:rotate-6 transition-all duration-300 shadow-md`}>
                       {service.icon}
                     </div>
-                    <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2 group-hover:text-orange-600 transition-colors">
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-300 mb-2 group-hover:text-orange-600 transition-colors">
                       {service.title}
                     </h3>
-                    <p className="text-gray-600 mb-4 leading-relaxed text-sm sm:text-base">
+                    <p className="text-gray-600 dark:text-gray-400 mb-4 leading-relaxed text-sm sm:text-base">
                       {service.description}
                     </p>
                     <div className="flex items-center text-orange-600 font-semibold group-hover:text-orange-700 text-sm sm:text-base">

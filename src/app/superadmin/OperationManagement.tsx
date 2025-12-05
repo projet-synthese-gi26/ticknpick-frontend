@@ -6,1070 +6,429 @@ import dynamic from 'next/dynamic';
 import { 
     Package, Building, Search, Filter, Loader2, X, Eye, Edit, Ban, PlusCircle, 
     Map, List, CheckCircle, ArrowLeft, ArrowRight, Calendar, User, Phone, 
-    MapPin, Truck, DollarSign
+    MapPin, DollarSign, MoreVertical, AlertTriangle
 } from 'lucide-react';
 
-import { supabase } from '@/lib/supabase';
+// --- Services Backend ---
+import { relayPointService, RelayPoint } from '@/services/relayPointService';
+import { adminService } from '@/services/adminService';
+import apiClient from '@/services/apiClient';
+
 import 'leaflet/dist/leaflet.css';
+// LEAFLET HACK POUR ICONES
 import L from 'leaflet';
+const DefaultIcon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 // =============================================================================
 // TYPES & CONSTANTS
 // =============================================================================
 
-type ShipmentStatus = 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE';
+type ShipmentStatus = 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE' | 'LIVRE';
 
-const ALL_STATUSES: ShipmentStatus[] = [
-    'EN_ATTENTE_DE_DEPOT', 
-    'AU_DEPART', 
-    'EN_TRANSIT', 
-    'ARRIVE_AU_RELAIS', 
-    'RECU', 
-    'ANNULE'
-];
-
-const ITEMS_PER_PAGE = 10;
-
-interface RelayPoint {
-    id: number;
-    name: string;
-    address: string | null;
-    quartier: string | null;
-    lat: number;
-    lng: number;
-    hours: string | null;
-    type: 'bureau' | 'commerce' | 'agence';
-    status: 'ACTIVE' | 'INACTIVE';
-}
+const ITEMS_PER_PAGE = 8;
 
 interface Shipment {
-    id: number;
-    tracking_number: string;
+    id: string; // Backend renvoie string UUID pour ID
+    trackingNumber: string; // Attention : camelCase venant du backend
     status: ShipmentStatus;
-    sender_name: string;
-    recipient_name: string;
-    departure_point_name: string;
-    arrival_point_name: string;
-    shipping_cost: number;
-    created_at: string;
-    total_count: number;
-}
+    description: string;
+    shippingCost: number;
+    createdAt: string;
+    
+    senderName?: string;
+    recipientName?: string;
+    departurePointName?: string;
+    arrivalPointName?: string;
 
-interface FullShipmentDetails {
-    id: number;
-    tracking_number: string;
-    status: ShipmentStatus;
-    created_at: string;
-    sender_name: string;
-    sender_phone: string;
-    recipient_name: string;
-    recipient_phone: string;
-    description: string | null;
-    weight: number | null;
-    is_fragile: boolean;
-    is_perishable: boolean;
-    is_insured: boolean;
-    declared_value: number | null;
-    shipping_cost: number;
-    is_paid_at_departure: boolean;
-    departure_point: { name: string } | null;
-    arrival_point: { name: string } | null;
-}
-
-interface Filters {
-    searchTerm: string;
-    status: string;
-    departure: string;
-    arrival: string;
-}
-
-interface Pagination {
-    currentPage: number;
-    totalPages: number;
-    totalCount: number;
+    // Pour les détails
+    weight?: number;
+    isFragile?: boolean;
+    isInsured?: boolean;
+    isPerishable?: boolean;
+    declaredValue?: number;
+    deliveryFee?: number; // Souvent utilisé pour shipping_cost
 }
 
 // =============================================================================
-// LEAFLET MAP CONFIGURATION
+// MAP COMPONENT DYNAMIQUE
 // =============================================================================
-
-// Dynamic imports for Leaflet to avoid SSR issues
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
-// Fix for default Leaflet icon
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
 // =============================================================================
-// UTILITY COMPONENTS
+// UI UTILITIES
 // =============================================================================
 
-const StatusBadge = ({ status }: { status: ShipmentStatus }) => {
-    const statusConfig = {
-        'EN_ATTENTE_DE_DEPOT': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-        'AU_DEPART': 'bg-blue-100 text-blue-800 border border-blue-200',
-        'EN_TRANSIT': 'bg-indigo-100 text-indigo-800 border border-indigo-200',
-        'ARRIVE_AU_RELAIS': 'bg-purple-100 text-purple-800 border border-purple-200',
-        'RECU': 'bg-green-100 text-green-800 border border-green-200',
-        'ANNULE': 'bg-red-100 text-red-800 border border-red-200'
-    };
+const StatusBadge = ({ status }: { status: string }) => {
+    // Mapping status -> Style
+    let color = "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+    const s = status?.toUpperCase() || 'UNKNOWN';
+
+    if (s.includes('ATTENTE') || s.includes('PENDING')) color = "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+    else if (s.includes('TRANSIT') || s.includes('DEPART')) color = "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+    else if (s.includes('ARRIVE') || s.includes('RELAY')) color = "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
+    else if (s.includes('LIVRE') || s.includes('RECU')) color = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+    else if (s.includes('ANNULE')) color = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
 
     return (
-        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusConfig[status]}`}>
-            {status.replace(/_/g, ' ')}
+        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-transparent ${color}`}>
+            {status?.replace(/_/g, ' ')}
         </span>
     );
 };
 
-const LoadingSpinner = ({ size = 'default' }: { size?: 'small' | 'default' | 'large' }) => {
-    const sizeClasses = {
-        small: 'h-4 w-4',
-        default: 'h-8 w-8',
-        large: 'h-12 w-12'
-    };
-
-    return (
-        <div className="flex justify-center items-center">
-            <Loader2 className={`animate-spin text-orange-500 ${sizeClasses[size]}`} />
-        </div>
-    );
-};
+const LoadingOverlay = () => (
+    <div className="absolute inset-0 bg-white/80 dark:bg-black/50 z-10 flex items-center justify-center backdrop-blur-sm rounded-xl">
+        <Loader2 className="w-10 h-10 text-orange-500 animate-spin" />
+    </div>
+);
 
 // =============================================================================
-// SHIPMENT DETAILS MODAL
+// MODALE DÉTAILS COLIS
 // =============================================================================
 
-const DetailItem = ({ 
-    icon: Icon, 
-    label, 
-    value 
-}: { 
-    icon: React.ElementType; 
-    label: string; 
-    value: string | number | null | undefined | React.ReactNode;
-}) => (
-    <div className="flex items-start gap-3">
-        <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
-        <div>
-            <p className="text-gray-500 text-xs font-medium">{label}</p>
-            <p className="font-semibold text-gray-800 dark:text-gray-300">{value || 'N/A'}</p>
+const ShipmentDetailsModal = ({ shipment, onClose }: { shipment: Shipment; onClose: () => void }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+             <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-700">
+                 <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                     <Package className="text-orange-500"/> Détail du Colis
+                 </h3>
+                 <button onClick={onClose}><X className="w-6 h-6 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"/></button>
+             </div>
+             
+             <div className="p-6 space-y-6">
+                 {/* En-tête */}
+                 <div className="flex justify-between items-start">
+                     <div>
+                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold">N° Tracking</p>
+                         <p className="text-2xl font-black text-slate-800 dark:text-white tracking-tight font-mono">{shipment.trackingNumber}</p>
+                     </div>
+                     <div className="text-right">
+                         <StatusBadge status={shipment.status} />
+                         <p className="text-xs text-gray-400 mt-1">{new Date(shipment.createdAt).toLocaleString()}</p>
+                     </div>
+                 </div>
+
+                 {/* Infos Trajet */}
+                 <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-200 dark:border-slate-600">
+                     <div>
+                         <p className="text-xs text-blue-500 font-bold uppercase mb-1 flex items-center gap-1"><MapPin className="w-3 h-3"/> Expéditeur / Départ</p>
+                         <p className="font-bold text-sm dark:text-white">{shipment.senderName || "Nom Inconnu"}</p>
+                         <p className="text-xs text-gray-500">{shipment.departurePointName || "Point de Départ"}</p>
+                     </div>
+                     <div className="border-l border-gray-200 dark:border-gray-600 pl-4">
+                         <p className="text-xs text-green-500 font-bold uppercase mb-1 flex items-center gap-1"><MapPin className="w-3 h-3"/> Destinataire / Arrivée</p>
+                         <p className="font-bold text-sm dark:text-white">{shipment.recipientName || "Nom Inconnu"}</p>
+                         <p className="text-xs text-gray-500">{shipment.arrivalPointName || "Point d'Arrivée"}</p>
+                     </div>
+                 </div>
+
+                 {/* Caractéristiques */}
+                 <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Poids</p>
+                          <p className="font-bold text-slate-700 dark:text-slate-200">{shipment.weight || 'N/A'} kg</p>
+                      </div>
+                      <div className="p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Prix</p>
+                          <p className="font-bold text-slate-700 dark:text-slate-200">{(shipment.shippingCost || shipment.deliveryFee || 0).toLocaleString()} FCFA</p>
+                      </div>
+                      <div className="p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Type</p>
+                          <p className="font-bold text-slate-700 dark:text-slate-200">{shipment.isFragile ? 'Fragile' : 'Standard'}</p>
+                      </div>
+                 </div>
+                 
+                 <div className="p-4 bg-orange-50 dark:bg-orange-900/10 rounded-lg text-sm text-orange-800 dark:text-orange-300 italic">
+                     {shipment.description || "Pas de description supplémentaire."}
+                 </div>
+
+             </div>
+             
+             <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-slate-800/50 flex justify-end gap-2">
+                  <button onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 dark:bg-slate-700 dark:border-slate-600 dark:text-white rounded-lg shadow-sm text-sm font-semibold hover:bg-gray-50 transition">Fermer</button>
+             </div>
         </div>
     </div>
 );
 
-const ShipmentDetailsModal = ({ 
-    shipmentId, 
-    onClose 
-}: { 
-    shipmentId: number; 
-    onClose: () => void;
-}) => {
-    const [details, setDetails] = useState<FullShipmentDetails | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchDetails = async () => {
-            setLoading(true);
-            try {
-                const { data, error } = await supabase
-                    .from('shipments')
-                    .select('*, departure_point:departure_point_id(name), arrival_point:arrival_point_id(name)')
-                    .eq('id', shipmentId)
-                    .single();
-
-                if (error) throw error;
-                if (data) setDetails(data as FullShipmentDetails);
-            } catch (error) {
-                console.error('Error fetching shipment details:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDetails();
-    }, [shipmentId]);
-
-    const formatSpecificities = (details: FullShipmentDetails) => {
-        const specificities = [];
-        if (details.is_fragile) specificities.push('Fragile');
-        if (details.is_perishable) specificities.push('Périssable');
-        if (details.is_insured) specificities.push('Assuré');
-        return specificities.length > 0 ? specificities.join(', ') : 'Aucune';
-    };
-    // --- JSX principal de la modale ---
-return (
-    <motion.div 
-        initial={{ opacity: 0 }} 
-        animate={{ opacity: 1 }} 
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        onClick={onClose}
-    >
-        <motion.div 
-            initial={{ scale: 0.95, y: 10 }} 
-            animate={{ scale: 1, y: 0 }} 
-            exit={{ scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700"
-            onClick={e => e.stopPropagation()}
-        >
-            {/* Header */}
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                    Détails du Colis
-                </h3>
-                <button 
-                    onClick={onClose} 
-                    className="p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
-                    aria-label="Fermer la modale"
-                >
-                    <X size={20} />
-                </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
-                {loading ? (
-                    <div className="flex justify-center items-center h-48">
-                        <LoadingSpinner />
-                    </div>
-                ) : !details ? (
-                    <p className="text-red-500 dark:text-red-400 text-center py-10">
-                        Impossible de charger les détails du colis.
-                    </p>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
-                        
-                        <div className="space-y-4 ">
-                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
-                                Informations Générales
-                            </h4>
-                            <DetailItem icon={Package} label="N° de Suivi" value={details.tracking_number} />
-                            <DetailItem icon={Calendar} label="Créé le" value={new Date(details.created_at).toLocaleString('fr-FR')} />
-                            <DetailItem icon={CheckCircle} label="Statut Actuel" value={<StatusBadge status={details.status} />} />
-                            <DetailItem icon={DollarSign} label="Coût d'expédition" value={`${details.shipping_cost.toLocaleString()} FCFA`} />
-                        </div>
-
-                        <div className="space-y-4">
-                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
-                                Détails du Colis
-                            </h4>
-                            <DetailItem icon={Edit} label="Description" value={details.description} />
-                            <DetailItem icon={Package} label="Poids" value={details.weight ? `${details.weight} kg` : null} />
-                            <DetailItem icon={Ban} label="Spécificités" value={formatSpecificities(details)} />
-                            {details.is_insured && (
-                                <DetailItem icon={DollarSign} label="Valeur Déclarée" value={`${details.declared_value?.toLocaleString()} FCFA`} />
-                            )}
-                        </div>
-
-                        <div className="space-y-4">
-                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
-                                Expéditeur
-                            </h4>
-                            <DetailItem icon={User} label="Nom" value={details.sender_name} />
-                            <DetailItem icon={Phone} label="Téléphone" value={details.sender_phone} />
-                            <DetailItem icon={MapPin} label="Point de départ" value={details.departure_point?.name} />
-                        </div>
-
-                        <div className="space-y-4">
-                            <h4 className="font-bold text-orange-600 dark:text-orange-400 border-b border-gray-200 dark:border-gray-700 pb-1">
-                                Destinataire
-                            </h4>
-                            <DetailItem icon={User} label="Nom" value={details.recipient_name} />
-                            <DetailItem icon={Phone} label="Téléphone" value={details.recipient_phone} />
-                            <DetailItem icon={MapPin} label="Point d'arrivée" value={details.arrival_point?.name} />
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex justify-end flex-shrink-0">
-                <button 
-                    onClick={onClose} 
-                    className="bg-gray-200 dark:bg-gray-700 px-4 py-2 rounded-lg text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                    Fermer
-                </button>
-            </div>
-        </motion.div>
-    </motion.div>
-);
-};
 
 // =============================================================================
-// STATUS UPDATE MODAL
+// SOUS-COMPOSANT: GESTION DES COLIS (Shipments)
 // =============================================================================
 
-const StatusUpdateModal = ({
-    shipment,
-    newStatus,
-    setNewStatus,
-    onUpdate,
-    onClose
-}: {
-    shipment: { id: number; tracking_number: string };
-    newStatus: ShipmentStatus | '';
-    setNewStatus: (status: ShipmentStatus | '') => void;
-    onUpdate: () => void;
-    onClose: () => void;
-}) => (
-    <motion.div 
-        initial={{ opacity: 0 }} 
-        animate={{ opacity: 1 }} 
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center"
-        onClick={onClose}
-    >
-        <motion.div 
-            initial={{ scale: 0.9 }} 
-            animate={{ scale: 1 }} 
-            exit={{ scale: 0.9 }}
-            className="bg-white p-6 rounded-lg w-full max-w-sm"
-            onClick={e => e.stopPropagation()}
-        >
-            <h3 className="font-bold text-lg mb-2">Modifier le statut de</h3>
-            <p className="font-mono text-orange-600 mb-4">{shipment.tracking_number}</p>
-            
-            <select 
-                value={newStatus} 
-                onChange={e => setNewStatus(e.target.value as ShipmentStatus)}
-                className="w-full p-2 border rounded-lg mb-4"
-            >
-                <option value="" disabled>Choisir un nouveau statut...</option>
-                {ALL_STATUSES.map(status => (
-                    <option key={status} value={status}>
-                        {status.replace(/_/g, ' ')}
-                    </option>
-                ))}
-            </select>
-            
-            <div className="flex justify-end gap-3">
-                <button 
-                    onClick={onClose} 
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                    Annuler
-                </button>
-                <button 
-                    onClick={onUpdate} 
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
-                    disabled={!newStatus}
-                >
-                    Sauvegarder
-                </button>
-            </div>
-        </motion.div>
-    </motion.div>
-);
-
-// =============================================================================
-// SHIPMENTS MANAGER COMPONENT
-// =============================================================================
-
-const ShipmentsManager = ({ allRelayPoints }: { allRelayPoints: RelayPoint[] }) => {
+const ShipmentsManager = () => {
     const [shipments, setShipments] = useState<Shipment[]>([]);
+    const [filteredShipments, setFilteredShipments] = useState<Shipment[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState<Filters>({ 
-        searchTerm: '', 
-        status: 'ALL', 
-        departure: 'ALL', 
-        arrival: 'ALL' 
-    });
-    const [pagination, setPagination] = useState<Pagination>({ 
-        currentPage: 1, 
-        totalPages: 1, 
-        totalCount: 0 
-    });
-    const [selectedShipmentId, setSelectedShipmentId] = useState<number | null>(null);
-    const [statusToUpdate, setStatusToUpdate] = useState<{ id: number; tracking_number: string } | null>(null);
-    const [newStatus, setNewStatus] = useState<ShipmentStatus | ''>('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+    const [page, setPage] = useState(1);
 
-    const fetchShipments = useCallback(async (page = pagination.currentPage) => {
+    // Fetcher tous les colis depuis le endpoint Admin global
+    const loadShipments = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase.rpc('search_all_shipments', {
-                search_term: filters.searchTerm,
-                filter_status: filters.status,
-                filter_departure: filters.departure === 'ALL' ? null : parseInt(filters.departure),
-                filter_arrival: filters.arrival === 'ALL' ? null : parseInt(filters.arrival),
-                start_date: new Date(0).toISOString(),
-                end_date: new Date().toISOString(),
-                page_limit: ITEMS_PER_PAGE,
-                page_offset: (page - 1) * ITEMS_PER_PAGE
-            });
+            const data = await adminService.getAllShipmentsGlobal(); // Endpoint /api/admin/shipments
+            // Mapping pour assurer la compatibilité camelCase (Spring Boot)
+            const cleanData = (data || []).map((s: any) => ({
+                id: s.id,
+                trackingNumber: s.trackingNumber || s.tracking_number || 'N/A',
+                status: s.status,
+                description: s.description || '',
+                shippingCost: s.shippingCost || s.deliveryFee || 0,
+                createdAt: s.createdAt || new Date().toISOString(),
+                senderName: s.senderName || 'N/A',
+                recipientName: s.recipientName || 'N/A',
+                departurePointName: s.departurePointName || s.pickupAddress || 'Départ',
+                arrivalPointName: s.arrivalPointName || s.deliveryAddress || 'Arrivée',
+                weight: s.weight,
+                isFragile: s.isFragile,
+                isInsured: s.isInsured
+            }));
 
-            if (error) throw error;
-            
-            if (data) {
-                setShipments(data);
-                const totalCount = data.length > 0 ? data[0].total_count : 0;
-                setPagination({ 
-                    currentPage: page, 
-                    totalPages: Math.ceil(totalCount / ITEMS_PER_PAGE), 
-                    totalCount 
-                });
-            }
-        } catch (error) {
-            console.error('Error fetching shipments:', error);
+            // Trier par date décroissante
+            cleanData.sort((a: Shipment, b: Shipment) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            setShipments(cleanData);
+            setFilteredShipments(cleanData);
+        } catch (e) {
+            console.error("Erreur chargement colis", e);
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    };
 
-    // Reset to first page when filters change
+    useEffect(() => { loadShipments(); }, []);
+
+    // Filtrage Local
     useEffect(() => {
-        const handler = setTimeout(() => {
-            if (pagination.currentPage !== 1) {
-                setPagination(prev => ({ ...prev, currentPage: 1 }));
-            } else {
-                fetchShipments(1);
-            }
-        }, 500);
-        return () => clearTimeout(handler);
-    }, [filters.searchTerm, filters.status, filters.departure, filters.arrival]);
+        const term = searchTerm.toLowerCase();
+        const filtered = shipments.filter(s => 
+             s.trackingNumber.toLowerCase().includes(term) || 
+             s.senderName?.toLowerCase().includes(term) ||
+             s.recipientName?.toLowerCase().includes(term)
+        );
+        setFilteredShipments(filtered);
+        setPage(1);
+    }, [searchTerm, shipments]);
 
-    // Fetch when page changes
-    useEffect(() => {
-        fetchShipments(pagination.currentPage);
-    }, [pagination.currentPage]);
-
-    const handleUpdateStatus = async () => {
-        if (!statusToUpdate || !newStatus) return;
-        
-        try {
-            const { error } = await supabase
-                .from('shipments')
-                .update({ status: newStatus })
-                .eq('id', statusToUpdate.id);
-            
-            if (error) throw error;
-            
-            setStatusToUpdate(null);
-            setNewStatus('');
-            fetchShipments(pagination.currentPage);
-        } catch (error) {
-            console.error('Error updating status:', error);
-            alert("Erreur lors de la mise à jour du statut.");
-        }
-    };
-
-    const handleFilterChange = (key: keyof Filters, value: string) => {
-        setFilters(prev => ({ ...prev, [key]: value }));
-    };
-
-    const handlePageChange = (direction: 'prev' | 'next') => {
-        setPagination(prev => ({
-            ...prev,
-            currentPage: direction === 'prev' ? prev.currentPage - 1 : prev.currentPage + 1
-        }));
-    };
+    // Pagination Locale
+    const paginatedData = filteredShipments.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(filteredShipments.length / ITEMS_PER_PAGE);
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border space-y-4">
+        <div className="space-y-6">
+             {/* BARRE OUTILS */}
+             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border dark:border-gray-700">
+                 <div className="relative w-full md:max-w-md">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
+                     <input 
+                        type="text" 
+                        placeholder="Rechercher un tracking, expéditeur..." 
+                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none dark:text-white"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                     />
+                 </div>
+                 <button onClick={loadShipments} className="p-2 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300">
+                     <div className={loading ? 'animate-spin' : ''}><ArrowRight className="w-4 h-4"/></div> {/* Refresh Icon Fake */}
+                 </button>
+             </div>
 
-            {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <input 
-                    type="text" 
-                    placeholder="Rechercher par N°, nom..." 
-                    value={filters.searchTerm}
-                    onChange={e => handleFilterChange('searchTerm', e.target.value)}
-                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
-                
-                <select 
-                    value={filters.status}
-                    onChange={e => handleFilterChange('status', e.target.value)}
-                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                    <option value="ALL">Tous les statuts</option>
-                    {ALL_STATUSES.map(status => (
-                        <option key={status} value={status}>
-                            {status.replace(/_/g, ' ')}
-                        </option>
-                    ))}
-                </select>
-                
-                <select 
-                    value={filters.departure}
-                    onChange={e => handleFilterChange('departure', e.target.value)}
-                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                    <option value="ALL">Tous les départs</option>
-                    {allRelayPoints.map(point => (
-                        <option key={point.id} value={point.id}>
-                            {point.name}
-                        </option>
-                    ))}
-                </select>
-                
-                <select 
-                    value={filters.arrival}
-                    onChange={e => handleFilterChange('arrival', e.target.value)}
-                    className="p-2 border dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                    <option value="ALL">Toutes les arrivées</option>
-                    {allRelayPoints.map(point => (
-                        <option key={point.id} value={point.id}>
-                            {point.name}
-                        </option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Table */}
-            <div className="overflow-x-auto">
-                {loading ? (
-                    <div className="h-96 flex items-center justify-center">
-                        <LoadingSpinner size="large" />
-                    </div>
-                ) : shipments.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                        Aucun colis ne correspond à votre recherche.
-                    </div>
-                ) : (
-                    <table className="w-full text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-900 dark:text-gray-300 text-gray-600 uppercase">
+             {/* TABLEAU */}
+             <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm relative min-h-[400px]">
+                  {loading && <LoadingOverlay/>}
+                  
+                  <table className="w-full text-sm text-left">
+                       <thead className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-gray-400 uppercase font-bold text-xs">
                             <tr>
-                                <th className="p-3 text-left">N° Suivi</th>
-                                <th className="p-3 text-left">Trajet</th>
-                                <th className="p-3 text-left">Statut</th>
-                                <th className="p-3 text-left">Coût</th>
-                                <th className="p-3 text-left">Date</th>
-                                <th className="p-3 text-left">Actions</th>
+                                <th className="p-4">Tracking</th>
+                                <th className="p-4">Expéditeur &rarr; Destinataire</th>
+                                <th className="p-4 text-center">Statut</th>
+                                <th className="p-4 text-right">Montant</th>
+                                <th className="p-4 text-center">Actions</th>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {shipments.map(shipment => (
-                                <tr key={shipment.id} className="border-b hover:bg-orange-50 dark:hover:bg-gray-900 dark:text-gray-400 transition-colors">
-                                    <td className="p-3 font-mono font-semibold">
-                                        {shipment.tracking_number}
-                                    </td>
-                                    <td className="p-3">
-                                        <div>
-                                            <strong>De:</strong> {shipment.departure_point_name}
-                                        </div>
-                                        <div>
-                                            <strong>À:</strong> {shipment.arrival_point_name}
-                                        </div>
-                                    </td>
-                                    <td className="p-3">
-                                        <StatusBadge status={shipment.status} />
-                                    </td>
-                                    <td className="p-3">
-                                        {shipment.shipping_cost.toLocaleString()} FCFA
-                                    </td>
-                                    <td className="p-3">
-                                        {new Date(shipment.created_at).toLocaleDateString('fr-FR')}
-                                    </td>
-                                    <td className="p-3">
-                                        <div className="flex items-center gap-3">
-                                            <button 
-                                                onClick={() => setSelectedShipmentId(shipment.id)}
-                                                title="Voir Détails"
-                                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                            >
-                                                <Eye className="h-5 w-5" />
-                                            </button>
-                                        </div>
-                                    </td>
+                       </thead>
+                       <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                            {paginatedData.length === 0 ? (
+                                <tr><td colSpan={5} className="p-8 text-center text-gray-500 italic">Aucun colis trouvé.</td></tr>
+                            ) : paginatedData.map(s => (
+                                <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/30 transition cursor-default">
+                                     <td className="p-4 font-mono font-semibold text-orange-600 dark:text-orange-400">
+                                         {s.trackingNumber}
+                                         <div className="text-[10px] text-gray-400 font-sans mt-0.5">{new Date(s.createdAt).toLocaleDateString()}</div>
+                                     </td>
+                                     <td className="p-4">
+                                         <div className="text-slate-800 dark:text-white font-medium">{s.senderName}</div>
+                                         <div className="text-xs text-gray-500">Vers: {s.recipientName}</div>
+                                     </td>
+                                     <td className="p-4 text-center"><StatusBadge status={s.status} /></td>
+                                     <td className="p-4 text-right font-bold text-slate-700 dark:text-slate-300">{(s.shippingCost||0).toLocaleString()} F</td>
+                                     <td className="p-4 text-center">
+                                         <button 
+                                            onClick={() => setSelectedShipment(s)} 
+                                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition"
+                                            title="Détails"
+                                         >
+                                             <Eye className="w-4 h-4"/>
+                                         </button>
+                                     </td>
                                 </tr>
                             ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
+                       </tbody>
+                  </table>
+             </div>
 
-            {/* Pagination */}
-            {pagination.totalPages > 1 && (
-                <div className="flex justify-between items-center mt-4 text-sm">
-                    <button 
-                        onClick={() => handlePageChange('prev')}
-                        disabled={pagination.currentPage <= 1}
-                        className="px-4 py-2 bg-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-transparent rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
-                    >
-                        <ArrowLeft size={16} /> Précédente
-                    </button>
-                    
-                    <span className="font-medium">
-                        Page {pagination.currentPage} / {pagination.totalPages} 
-                        ({pagination.totalCount} colis)
-                    </span>
-                    
-                    <button 
-                        onClick={() => handlePageChange('next')}
-                        disabled={pagination.currentPage >= pagination.totalPages}
-                        className="px-4 py-2 bg-gray-200  dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-transparent rounded-lg disabled:opacity-50 font-semibold flex items-center gap-1 hover:bg-gray-300 transition-colors disabled:hover:bg-gray-200"
-                    >
-                        Suivante <ArrowRight size={16} />
-                    </button>
-                </div>
-            )}
+             {/* PAGINATION SIMPLE */}
+             <div className="flex justify-between items-center">
+                 <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="px-4 py-2 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg disabled:opacity-50 text-sm hover:bg-gray-50 dark:text-white">Précédent</button>
+                 <span className="text-sm text-gray-600 dark:text-gray-400">Page {page} / {totalPages || 1}</span>
+                 <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages || totalPages === 0} className="px-4 py-2 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg disabled:opacity-50 text-sm hover:bg-gray-50 dark:text-white">Suivant</button>
+             </div>
 
-            {/* Modals */}
-            <AnimatePresence>
-                {selectedShipmentId && (
-                    <ShipmentDetailsModal 
-                        shipmentId={selectedShipmentId} 
-                        onClose={() => setSelectedShipmentId(null)} 
-                    />
-                )}
-                
-                {statusToUpdate && (
-                    <StatusUpdateModal
-                        shipment={statusToUpdate}
-                        newStatus={newStatus}
-                        setNewStatus={setNewStatus}
-                        onUpdate={handleUpdateStatus}
-                        onClose={() => {
-                            setStatusToUpdate(null);
-                            setNewStatus('');
-                        }}
-                    />
-                )}
-            </AnimatePresence>
+             {/* MODAL */}
+             {selectedShipment && <ShipmentDetailsModal shipment={selectedShipment} onClose={() => setSelectedShipment(null)} />}
         </div>
     );
 };
 
+
 // =============================================================================
-// RELAY POINTS MANAGER COMPONENT
+// SOUS-COMPOSANT: GESTION DES POINTS RELAIS (RelayPoints)
 // =============================================================================
 
 const RelayPointsManager = () => {
-    const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
+    const [relays, setRelays] = useState<RelayPoint[]>([]);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [currentPoint, setCurrentPoint] = useState<Partial<RelayPoint> | null>(null);
-
-    const fetchPoints = async () => {
+    const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
+    
+    // Chargement direct depuis relayPointService
+    const loadRelays = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('relay_points')
-                .select('*')
-                .order('name');
-            
-            if (error) throw error;
-            if (data) setRelayPoints(data as RelayPoint[]);
-        } catch (error) {
-            console.error('Error fetching relay points:', error);
+            const data = await relayPointService.getAllRelayPoints();
+            setRelays(data);
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchPoints();
-    }, []);
-
-    const handleSavePoint = async () => {
-        if (!currentPoint?.name || !currentPoint.address || !currentPoint.lat || !currentPoint.lng) {
-            alert('Champs requis manquants.');
-            return;
-        }
-        
-        try {
-            const { error } = await supabase.from('relay_points').upsert(currentPoint);
-            
-            if (error) throw error;
-            
-            setIsModalOpen(false);
-            setCurrentPoint(null);
-            fetchPoints();
-        } catch (error) {
-            console.error('Error saving relay point:', error);
-            alert("Erreur de sauvegarde.");
-        }
-    };
-
-    const handleInputChange = (field: keyof RelayPoint, value: any) => {
-        setCurrentPoint(prev => ({ ...prev, [field]: value }));
-    };
-
-    if (loading) {
-        return <LoadingSpinner size="large" />;
-    }
+    useEffect(() => { loadRelays(); }, []);
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border space-y-4">
-            <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-200">Gestion des Points Relais</h2>
-                
-                {/* View Mode Toggle */}
-                <div className="flex items-center gap-4">
-                    <div className="flex gap-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg">
-                        <button 
-                            onClick={() => setViewMode('list')}
-                            className={`px-3 py-1 rounded-md transition-colors ${
-                                viewMode === 'list' ? 'bg-white shadow' : 'hover:bg-gray-100'
-                            }`}
-                        >
-                            <List className="w-4 h-4" />
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('map')}
-                            className={`px-3 py-1 rounded-md transition-colors ${
-                                viewMode === 'map' ? 'bg-white shadow' : 'hover:bg-gray-100'
-                            }`}
-                        >
-                            <Map className="w-4 h-4" />
-                        </button>
-                    </div>
-                    
-                    <button 
-                        onClick={() => { 
-                            setCurrentPoint({ 
-                                type: 'bureau', 
-                                status: 'ACTIVE' 
-                            }); 
-                            setIsModalOpen(true); 
-                        }}
-                        className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-orange-600 transition-colors"
-                    >
-                        <PlusCircle className="w-4 h-4" />
-                        Ajouter
-                    </button>
-                </div>
+        <div className="space-y-6">
+            <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-gray-700 shadow-sm">
+                 <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2"><Building className="w-5 h-5 text-blue-500"/> Points Relais</h3>
+                 <div className="flex gap-2">
+                      <button onClick={() => setViewMode('LIST')} className={`p-2 rounded-lg text-sm font-bold transition ${viewMode === 'LIST' ? 'bg-orange-100 text-orange-700' : 'text-gray-500 hover:bg-gray-100'}`}><List className="w-4 h-4"/></button>
+                      <button onClick={() => setViewMode('MAP')} className={`p-2 rounded-lg text-sm font-bold transition ${viewMode === 'MAP' ? 'bg-orange-100 text-orange-700' : 'text-gray-500 hover:bg-gray-100'}`}><Map className="w-4 h-4"/></button>
+                 </div>
             </div>
-
-            {/* Content based on view mode */}
-            {viewMode === 'list' ? (
-                <div className="overflow-x-auto ">
-                    {relayPoints.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            Aucun point relais enregistré.
-                        </div>
-                    ) : (
-                        <table className="w-full  text-sm">
-                            <thead className="bg-gray-50 dark:bg-gray-900 dark:text-gray-300 text-gray-600 uppercase">
-                                <tr>
-                                    <th className="p-3 text-left">Nom</th>
-                                    <th className="p-3 text-left">Adresse</th>
-                                    <th className="p-3 text-left">Quartier</th>
-                                    <th className="p-3 text-left">Type</th>
-                                    <th className="p-3 text-left">Statut</th>
-                                    <th className="p-3 text-left">Horaires</th>
-                                    <th className="p-3 text-left">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {relayPoints.map(point => (
-                                    <tr key={point.id} className="border-b hover:bg-orange-50 dark:hover:bg-gray-900 dark:text-gray-300 transition-colors">
-                                        <td className="p-3 font-semibold">{point.name}</td>
-                                        <td className="p-3">{point.address || 'N/A'}</td>
-                                        <td className="p-3">{point.quartier || 'N/A'}</td>
-                                        <td className="p-3">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                                point.type === 'bureau' ? 'bg-blue-100 text-blue-800' :
-                                                point.type === 'commerce' ? 'bg-green-100 text-green-800' :
-                                                'bg-purple-100 text-purple-800'
-                                            }`}>
-                                                {point.type.charAt(0).toUpperCase() + point.type.slice(1)}
-                                            </span>
-                                        </td>
-                                        <td className="p-3">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                                point.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                            }`}>
-                                                {point.status}
-                                            </span>
-                                        </td>
-                                        <td className="p-3">{point.hours || 'N/A'}</td>
-                                        <td className="p-3">
-                                            <button 
-                                                onClick={() => { 
-                                                    setCurrentPoint(point); 
-                                                    setIsModalOpen(true); 
-                                                }}
-                                                title="Modifier"
-                                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                            >
-                                                <Edit className="h-5 w-5" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-            ) : (
-                <div className="h-[600px] rounded-lg overflow-hidden shadow-lg">
-                    <MapContainer 
-                        center={[5.7, 10.2]} 
-                        zoom={6} 
-                        style={{ height: '100%', width: '100%' }}
-                    >
-                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                        {relayPoints.map(point => (
-                            <Marker key={point.id} position={[point.lat, point.lng]}>
-                                <Popup>
-                                    <div className="space-y-1">
-                                        <h3 className="font-semibold">{point.name}</h3>
-                                        <p className="text-sm text-gray-600">{point.address}</p>
-                                        {point.quartier && (
-                                            <p className="text-sm text-gray-600">Quartier: {point.quartier}</p>
-                                        )}
-                                        <p className="text-sm">
-                                            <span className={`px-2 py-1 text-xs rounded ${
-                                                point.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                            }`}>
-                                                {point.status}
-                                            </span>
-                                        </p>
-                                    </div>
-                                </Popup>
-                            </Marker>
-                        ))}
-                    </MapContainer>
-                </div>
-            )}
             
-            {/* Add/Edit Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-                        <h3 className="font-bold text-lg mb-4">
-                            {currentPoint?.id ? 'Modifier' : 'Ajouter'} un point relais
-                        </h3>
-                        
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Nom *
-                                </label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Nom du point relais" 
-                                    value={currentPoint?.name || ''} 
-                                    onChange={e => handleInputChange('name', e.target.value)}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Adresse *
-                                </label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Adresse complète" 
-                                    value={currentPoint?.address || ''} 
-                                    onChange={e => handleInputChange('address', e.target.value)}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Quartier
-                                </label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Quartier" 
-                                    value={currentPoint?.quartier || ''} 
-                                    onChange={e => handleInputChange('quartier', e.target.value)}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                />
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Latitude *
-                                    </label>
-                                    <input 
-                                        type="number" 
-                                        step="any"
-                                        placeholder="5.123456" 
-                                        value={currentPoint?.lat || ''} 
-                                        onChange={e => handleInputChange('lat', parseFloat(e.target.value) || 0)}
-                                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Longitude *
-                                    </label>
-                                    <input 
-                                        type="number" 
-                                        step="any"
-                                        placeholder="10.123456" 
-                                        value={currentPoint?.lng || ''} 
-                                        onChange={e => handleInputChange('lng', parseFloat(e.target.value) || 0)}
-                                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                    />
-                                </div>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Type
-                                </label>
-                                <select 
-                                    value={currentPoint?.type || 'bureau'} 
-                                    onChange={e => handleInputChange('type', e.target.value as 'bureau' | 'commerce' | 'agence')}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                >
-                                    <option value="bureau">Bureau</option>
-                                    <option value="commerce">Commerce</option>
-                                    <option value="agence">Agence</option>
-                                </select>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Statut
-                                </label>
-                                <select 
-                                    value={currentPoint?.status || 'ACTIVE'} 
-                                    onChange={e => handleInputChange('status', e.target.value as 'ACTIVE' | 'INACTIVE')}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                >
-                                    <option value="ACTIVE">Actif</option>
-                                    <option value="INACTIVE">Inactif</option>
-                                </select>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Horaires
-                                </label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Ex: Lun-Ven: 8h-17h" 
-                                    value={currentPoint?.hours || ''} 
-                                    onChange={e => handleInputChange('hours', e.target.value)}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                />
-                            </div>
-                        </div>
-                        
-                        <div className="flex justify-end gap-3 mt-6">
-                            <button 
-                                onClick={() => {
-                                    setIsModalOpen(false);
-                                    setCurrentPoint(null);
-                                }}
-                                className="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-                            >
-                                Annuler
-                            </button>
-                            <button 
-                                onClick={handleSavePoint}
-                                className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
-                            >
-                                Sauvegarder
-                            </button>
-                        </div>
+            {loading ? <div className="flex justify-center py-20"><Loader2 className="animate-spin w-10 h-10 text-orange-500"/></div> : (
+                viewMode === 'LIST' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                         {relays.map((r: RelayPoint) => (
+                             <div key={r.id} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-5 shadow-sm hover:shadow-md transition-all group">
+                                 <div className="flex justify-between items-start mb-2">
+                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-lg text-lg">
+                                         {r.relayPointName.charAt(0)}
+                                     </div>
+                                     <span className={`text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-700 uppercase tracking-wider`}>Actif</span>
+                                 </div>
+                                 <h4 className="text-base font-bold text-slate-800 dark:text-white line-clamp-1">{r.relayPointName}</h4>
+                                 <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center mt-1 mb-3">
+                                     <MapPin className="w-3 h-3 mr-1"/> {r.relay_point_address || r.address}
+                                 </p>
+                                 
+                                 <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                      <Calendar className="w-3 h-3"/> {r.opening_hours || r.openingHours || "08:00 - 18:00"}
+                                 </div>
+                             </div>
+                         ))}
                     </div>
-                </div>
+                ) : (
+                    <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-4 border-white dark:border-slate-700">
+                        {/* LA CARTE DOIT ETRE DYNAMIQUE CLIENT */}
+                        <MapContainer center={[3.848, 11.502]} zoom={12} style={{ height: '100%', width: '100%' }}>
+                            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                            {relays.map(rp => (
+                                <Marker key={rp.id} position={[rp.latitude, rp.longitude]}>
+                                    <Popup>{rp.relayPointName}</Popup>
+                                </Marker>
+                            ))}
+                        </MapContainer>
+                    </div>
+                )
             )}
         </div>
     );
 };
 
+
 // =============================================================================
-// MAIN OPERATIONS MANAGEMENT COMPONENT
+// COMPOSANT RACINE (Wrapper des Onglets)
 // =============================================================================
 
 export default function OperationsManagement() {
-    const [activeTab, setActiveTab] = useState<'shipments' | 'relays'>('shipments');
-    const [allRelayPoints, setAllRelayPoints] = useState<RelayPoint[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'packages' | 'relays'>('packages');
 
-    useEffect(() => {
-        const fetchInitialData = async () => {
-            setIsLoading(true);
-            try {
-                const { data, error } = await supabase
-                    .from('relay_points')
-                    .select('*')
-                    .order('name');
-                
-                if (error) throw error;
-                if (data) setAllRelayPoints(data as RelayPoint[]);
-            } catch (error) {
-                console.error('Error fetching initial data:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchInitialData();
-    }, []);
-
-    const tabConfig = {
-        shipments: {
-            label: 'Gestion des Colis',
-            icon: Package,
-            component: <ShipmentsManager allRelayPoints={allRelayPoints} />
-        },
-        relays: {
-            label: 'Gestion des Points Relais',
-            icon: Building,
-            component: <RelayPointsManager />
-        }
-    };
-    // ... (vos imports : AnimatePresence, motion, etc.)
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg transition-colors duration-300">
-
-            {/* Tab Navigation Header */}
-            <div className="px-4 sm:px-6 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex -mb-px"> {/* -mb-px pour que la bordure de l'onglet actif fusionne avec la bordure du conteneur */}
-                    {Object.entries(tabConfig).map(([key, config]) => {
-                        const Icon = config.icon;
-                        const isActive = activeTab === key;
-                        return (
-                            <button
-                                key={key}
-                                onClick={() => setActiveTab(key as 'shipments' | 'relays')}
-                                className={`py-3 px-4 font-semibold flex items-center gap-2 border-b-2 transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-t-md ${
-                                    isActive
-                                        ? 'border-orange-500 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10'
-                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
-                                }`}
-                            >
-                                <Icon className="w-5 h-5" />
-                                {config.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
+        <div className="min-h-[600px] space-y-8 pb-20 animate-in fade-in duration-500">
             
-            {/* Tab Content */}
-            <div className="p-4 sm:p-6">
-                {isLoading ? (
-                    <div className="flex justify-center py-10">
-                        <LoadingSpinner size="large" />
-                    </div>
-                ) : (
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={activeTab}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            {tabConfig[activeTab].component}
-                        </motion.div>
-                    </AnimatePresence>
-                )}
+            {/* HEADER ONGLETS */}
+            <div className="flex items-center justify-between mb-6">
+                 <div>
+                     <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Opérations Logistiques</h2>
+                     <p className="text-slate-500 dark:text-slate-400 text-sm">Supervision en temps réel du réseau</p>
+                 </div>
+                 <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex">
+                      <button 
+                         onClick={() => setActiveTab('packages')}
+                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2
+                         ${activeTab === 'packages' 
+                             ? 'bg-white dark:bg-slate-600 shadow text-orange-600 dark:text-white' 
+                             : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'}`}
+                      >
+                          <Package className="w-4 h-4"/> Colis
+                      </button>
+                      <button 
+                         onClick={() => setActiveTab('relays')}
+                         className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2
+                         ${activeTab === 'relays' 
+                             ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-white' 
+                             : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'}`}
+                      >
+                          <Building className="w-4 h-4"/> Points Relais
+                      </button>
+                 </div>
             </div>
+
+            {/* CONTENU DYNAMIQUE */}
+            <AnimatePresence mode="wait">
+                 <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.2 }}
+                 >
+                    {activeTab === 'packages' ? <ShipmentsManager /> : <RelayPointsManager />}
+                 </motion.div>
+            </AnimatePresence>
+            
         </div>
     );
 }
