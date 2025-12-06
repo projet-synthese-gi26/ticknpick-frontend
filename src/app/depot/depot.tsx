@@ -19,6 +19,7 @@ import { packageService } from '@/services/packageService';
 
 // Import du module d'expédition existant pour l'intégration "Nouveau Colis"
 import ShippingPage from '@/app/expedition/page';
+import jsPDF from 'jspdf';
 
 // --- TYPES & INTERFACES ---
 
@@ -34,6 +35,9 @@ interface Shipment {
   is_paid_at_departure: boolean;
   created_at: string;
   weight?: number;
+  // Infos supplémentaires pour le PDF
+  arrival_point_name?: string;
+  departure_point_name?: string;
 }
 
 interface DepositUserInfo {
@@ -223,6 +227,106 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
       }
   };
 
+   // ===========================================================================
+  // 3. GENERATEUR PDF BORDEREAU DE DÉPÔT
+  // ===========================================================================
+  const generateDepositPDF = async (
+    shipment: Shipment, 
+    relay: any, 
+    user: DepositUserInfo, 
+    paymentStatus: string
+  ) => {
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const width = pdf.internal.pageSize.getWidth();
+      let y = 20;
+
+      // -- Header Brand --
+      pdf.setFontSize(22);
+      pdf.setTextColor(255, 102, 0); // PicknDrop Orange
+      pdf.setFont("helvetica", "bold");
+      pdf.text("PicknDrop", 15, y);
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(100);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Bordereau de Dépôt Officiel", 15, y + 5);
+
+      y += 20;
+      pdf.setLineWidth(0.5);
+      pdf.setDrawColor(200);
+      pdf.line(15, y, width - 15, y);
+      y += 10;
+
+      // -- 1. Informations Point Relais & Agent --
+      pdf.setFontSize(11);
+      pdf.setTextColor(0);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("1. Point de Dépôt (Réceptionnaire)", 15, y);
+      y += 6;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Relais : ${relay?.relayPointName || "N/A"}`, 20, y);
+      pdf.text(`Localisation : ${relay?.relay_point_locality || relay?.locality || ""}, ${relay?.address || relay?.relay_point_address || ""}`, 20, y + 5);
+      // User connecté
+      pdf.text(`Agent / Propriétaire : ${authUser?.name || authUser?.manager_name || "N/A"}`, 20, y + 10);
+      pdf.text(`Date & Heure : ${new Date().toLocaleString()}`, 20, y + 15);
+      
+      y += 25;
+
+      // -- 2. Informations Colis --
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      pdf.text("2. Détails du Colis", 15, y);
+      y += 6;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Tracking N° : ${shipment.tracking_number}`, 20, y);
+      pdf.text(`Destination : ${shipment.arrival_point_name}`, 20, y + 5);
+      pdf.text(`Contenu déclaré : ${shipment.description}`, 20, y + 10);
+      pdf.text(`Poids : ${shipment.weight} kg`, 20, y + 15);
+      pdf.text(`Frais de port : ${shipment.shipping_cost} FCFA (${paymentStatus})`, 20, y + 20);
+      
+      y += 30;
+
+      // -- 3. Informations Déposant --
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      pdf.text("3. Déposant", 15, y);
+      y += 6;
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Nom complet : ${user.fullName}`, 20, y);
+      pdf.text(`Téléphone : ${user.phone}`, 20, y + 5);
+
+      // Signature Image
+      if (user.signature) {
+        pdf.text("Signature du client :", 20, y + 15);
+        try {
+          pdf.addImage(user.signature, 'PNG', 20, y + 18, 50, 20);
+        } catch(e) {}
+      } else {
+        pdf.text("(Signature non fournie)", 20, y + 15);
+      }
+
+      // Footer legal
+      const footerY = pdf.internal.pageSize.getHeight() - 20;
+      pdf.setFontSize(8);
+      pdf.setTextColor(150);
+      pdf.text("Document généré automatiquement par PicknDrop System.", 15, footerY);
+      pdf.text("Conservez ce reçu comme preuve de dépôt.", 15, footerY + 4);
+
+      pdf.save(`Bordereau_Depot_${shipment.tracking_number}.pdf`);
+      return true;
+    } catch (error) {
+      console.error("Erreur PDF Generation:", error);
+      return false;
+    }
+  };
+
 
   // ===========================================================================
   // 3. GESTION SIGNATURE (CANVAS)
@@ -323,11 +427,33 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
               depositor: userInfo
           });
 
+                    // 1. TRAITEMENT DU PAIEMENT
+          let payStatusLabel = "DEJA PAYÉ";
+
+          if (!selectedShipment.is_paid_at_departure) {
+              // Cas POSTPAID (Paiement comptoir)
+              if (!isPaymentCollected && selectedShipment.shipping_cost > 0) {
+                  throw new Error("Paiement non validé par l'agent.");
+              }
+              
+              console.log("💸 Traitement paiement API...");
+              // Appel Route : POST /api/payments/process/{id}
+              await packageService.processPayment(selectedShipment.id, {
+                  paymentMethod: "CASH", 
+                  paymentType: "POSTPAID" 
+              });
+              payStatusLabel = "PAYÉ COMPTANT (POSTPAID)";
+          } else {
+              payStatusLabel = "PREPAID (En Ligne)";
+          }
+
           // 4. Appel API Backend pour réceptionner le colis
           // Route: POST /api/relay-points/{relayId}/packages/{packageId}/receive
           // (Le backend gère le changement de statut -> AT_DEPARTURE_RELAY_POINT)
           const result = await relayPointService.receivePackage(myRelayId, selectedShipment.id);
-          
+           // 3. GÉNÉRATION BORDEREAU PDF
+          await generateDepositPDF(selectedShipment, myRelayId, userInfo, payStatusLabel);
+
           console.log("✅ API Success:", result);
           
           // Affichage succès

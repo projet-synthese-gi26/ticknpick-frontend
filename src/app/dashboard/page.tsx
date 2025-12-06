@@ -50,6 +50,7 @@ export interface UserProfile {
   businessName?: string;
   businessAddress?: string;
   businessLocality?: string;
+  credit_balance?: number;  // Peut venir de l'API utilisateur
 
   // -- Champs PRO/Relais --
   identity_photo_url?: string | null;
@@ -174,13 +175,13 @@ interface HeaderProps {
   setShowTrackingModal: (show: boolean) => void;
 }
 
-// --- Composant Sidebar Moderne ---
+// ==========================================================================
+// COMPOSANT SIDEBAR : Gestion Hybride (Sidebar Gauche Desktop / Bottom Nav Mobile)
+// ==========================================================================
 const Sidebar: React.FC<SidebarProps> = ({ 
   navigationItems, 
   activeTab, 
   setActiveTab, 
-  isSidebarOpen, 
-  setIsSidebarOpen, 
   userProfile 
 }: any) => {
   const router = useRouter();
@@ -203,132 +204,103 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Overlay pour mobile */}
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Sidebar - Fixed sur toute la hauteur */}
-      <motion.aside 
-        initial={{ x: '-100%' }} 
-        animate={{ 
-          x: isSidebarOpen || (typeof window !== 'undefined' && window.innerWidth >= 1024) ? 0 : '-100%' 
-        }} 
-        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-        className="fixed top-0 left-0 z-50 w-72 h-screen bg-white/95 dark:bg-gray-900 backdrop-blur-xl border-r border-orange-100 dark:border-gray-800 shadow-xl lg:shadow-2xl flex flex-col"
-      >
-        {/* Header Sidebar */}
-        <div className="px-5 py-6 border-b border-orange-100/50 dark:border-gray-800 relative overflow-hidden flex-shrink-0">
-          <div className="relative flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <div className={`${getAccountTypeColor(userProfile?.account_type || 'freelance')} p-3 rounded-xl shadow-md transform rotate-2 hover:rotate-0 transition-all duration-300`}>
-                <Package className="h-6 w-6 text-white drop-shadow-sm"/>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent dark:text-white">
-                  Dashboard
-                </h1>
-                <div className="flex items-center mt-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${getAccountTypeColor(userProfile?.account_type || 'freelance')} mr-2`} />
-                  <p className="text-orange-600 dark:text-orange-400 text-xs font-medium capitalize tracking-wide">
-                    {userProfile?.account_type?.toLowerCase()}
-                  </p>
-                </div>
+      {/* --- VERSION DESKTOP (Sidebar Verticale à Gauche) --- */}
+      {/* hidden sur mobile/tablette (< 1024px), block sur large (> 1024px) */}
+      <aside className="hidden lg:flex fixed top-0 left-0 z-50 w-72 h-screen bg-white/95 dark:bg-gray-900 backdrop-blur-xl border-r border-orange-100 dark:border-gray-800 shadow-xl flex-col">
+        {/* Header Sidebar Desktop */}
+        <div className="px-5 py-6 border-b border-orange-100/50 dark:border-gray-800 flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className={`${getAccountTypeColor(userProfile?.account_type || 'freelance')} p-3 rounded-xl shadow-md`}>
+              <Package className="h-6 w-6 text-white drop-shadow-sm"/>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent dark:text-white">
+                Dashboard
+              </h1>
+              <div className="flex items-center mt-1">
+                <div className={`w-1.5 h-1.5 rounded-full ${getAccountTypeColor(userProfile?.account_type || 'freelance')} mr-2`} />
+                <p className="text-orange-600 dark:text-orange-400 text-xs font-medium capitalize tracking-wide">
+                  {userProfile?.account_type?.toLowerCase()}
+                </p>
               </div>
             </div>
-            <button 
-              onClick={() => setIsSidebarOpen(false)} 
-              className="lg:hidden p-2 hover:bg-orange-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 text-orange-600 dark:text-gray-400"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
         </div>
         
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-orange-200 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent">
-          {navigationItems.map((item: NavItem, index: number) => (
-            <motion.div
+        {/* Navigation Desktop */}
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+          {navigationItems.map((item: NavItem) => (
+            <button
               key={item.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full group flex items-center justify-between px-3 py-3 rounded-xl font-medium transition-all duration-200 ${
+                activeTab === item.id
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-gray-800 hover:text-orange-700 dark:hover:text-white'
+              }`}
             >
-              <button
-                onClick={() => { 
-                  setActiveTab(item.id); 
-                  setIsSidebarOpen(false); 
-                }}
-                className={`w-full group flex items-center justify-between px-3 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  activeTab === item.id
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-gray-800 hover:text-orange-700 dark:hover:text-white'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-lg transition-all duration-200 ${
-                    activeTab === item.id 
-                      ? 'bg-white/20' 
-                      : 'bg-orange-100/50 dark:bg-gray-800 group-hover:bg-orange-200/50 dark:group-hover:bg-gray-700'
-                  }`}>
-                    <item.icon className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium text-sm">{item.label}</span>
+              <div className="flex items-center space-x-3">
+                <item.icon className={`h-5 w-5 ${activeTab === item.id ? 'text-white' : 'text-current'}`} />
+                <span className="font-medium text-sm">{item.label}</span>
+              </div>
+              {item.badge && (
+                <div className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {item.badge}
                 </div>
-                {item.badge && (
-                  <div className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {item.badge}
-                  </div>
-                )}
-              </button>
-            </motion.div>
+              )}
+            </button>
           ))}
         </nav>
         
-        {/* Footer Sidebar */}
-        <div className="px-4 py-4 border-t border-orange-100/50 dark:border-gray-800 bg-orange-50/30 dark:bg-gray-800/30 flex-shrink-0">
-          <div className="space-y-2">
-            <button 
-              onClick={() => router.push('/')} 
-              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm rounded-lg transition-all duration-200 group"
-            >
-              <Home className="h-4 w-4 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors" />
-              <span className="font-medium text-sm">Retour accueil</span>
-            </button>
-            <button 
-              onClick={handleLogout} 
-              className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-all duration-200 group"
-            >
-              <LogOut className="h-4 w-4 group-hover:text-red-600 transition-colors" />
-              <span className="font-medium text-sm">Déconnexion</span>
-            </button>
-          </div>
-          
-          <div className="mt-3 p-3 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl border border-orange-100/50 dark:border-gray-700">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                <User className="h-4 w-4 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">
-                  {userProfile?.manager_name || 'Utilisateur'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {userProfile?.email || 'email@exemple.com'}
-                </p>
-              </div>
-            </div>
-          </div>
+        {/* Footer Sidebar Desktop */}
+        <div className="px-4 py-4 border-t border-orange-100/50 dark:border-gray-800 bg-orange-50/30 dark:bg-gray-800/30 flex-shrink-0 space-y-2">
+          <button 
+            onClick={() => router.push('/')} 
+            className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all group"
+          >
+            <Home className="h-4 w-4 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors" />
+            <span className="font-medium text-sm">Retour accueil</span>
+          </button>
+          <button 
+            onClick={handleLogout} 
+            className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-all group"
+          >
+            <LogOut className="h-4 w-4 group-hover:text-red-600 transition-colors" />
+            <span className="font-medium text-sm">Déconnexion</span>
+          </button>
         </div>
-      </motion.aside>
+      </aside>
+
+      {/* --- VERSION MOBILE (Bottom Navigation Bar) --- */}
+      {/* block sur mobile/tablette (< 1024px), hidden sur large (> 1024px) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white dark:bg-gray-900 border-t border-orange-100 dark:border-gray-800 pb-safe shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center justify-around h-16 px-2">
+          {navigationItems.slice(0, 5).map((item: NavItem) => ( // Limite à 5 items max pour la barre
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-all duration-200 relative ${
+                 activeTab === item.id ? 'text-orange-600 dark:text-orange-500' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              {/* Indicateur Actif Mobile */}
+              {activeTab === item.id && (
+                <motion.div layoutId="mobile-nav-active" className="absolute -top-0.5 h-1 w-10 bg-orange-500 rounded-b-lg shadow-[0_2px_10px_rgba(249,115,22,0.4)]" />
+              )}
+
+              <div className="relative">
+                  <item.icon className={`h-6 w-6 transition-transform ${activeTab === item.id ? 'scale-110' : ''}`} />
+                  {item.badge && (
+                    <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1 rounded-full min-w-[14px] h-4 flex items-center justify-center border border-white dark:border-gray-900">
+                        {item.badge}
+                    </div>
+                  )}
+              </div>
+              <span className="text-[10px] font-medium truncate max-w-[64px] leading-none">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
     </>
   );
 };
@@ -524,7 +496,7 @@ const DashboardSwitcher: React.FC = () => {
       case 'client':
         return [
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
-          { id: 'packages', label: 'Mes Colis', icon: Package, badge: 3 },
+          { id: 'packages', label: 'Mes Colis', icon: Package },
           { id: 'profile', label: 'Mon Profil', icon: User },
           { id: 'settings', label: 'Paramètres', icon: Settings },
         ];

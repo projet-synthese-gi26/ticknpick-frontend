@@ -8,10 +8,11 @@ import {
     Map, List, CheckCircle, ArrowLeft, ArrowRight, Calendar, User, Phone, 
     MapPin, DollarSign, MoreVertical, AlertTriangle
 } from 'lucide-react';
+import { adminService, AdminPackage } from '@/services/adminService';
 
 // --- Services Backend ---
 import { relayPointService, RelayPoint } from '@/services/relayPointService';
-import { adminService } from '@/services/adminService';
+
 import apiClient from '@/services/apiClient';
 
 import 'leaflet/dist/leaflet.css';
@@ -162,47 +163,40 @@ const ShipmentDetailsModal = ({ shipment, onClose }: { shipment: Shipment; onClo
 );
 
 
-// =============================================================================
-// SOUS-COMPOSANT: GESTION DES COLIS (Shipments)
-// =============================================================================
-
+// GESTIONNAIRE DE COLIS
 const ShipmentsManager = () => {
-    const [shipments, setShipments] = useState<Shipment[]>([]);
-    const [filteredShipments, setFilteredShipments] = useState<Shipment[]>([]);
+    const [shipments, setShipments] = useState<AdminPackage[]>([]);
+    const [filteredShipments, setFilteredShipments] = useState<AdminPackage[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
     const [page, setPage] = useState(1);
+    
+    const [selectedShipment, setSelectedShipment] = useState<AdminPackage | null>(null);
 
-    // Fetcher tous les colis depuis le endpoint Admin global
     const loadShipments = async () => {
         setLoading(true);
         try {
-            const data = await adminService.getAllShipmentsGlobal(); // Endpoint /api/admin/shipments
-            // Mapping pour assurer la compatibilité camelCase (Spring Boot)
-            const cleanData = (data || []).map((s: any) => ({
-                id: s.id,
-                trackingNumber: s.trackingNumber || s.tracking_number || 'N/A',
-                status: s.status,
-                description: s.description || '',
-                shippingCost: s.shippingCost || s.deliveryFee || 0,
-                createdAt: s.createdAt || new Date().toISOString(),
-                senderName: s.senderName || 'N/A',
-                recipientName: s.recipientName || 'N/A',
-                departurePointName: s.departurePointName || s.pickupAddress || 'Départ',
-                arrivalPointName: s.arrivalPointName || s.deliveryAddress || 'Arrivée',
-                weight: s.weight,
-                isFragile: s.isFragile,
-                isInsured: s.isInsured
-            }));
-
-            // Trier par date décroissante
-            cleanData.sort((a: Shipment, b: Shipment) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-            setShipments(cleanData);
-            setFilteredShipments(cleanData);
-        } catch (e) {
-            console.error("Erreur chargement colis", e);
+            // Utilise maintenant le service normalisé
+            const data = await adminService.getAllShipmentsGlobal();
+            
+            if (Array.isArray(data)) {
+                // Tri sécurisé (vérification de la date)
+                data.sort((a, b) => {
+                    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return dateB - dateA;
+                });
+                setShipments(data);
+                setFilteredShipments(data);
+            } else {
+                // Cas où API renverrait null par erreur
+                setShipments([]);
+                setFilteredShipments([]);
+            }
+        } catch (e: any) {
+            console.error("Load shipments failed:", e.message);
+            // Gérer l'expiration de session
+            if (e.message.includes("401")) window.location.href = "/login";
         } finally {
             setLoading(false);
         }
@@ -210,97 +204,125 @@ const ShipmentsManager = () => {
 
     useEffect(() => { loadShipments(); }, []);
 
-    // Filtrage Local
     useEffect(() => {
         const term = searchTerm.toLowerCase();
         const filtered = shipments.filter(s => 
-             s.trackingNumber.toLowerCase().includes(term) || 
-             s.senderName?.toLowerCase().includes(term) ||
-             s.recipientName?.toLowerCase().includes(term)
+             (s.trackingNumber && s.trackingNumber.toLowerCase().includes(term)) || 
+             (s.senderName && s.senderName.toLowerCase().includes(term)) ||
+             (s.recipientName && s.recipientName.toLowerCase().includes(term))
         );
         setFilteredShipments(filtered);
         setPage(1);
     }, [searchTerm, shipments]);
 
-    // Pagination Locale
     const paginatedData = filteredShipments.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-    const totalPages = Math.ceil(filteredShipments.length / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(filteredShipments.length / ITEMS_PER_PAGE) || 1;
 
     return (
         <div className="space-y-6">
-             {/* BARRE OUTILS */}
-             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border dark:border-gray-700">
+             {/* BARRE FILTRE */}
+             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700 shadow-sm">
                  <div className="relative w-full md:max-w-md">
                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
                      <input 
                         type="text" 
-                        placeholder="Rechercher un tracking, expéditeur..." 
-                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none dark:text-white"
+                        placeholder="Rechercher tracking, expéditeur..." 
+                        className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none dark:text-white transition-all"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                      />
                  </div>
-                 <button onClick={loadShipments} className="p-2 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300">
-                     <div className={loading ? 'animate-spin' : ''}><ArrowRight className="w-4 h-4"/></div> {/* Refresh Icon Fake */}
+                 <button onClick={loadShipments} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 hover:bg-slate-200 transition" title="Rafraîchir">
+                     {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <div className="flex items-center text-xs font-bold"><Search className="w-4 h-4 mr-1"/> Reload</div>}
                  </button>
              </div>
 
-             {/* TABLEAU */}
-             <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm relative min-h-[400px]">
-                  {loading && <LoadingOverlay/>}
+             {/* LISTE COLIS */}
+             <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm relative min-h-[300px]">
+                  {loading && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 z-10 flex items-center justify-center"><Loader2 className="w-10 h-10 text-orange-500 animate-spin" /></div>}
                   
-                  <table className="w-full text-sm text-left">
-                       <thead className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-gray-400 uppercase font-bold text-xs">
-                            <tr>
-                                <th className="p-4">Tracking</th>
-                                <th className="p-4">Expéditeur &rarr; Destinataire</th>
-                                <th className="p-4 text-center">Statut</th>
-                                <th className="p-4 text-right">Montant</th>
-                                <th className="p-4 text-center">Actions</th>
-                            </tr>
-                       </thead>
-                       <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                            {paginatedData.length === 0 ? (
-                                <tr><td colSpan={5} className="p-8 text-center text-gray-500 italic">Aucun colis trouvé.</td></tr>
-                            ) : paginatedData.map(s => (
-                                <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/30 transition cursor-default">
-                                     <td className="p-4 font-mono font-semibold text-orange-600 dark:text-orange-400">
-                                         {s.trackingNumber}
-                                         <div className="text-[10px] text-gray-400 font-sans mt-0.5">{new Date(s.createdAt).toLocaleDateString()}</div>
-                                     </td>
-                                     <td className="p-4">
-                                         <div className="text-slate-800 dark:text-white font-medium">{s.senderName}</div>
-                                         <div className="text-xs text-gray-500">Vers: {s.recipientName}</div>
-                                     </td>
-                                     <td className="p-4 text-center"><StatusBadge status={s.status} /></td>
-                                     <td className="p-4 text-right font-bold text-slate-700 dark:text-slate-300">{(s.shippingCost||0).toLocaleString()} F</td>
-                                     <td className="p-4 text-center">
-                                         <button 
-                                            onClick={() => setSelectedShipment(s)} 
-                                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition"
-                                            title="Détails"
-                                         >
-                                             <Eye className="w-4 h-4"/>
-                                         </button>
-                                     </td>
+                  <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                           <thead className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 dark:text-gray-400 uppercase font-bold text-xs">
+                                <tr>
+                                    <th className="p-4">Tracking</th>
+                                    <th className="p-4">Expéditeur &rarr; Dest.</th>
+                                    <th className="p-4 text-center">Statut</th>
+                                    <th className="p-4 text-right">Prix</th>
+                                    <th className="p-4 text-center">Actions</th>
                                 </tr>
-                            ))}
-                       </tbody>
-                  </table>
+                           </thead>
+                           <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                                {paginatedData.length === 0 && !loading ? (
+                                    <tr><td colSpan={5} className="p-8 text-center text-gray-500">Aucun colis trouvé.</td></tr>
+                                ) : paginatedData.map(s => (
+                                    <tr key={s.id} className="hover:bg-orange-50 dark:hover:bg-slate-700/30 transition">
+                                         <td className="p-4 font-mono font-bold text-orange-600 dark:text-orange-400">
+                                             {s.trackingNumber}
+                                             <div className="text-[10px] text-gray-400 font-sans">{new Date(s.createdAt).toLocaleDateString()}</div>
+                                         </td>
+                                         <td className="p-4">
+                                             <div className="font-bold text-slate-700 dark:text-slate-200">{s.senderName}</div>
+                                             <div className="text-xs text-gray-400 flex items-center gap-1"><ArrowRight className="w-3 h-3"/> {s.recipientName}</div>
+                                         </td>
+                                         <td className="p-4 text-center"><StatusBadge status={s.status}/></td>
+                                         <td className="p-4 text-right font-bold">{s.shippingCost.toLocaleString()} F</td>
+                                         <td className="p-4 text-center">
+                                             <button onClick={() => setSelectedShipment(s)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg"><Eye className="w-4 h-4"/></button>
+                                         </td>
+                                    </tr>
+                                ))}
+                           </tbody>
+                      </table>
+                  </div>
              </div>
 
-             {/* PAGINATION SIMPLE */}
-             <div className="flex justify-between items-center">
-                 <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="px-4 py-2 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg disabled:opacity-50 text-sm hover:bg-gray-50 dark:text-white">Précédent</button>
-                 <span className="text-sm text-gray-600 dark:text-gray-400">Page {page} / {totalPages || 1}</span>
-                 <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages || totalPages === 0} className="px-4 py-2 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg disabled:opacity-50 text-sm hover:bg-gray-50 dark:text-white">Suivant</button>
-             </div>
+             {/* PAGINATION */}
+             {filteredShipments.length > ITEMS_PER_PAGE && (
+                 <div className="flex justify-center gap-4 items-center pt-2">
+                     <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 rounded bg-gray-200 disabled:opacity-50 text-sm">Préc.</button>
+                     <span className="text-xs text-gray-500">Page {page} / {totalPages}</span>
+                     <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 rounded bg-gray-200 disabled:opacity-50 text-sm">Suiv.</button>
+                 </div>
+             )}
 
-             {/* MODAL */}
-             {selectedShipment && <ShipmentDetailsModal shipment={selectedShipment} onClose={() => setSelectedShipment(null)} />}
+             {/* MODAL DETAILS */}
+             {selectedShipment && (
+                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setSelectedShipment(null)}>
+                      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                          <div className="p-6 border-b bg-slate-50 dark:bg-slate-900 flex justify-between items-center">
+                              <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Package className="text-orange-500"/> Détails Colis</h3>
+                              <button onClick={() => setSelectedShipment(null)}><X className="text-gray-400 hover:text-red-500"/></button>
+                          </div>
+                          <div className="p-6 space-y-4 text-sm">
+                               <div className="grid grid-cols-2 gap-4">
+                                   <div className="bg-gray-50 p-3 rounded-lg border">
+                                       <p className="text-xs font-bold uppercase text-gray-400">Départ</p>
+                                       <p className="font-bold text-slate-700">{selectedShipment.senderName}</p>
+                                       <p className="text-xs text-gray-500 truncate" title={selectedShipment.departurePointName}>{selectedShipment.departurePointName}</p>
+                                   </div>
+                                   <div className="bg-gray-50 p-3 rounded-lg border">
+                                       <p className="text-xs font-bold uppercase text-gray-400">Arrivée</p>
+                                       <p className="font-bold text-slate-700">{selectedShipment.recipientName}</p>
+                                       <p className="text-xs text-gray-500 truncate" title={selectedShipment.arrivalPointName}>{selectedShipment.arrivalPointName}</p>
+                                   </div>
+                               </div>
+                               <div>
+                                   <p className="font-bold mb-1">Description</p>
+                                   <p className="p-3 bg-orange-50 text-orange-800 rounded-lg italic border border-orange-100">{selectedShipment.description || "Non spécifié"}</p>
+                               </div>
+                               <div className="flex justify-between items-center pt-2 border-t">
+                                   <span className="font-bold">Poids: {selectedShipment.weight || 'N/A'} kg</span>
+                                   <span className="text-xl font-black text-green-600">{selectedShipment.shippingCost.toLocaleString()} FCFA</span>
+                               </div>
+                          </div>
+                      </motion.div>
+                 </div>
+             )}
         </div>
     );
 };
+
 
 
 // =============================================================================

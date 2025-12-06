@@ -1,23 +1,26 @@
 // FICHIER: src/services/adminService.ts
 import apiClient from './apiClient';
 
-// --- INTERFACES POUR LE TYPAGE INTERNE ---
-
-// Représente un colis extrait d'un point relais
-export interface MergedPackage {
+// --- INTERFACES ---
+export interface AdminPackage {
     id: string;
-    trackingNumber: string;
+    trackingNumber: string; 
+    status: string;
+    description: string;
     shippingCost: number;
     createdAt: string;
-    status: string;
+    updatedAt?: string;
     
-    senderName?: string;
-    senderPhone?: string;
-    recipientName?: string;
+    senderName: string;
+    recipientName: string;
+    departurePointName: string;
+    arrivalPointName: string;
     
-    // Clé pour le pivot
-    relayPointId?: string;
-    relayPointName?: string; 
+    weight?: number;
+    isFragile?: boolean;
+    isInsured?: boolean;
+    
+    [key: string]: any; 
 }
 
 export interface AdminDashboardStats {
@@ -25,146 +28,117 @@ export interface AdminDashboardStats {
     totalShipments: number;
     totalBusinessActors: number;
     pendingValidations: number;
-    totalRevenue: number; // Calculé côté client
+    totalRevenue: number;
 }
 
-// --- FONCTION PUISSANTE DE RÉCUPÉRATION GLOBALE (CASCADE) ---
+// Helper Normalisation
+const normalizePackage = (rawPkg: any): AdminPackage => {
+    return {
+        id: rawPkg.id || rawPkg.packageId || "N/A",
+        trackingNumber: rawPkg.trackingNumber || rawPkg.tracking_number || 'N/A',
+        status: (rawPkg.status || rawPkg.currentStatus || 'UNKNOWN').toUpperCase(),
+        description: rawPkg.description || '',
+        shippingCost: Number(rawPkg.shippingCost || rawPkg.deliveryFee || rawPkg.cost || 0),
+        createdAt: rawPkg.createdAt || rawPkg.created_at || new Date().toISOString(),
+        updatedAt: rawPkg.updatedAt || rawPkg.updated_at,
+        
+        senderName: rawPkg.senderName || rawPkg.sender_name || 'N/A',
+        recipientName: rawPkg.recipientName || rawPkg.recipient_name || 'N/A',
+        departurePointName: rawPkg.departurePointName || rawPkg.pickupAddress || rawPkg.departure_relay_point?.name || 'N/A',
+        arrivalPointName: rawPkg.arrivalPointName || rawPkg.deliveryAddress || rawPkg.arrival_relay_point?.name || 'N/A',
+        
+        weight: Number(rawPkg.weight || 0),
+        isFragile: Boolean(rawPkg.isFragile),
+        isInsured: Boolean(rawPkg.isInsured)
+    };
+};
 
-const getAllShipmentsGlobal = async (): Promise<MergedPackage[]> => {
-    console.group("🔄 [AdminService] Deep Fetch Strategy : Scraping Relay Points");
-    let allPackages: MergedPackage[] = [];
-    const processedPackageIds = new Set<string>(); // Pour éviter les doublons si un colis est à la fois au départ et à l'arrivée dans nos résultats
+// --- CORE: Fetch Sécurisé ---
 
+const getAllShipmentsGlobal = async (): Promise<AdminPackage[]> => {
+    console.log("📦 [AdminService] Appel de la route Admin: /api/admin/packages");
+    
     try {
-        // 1. Récupérer TOUS les points relais
-        console.log("1️⃣ Fetching Relay Points List...");
-        const relayPoints = await apiClient<any[]>('/api/relay-points', 'GET'); // ou /api/public/relay-points
-        console.log(`✅ Found ${relayPoints.length} Relay Points.`);
+        // 1. Route Principale Optimisée
+        const response = await apiClient<any>('/api/admin/packages', 'GET');
+        
+        // Normalisation (gère { content: [] } si Spring Paginator ou Array direct)
+        const rawList = Array.isArray(response) ? response : (response?.content || response?.data || []);
+        
+        if (Array.isArray(rawList) && rawList.length > 0) {
+            console.log(`✅ ${rawList.length} colis récupérés via l'admin.`);
+            return rawList.map(normalizePackage);
+        } 
+        
+        console.warn("⚠️ Route Admin vide. Pas de colis ou réponse inattendue.");
+        return [];
 
-        if (relayPoints.length === 0) {
-             console.warn("⚠️ No relay points found. Aborting deep fetch.");
-             return [];
+    } catch (error: any) {
+        // Gestion d'erreur critique pour éviter de planter le composant React
+        console.error("🚨 Erreur récupération colis:", error.message);
+        if (error.message.includes('401') || error.message.includes('Session expirée')) {
+            // Si 401, on renvoie une erreur typée pour que le frontend puisse logout()
+            throw error;
         }
-
-        // 2. Pour chaque point relais, lancer une requête parallèle pour ses colis
-        // Attention à la charge : On le fait avec Promise.allSettled pour ne pas tout casser si un relais échoue
-        console.log("2️⃣ Fetching packages for each relay point (Parallel)...");
-        
-        const promises = relayPoints.map(rp => 
-             apiClient<any[]>(`/api/relay-points/${rp.id}/packages`, 'GET')
-                 .then(response => {
-                     // SECURISATION CRITIQUE
-                     let pkgs: any[] = [];
-                     if (Array.isArray(response)) {
-                         pkgs = response;
-                     } else if (response && typeof response === 'object') {
-                         // Gérer la pagination ou réponse { content: [...] }
-                         pkgs = (response as any).content || (response as any).data || [];
-                     }
-                     return { relayPoint: rp, packages: pkgs };
-                 })
-                 .catch(err => {
-                     console.warn(`❌ Failed fetching for Relay ${rp.relayPointName}:`, err.message);
-                     // On renvoie un tableau vide en cas d'échec pour ne pas casser le Promise.all
-                     return { relayPoint: rp, packages: [] };
-                 })
-        );
-
-        const results = await Promise.allSettled(promises);
-
-
-
-        // 3. Agréger les résultats
-        results.forEach((result) => {
-            if (result.status === 'fulfilled') {
-                const { relayPoint, packages } = result.value;
-                
-                packages.forEach((pkg: any) => {
-                     // Détection d'unicité
-                     // ID colis est souvent 'id' ou 'packageId' ou 'trackingNumber'
-                     const pkgId = pkg.id || pkg.trackingNumber;
-                     
-                     if (!processedPackageIds.has(pkgId)) {
-                         processedPackageIds.add(pkgId);
-                         
-                         // Normalisation
-                         allPackages.push({
-                             id: pkgId,
-                             trackingNumber: pkg.trackingNumber || pkg.tracking_number || "N/A",
-                             shippingCost: Number(pkg.shippingCost || pkg.deliveryFee || pkg.cost || 0),
-                             createdAt: pkg.createdAt || pkg.created_at || new Date().toISOString(),
-                             status: pkg.status || pkg.currentStatus,
-                             
-                             senderName: pkg.senderName || pkg.sender_name,
-                             senderPhone: pkg.senderPhone,
-                             recipientName: pkg.recipientName,
-
-                             relayPointId: relayPoint.id,
-                             relayPointName: relayPoint.relayPointName
-                         });
-                     }
-                });
-            }
-        });
-
-        console.log(`🎉 Deep Fetch Complete. Total unique packages collected: ${allPackages.length}`);
-        
-        // Log échantillon pour vérification
-        if (allPackages.length > 0) console.log("sample package:", allPackages[0]);
-
-        return allPackages;
-
-    } catch (error) {
-        console.error("🚨 CRITICAL: Deep Fetch failed", error);
-        return []; // Renvoie un tableau vide pour éviter crash UI
-    } finally {
-        console.groupEnd();
+        return []; // En cas d'autre erreur, renvoie liste vide au lieu de crash
     }
 };
 
-// --- AUTRES MÉTHODES DU SERVICE ADMIN ---
+// --- STATS (Avec protection) ---
 
 const getDashboardStats = async (): Promise<AdminDashboardStats> => {
-    // On va maintenant calculer nous-même les stats en agrégeant
-    // car l'endpoint /admin/statistics ne marche pas ou renvoie 500.
-    
-    const [users, businessActors, shipments] = await Promise.all([
-        // Essai route publique ou protégée Users (si admin peut)
-        // Sinon adminService devra scraper aussi (ce qui est lourd). Supposons que /api/users passe.
-        apiClient<any[]>('/api/users', 'GET').catch(() => []), 
-        apiClient<any[]>('/api/business-actors', 'GET').catch(() => []),
-        getAllShipmentsGlobal() // Notre nouvelle méthode Deep Fetch
+    // Promise.allSettled est meilleur que Promise.all ici : si une requête échoue, les autres continuent.
+    const results = await Promise.allSettled([
+        apiClient<any[]>('/api/users', 'GET'), 
+        apiClient<any[]>('/api/business-actors', 'GET'),
+        getAllShipmentsGlobal()
     ]);
 
-    const revenue = shipments.reduce((sum, p) => sum + p.shippingCost, 0);
-    const pending = businessActors.filter((a: any) => !a.isVerified && !a.is_verified).length;
+    const users = results[0].status === 'fulfilled' ? results[0].value : [];
+    const actors = results[1].status === 'fulfilled' ? results[1].value : [];
+    const shipments = results[2].status === 'fulfilled' ? results[2].value : [];
+
+    // Sécurité typage pour stats
+    const revenue = Array.isArray(shipments) 
+        ? shipments.reduce((sum, p) => sum + (Number(p.shippingCost) || 0), 0) 
+        : 0;
+
+    const pending = Array.isArray(actors) 
+        ? actors.filter((a: any) => a.isVerified === false).length
+        : 0;
+
+    const clientCount = Array.isArray(users) 
+        ? users.filter((u: any) => (u.account_type || u.accountType) === 'CLIENT').length
+        : 0;
 
     return {
-        totalUsers: users.length,
-        totalBusinessActors: businessActors.length,
-        totalShipments: shipments.length,
+        totalUsers: clientCount,
+        totalBusinessActors: Array.isArray(actors) ? actors.length : 0,
+        totalShipments: Array.isArray(shipments) ? shipments.length : 0,
         pendingValidations: pending,
         totalRevenue: revenue
     };
 };
 
-// Pour la liste Users (onglet utilisateurs)
 const getAllBusinessActors = async () => {
-    return apiClient<any[]>('/api/business-actors', 'GET').catch(() => []);
+    try {
+        const res = await apiClient<any[]>('/api/business-actors', 'GET');
+        return Array.isArray(res) ? res : [];
+    } catch(e) { return []; }
 };
 
 const validateBusinessActor = async (id: string, isValid: boolean) => {
     const actor = await apiClient<any>(`/api/business-actors/${id}`, 'GET');
+    // Attention au payload PUT, parfois on n'a besoin que des champs modifiés
     const updated = { ...actor, isVerified: isValid, isEnabled: isValid };
     return apiClient(`/api/business-actors/${id}`, 'PUT', updated);
 };
 
 const deleteBusinessActor = async (id: string) => apiClient(`/api/business-actors/${id}`, 'DELETE');
 
-
 export const adminService = {
     getDashboardStats,
-    getAllShipmentsGlobal, // Notre star ici
+    getAllShipmentsGlobal,
     getAllBusinessActors,
     validateBusinessActor,
     deleteBusinessActor

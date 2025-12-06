@@ -2,581 +2,298 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
+import { walletService, WalletTransactionResponse } from '@/services/walletService'; 
 import { 
-  HandCoins, 
-  CreditCard, 
-  Smartphone, 
-  Plus, 
-  History, 
-  TrendingUp,
-  Wallet,
-  RefreshCw,
-  Check,
-  X,
-  AlertCircle,
-  Eye,
-  EyeOff
+  Wallet, RefreshCw, Plus, Smartphone, CreditCard, 
+  ArrowUpRight, ArrowDownLeft, History, TrendingUp, Check, X, 
+  Loader2, AlertCircle 
 } from 'lucide-react';
-
-interface CreditTransaction {
-  id: number;
-  amount: number;
-  payment_method: 'ORANGE_MONEY' | 'VISA_CARD';
-  transaction_date: string;
-  status: 'SUCCESS' | 'PENDING' | 'FAILED';
-  reference_number?: string;
-}
+import toast, { Toaster } from 'react-hot-toast';
+import { UserProfile } from './page'; // Import depuis ton fichier de types central
 
 interface CreditPageProps {
-  profile: {
-    id: string;
-    credit_balance: number;
-    account_type: string;
-    manager_name: string;
-    email: string;
-  };
-  onUpdate?: () => void;
+  profile: UserProfile; 
+  onUpdate: () => void; // Callback pour rafraichir le profil global
 }
 
-const CreditPage: React.FC<CreditPageProps> = ({ profile, onUpdate }) => {
-  const [currentBalance, setCurrentBalance] = useState<number>(profile.credit_balance || 0);
-  const [isRecharging, setIsRecharging] = useState<boolean>(false);
-  const [rechargeAmount, setRechargeAmount] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'ORANGE_MONEY' | 'VISA_CARD'>('ORANGE_MONEY');
-  const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false);
-  const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [showBalance, setShowBalance] = useState<boolean>(true);
+// Types locaux pour l'UI
+interface Transaction {
+    id: number;
+    type: 'CREDIT' | 'DEBIT';
+    amount: number;
+    date: Date;
+    method: string;
+    status: 'COMPLETED' | 'FAILED';
+}
+
+export default function CreditPage({ profile, onUpdate }: CreditPageProps) {
+  // State pour le solde (Initialisé avec le profil, puis mis à jour localement)
+  // On suppose que profile.credit_balance existe (ajouté aux types plus bas)
+  const [balance, setBalance] = useState<number>(Number(profile.credit_balance || 0));
   
-  // Formulaire Orange Money
-  const [orangePhone, setOrangePhone] = useState<string>('');
-  const [orangePin, setOrangePin] = useState<string>('');
+  const [showRecharge, setShowRecharge] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState<'OM' | 'MOMO' | 'CB'>('OM');
+  const [phone, setPhone] = useState(profile.phone_number || '');
   
-  // Formulaire Carte Visa
-  const [cardNumber, setCardNumber] = useState<string>('');
-  const [cardExpiry, setCardExpiry] = useState<string>('');
-  const [cardCVC, setCardCVC] = useState<string>('');
-  const [cardHolder, setCardHolder] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // Messages
-  const [successMessage, setSuccessMessage] = useState<string>('');
-  const [errorMessage, setErrorMessage] = useState<string>('');
-
-  // Charger les transactions au montage
-  useEffect(() => {
-    fetchTransactions();
-  }, []);
-
-  const fetchTransactions = async () => {
-    try {
-      // Ici vous pourriez avoir une table credit_transactions dans Supabase
-      // Pour l'exemple, on simule des données
-      const mockTransactions: CreditTransaction[] = [
-        {
-          id: 1,
-          amount: 5000,
-          payment_method: 'ORANGE_MONEY',
-          transaction_date: '2024-01-15T10:30:00Z',
-          status: 'SUCCESS',
-          reference_number: 'OM123456789'
-        },
-        {
-          id: 2,
-          amount: 10000,
-          payment_method: 'VISA_CARD',
-          transaction_date: '2024-01-10T14:22:00Z',
-          status: 'SUCCESS',
-          reference_number: 'VISA987654321'
-        }
-      ];
-      setTransactions(mockTransactions);
-    } catch (error) {
-      console.error('Erreur lors du chargement des transactions:', error);
-    }
-  };
-
-  const validateAmount = (amount: string): boolean => {
-    const numAmount = parseFloat(amount);
-    return numAmount >= 1000 && numAmount % 1000 === 0;
-  };
-
-  const formatAmount = (amount: number): string => {
-    return new Intl.NumberFormat('fr-FR', { 
-      style: 'currency', 
-      currency: 'XAF' 
-    }).format(amount);
-  };
-
+  // Logique de Recharge
   const handleRecharge = async () => {
-    if (!validateAmount(rechargeAmount)) {
-      setErrorMessage('Le montant doit être au moins 1000F et multiple de 1000F');
-      return;
+    const val = parseInt(amount);
+    if(!val || val < 500) {
+        toast.error("Montant minimum : 500 FCFA");
+        return;
+    }
+    if(!phone) {
+        toast.error("Numéro de téléphone requis pour le paiement");
+        return;
     }
 
-    setIsRecharging(true);
-    setErrorMessage('');
-    setSuccessMessage('');
+    setIsProcessing(true);
+    const loadId = toast.loading("Traitement avec l'opérateur...");
 
     try {
-      // Simulation du processus de paiement
-      await new Promise(resolve => setTimeout(resolve, 2000));
+        // 1. SIMULATION PAIEMENT OPÉRATEUR (Orange/MTN)
+        // Dans une vraie app, ici on appellerait l'API de CinetPay, Stripe, etc.
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Attente artificielle
 
-      const amount = parseFloat(rechargeAmount);
-      const newBalance = currentBalance + amount;
+        // 2. APPEL API WALLET (Si le paiement opérateur réussit)
+        toast.loading("Mise à jour du portefeuille...", { id: loadId });
+        
+        // Appel du service qu'on a créé
+        await walletService.creditWallet(
+            profile.id, 
+            val, 
+            `Recharge via ${method} (${phone})`
+        );
 
-      // Mettre à jour le solde dans Supabase
-      const { error } = await supabase
-        .from('profiles_pro')
-        .update({ credit_balance: newBalance })
-        .eq('id', profile.id);
+        // 3. SUCCÈS
+        const newBal = balance + val;
+        setBalance(newBal);
+        
+        // Ajout transaction locale (car pas de GET history distant)
+        const newTx: Transaction = {
+            id: Date.now(),
+            type: 'CREDIT',
+            amount: val,
+            date: new Date(),
+            method: method === 'OM' ? 'Orange Money' : 'MTN MoMo',
+            status: 'COMPLETED'
+        };
+        setTransactions(prev => [newTx, ...prev]);
+        
+        toast.success("Recharge effectuée !", { id: loadId });
+        setShowRecharge(false);
+        setAmount('');
+        
+        // Notifier le parent pour rafraîchir les données globales
+        onUpdate();
 
-      if (error) throw error;
-
-      // Ajouter la transaction à l'historique (ici vous créeriez un enregistrement dans credit_transactions)
-      const newTransaction: CreditTransaction = {
-        id: Date.now(),
-        amount,
-        payment_method: paymentMethod,
-        transaction_date: new Date().toISOString(),
-        status: 'SUCCESS',
-        reference_number: `${paymentMethod === 'ORANGE_MONEY' ? 'OM' : 'VISA'}${Date.now()}`
-      };
-
-      setTransactions(prev => [newTransaction, ...prev]);
-      setCurrentBalance(newBalance);
-      setSuccessMessage(`Votre compte a été rechargé avec succès de ${formatAmount(amount)}`);
-      setShowPaymentForm(false);
-      resetForm();
-      
-      if (onUpdate) onUpdate();
-
-    } catch (error) {
-      console.error('Erreur lors de la recharge:', error);
-      setErrorMessage('Échec de la recharge. Veuillez réessayer.');
+    } catch (err: any) {
+        console.error(err);
+        toast.error("Erreur transaction : " + err.message, { id: loadId });
     } finally {
-      setIsRecharging(false);
-    }
-  };
-
-  const resetForm = () => {
-    setRechargeAmount('');
-    setOrangePhone('');
-    setOrangePin('');
-    setCardNumber('');
-    setCardExpiry('');
-    setCardCVC('');
-    setCardHolder('');
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'SUCCESS': return 'text-green-600 bg-green-100';
-      case 'PENDING': return 'text-yellow-600 bg-yellow-100';
-      case 'FAILED': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'SUCCESS': return 'Réussi';
-      case 'PENDING': return 'En attente';
-      case 'FAILED': return 'Échec';
-      default: return 'Inconnu';
+        setIsProcessing(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl">
-              <HandCoins className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Compte de Crédit</h1>
-              <p className="text-gray-600">Gérez votre solde et rechargez votre compte</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowBalance(!showBalance)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            {showBalance ? <EyeOff className="h-5 w-5 text-gray-500" /> : <Eye className="h-5 w-5 text-gray-500" />}
-          </button>
-        </div>
+    <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+      <Toaster position="top-center"/>
 
-        {/* Balance Card */}
-        <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-6 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-8 -translate-x-8" />
+      {/* --- 1. CARTE PRINCIPALE SOLDE --- */}
+      <div className="relative overflow-hidden bg-slate-900 text-white rounded-3xl p-8 shadow-2xl">
+           <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-orange-500/20 rounded-full blur-3xl"></div>
+           
+           <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
+               <div>
+                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-orange-500"/> ID: <span className="font-mono text-white">{profile.id.substring(0,8)}...</span>
+                   </p>
+                   <h1 className="text-5xl font-black tracking-tight">
+                       {balance.toLocaleString()} <span className="text-2xl font-normal text-slate-400">FCFA</span>
+                   </h1>
+                   <p className="text-sm text-slate-400 mt-2">Solde disponible pour vos opérations</p>
+               </div>
+
+               <div className="flex gap-3">
+                   <button 
+                      onClick={() => setShowRecharge(true)}
+                      className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-orange-900/20 transition transform hover:-translate-y-0.5 active:scale-95"
+                   >
+                       <Plus className="w-5 h-5"/> Recharger
+                   </button>
+               </div>
+           </div>
+      </div>
+
+      {/* --- 2. ACTIONS RAPIDES & KPIS --- */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Carte Info 1 */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition">
+               <div className="flex items-start justify-between mb-4">
+                   <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl text-green-600">
+                       <ArrowDownLeft className="w-6 h-6"/>
+                   </div>
+                   <span className="text-xs font-bold text-gray-400 uppercase">Revenus J-7</span>
+               </div>
+               <p className="text-2xl font-bold text-gray-800 dark:text-white">0 FCFA</p>
+          </div>
           
-          <div className="relative">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-orange-100 text-sm font-medium">Solde disponible</p>
-                <p className="text-3xl font-bold">
-                  {showBalance ? formatAmount(currentBalance) : '••••••'}
-                </p>
-              </div>
-              <Wallet className="h-8 w-8 text-orange-200" />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-xs">Compte {profile.account_type}</p>
-                <p className="text-white font-medium">{profile.manager_name}</p>
-              </div>
-              <button
-                onClick={() => setShowPaymentForm(true)}
-                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="text-sm font-medium">Recharger</span>
-              </button>
-            </div>
+          {/* Carte Info 2 */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition">
+               <div className="flex items-start justify-between mb-4">
+                   <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl text-red-600">
+                       <ArrowUpRight className="w-6 h-6"/>
+                   </div>
+                   <span className="text-xs font-bold text-gray-400 uppercase">Commissions Payées</span>
+               </div>
+               <p className="text-2xl font-bold text-gray-800 dark:text-white">0 FCFA</p>
           </div>
-        </div>
+
+          {/* Carte Info 3 */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition">
+               <div className="flex items-start justify-between mb-4">
+                   <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl text-blue-600">
+                       <TrendingUp className="w-6 h-6"/>
+                   </div>
+                   <span className="text-xs font-bold text-gray-400 uppercase">Statut</span>
+               </div>
+               <p className="text-2xl font-bold text-gray-800 dark:text-white">Actif</p>
+          </div>
       </div>
 
-      {/* Messages */}
+      {/* --- 3. MODAL RECHARGE --- */}
       <AnimatePresence>
-        {successMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center space-x-3"
-          >
-            <Check className="h-5 w-5 text-green-600 flex-shrink-0" />
-            <p className="text-green-800 font-medium">{successMessage}</p>
-          </motion.div>
-        )}
+          {showRecharge && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <motion.div 
+                    initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}
+                    onClick={() => setShowRecharge(false)} 
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  />
+                  <motion.div 
+                     initial={{scale: 0.9, y: 20, opacity: 0}} animate={{scale: 1, y: 0, opacity: 1}} exit={{scale: 0.9, y: 20, opacity: 0}}
+                     className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative z-10"
+                  >
+                      {/* Header Modal */}
+                      <div className="bg-gray-50 dark:bg-gray-800 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                           <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                               <RefreshCw className="w-5 h-5 text-orange-500"/> Recharger le Compte
+                           </h3>
+                           <button onClick={() => setShowRecharge(false)} className="text-gray-400 hover:text-red-500 transition"><X/></button>
+                      </div>
 
-        {errorMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3"
-          >
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-            <p className="text-red-800 font-medium">{errorMessage}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                      <div className="p-6 space-y-6">
+                           {/* Montant */}
+                           <div>
+                               <label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Montant à recharger</label>
+                               <div className="relative">
+                                   <input 
+                                      type="number" 
+                                      autoFocus
+                                      placeholder="5000"
+                                      className="w-full text-3xl font-black p-4 bg-gray-100 dark:bg-gray-800 rounded-xl border-2 border-transparent focus:border-orange-500 outline-none text-gray-900 dark:text-white"
+                                      value={amount}
+                                      onChange={e => setAmount(e.target.value)}
+                                   />
+                                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">FCFA</span>
+                               </div>
+                           </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-100">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-blue-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Recharges ce mois</h3>
-          </div>
-          <p className="text-2xl font-bold text-blue-600">
-            {formatAmount(transactions.reduce((sum, t) => sum + (t.status === 'SUCCESS' ? t.amount : 0), 0))}
-          </p>
-        </div>
+                           {/* Méthodes */}
+                           <div className="grid grid-cols-3 gap-3">
+                               <button 
+                                  onClick={() => setMethod('OM')}
+                                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition ${method==='OM' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+                               >
+                                  <div className="w-4 h-4 rounded-full bg-orange-500 mb-2"></div>
+                                  <span className="text-xs font-bold">Orange</span>
+                               </button>
+                               <button 
+                                  onClick={() => setMethod('MOMO')}
+                                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition ${method==='MOMO' ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+                               >
+                                  <div className="w-4 h-4 rounded-full bg-yellow-400 mb-2"></div>
+                                  <span className="text-xs font-bold">MTN</span>
+                               </button>
+                               <button 
+                                  onClick={() => setMethod('CB')}
+                                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition ${method==='CB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+                               >
+                                  <CreditCard className="w-4 h-4 text-blue-500 mb-2"/>
+                                  <span className="text-xs font-bold">Carte</span>
+                               </button>
+                           </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-100">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <RefreshCw className="h-5 w-5 text-green-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Transactions</h3>
-          </div>
-          <p className="text-2xl font-bold text-green-600">{transactions.length}</p>
-        </div>
+                           {/* Phone input */}
+                           {(method === 'OM' || method === 'MOMO') && (
+                               <div>
+                                   <label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Numéro de paiement</label>
+                                   <div className="relative">
+                                        <Smartphone className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                                        <input 
+                                            type="tel" 
+                                            value={phone}
+                                            onChange={e => setPhone(e.target.value)}
+                                            placeholder="6XX XX XX XX"
+                                            className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 focus:border-orange-500 outline-none bg-transparent"
+                                        />
+                                   </div>
+                               </div>
+                           )}
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-100">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <History className="h-5 w-5 text-purple-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Dernière recharge</h3>
-          </div>
-          <p className="text-2xl font-bold text-purple-600">
-            {transactions[0] ? formatAmount(transactions[0].amount) : 'Aucune'}
-          </p>
-        </div>
-      </div>
-
-      {/* Transaction History */}
-      <div className="bg-white rounded-xl shadow-sm border border-orange-100">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-            <History className="h-5 w-5 text-orange-600" />
-            <span>Historique des transactions</span>
-          </h2>
-        </div>
-        
-        <div className="p-6">
-          {transactions.length === 0 ? (
-            <div className="text-center py-8">
-              <HandCoins className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">Aucune transaction trouvée</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {transactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="p-2 bg-white rounded-lg">
-                      {transaction.payment_method === 'ORANGE_MONEY' ? (
-                        <Smartphone className="h-5 w-5 text-orange-600" />
-                      ) : (
-                        <CreditCard className="h-5 w-5 text-blue-600" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        Recharge {transaction.payment_method === 'ORANGE_MONEY' ? 'Orange Money' : 'Carte Visa'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(transaction.transaction_date).toLocaleDateString('fr-FR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                      {transaction.reference_number && (
-                        <p className="text-xs text-gray-400">Réf: {transaction.reference_number}</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600">+{formatAmount(transaction.amount)}</p>
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
-                      {getStatusText(transaction.status)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                           <button 
+                               disabled={isProcessing}
+                               onClick={handleRecharge}
+                               className="w-full py-4 rounded-xl bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold text-lg shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                           >
+                               {isProcessing ? <Loader2 className="animate-spin"/> : <Check/>}
+                               Valider le paiement
+                           </button>
+                      </div>
+                  </motion.div>
+              </div>
           )}
-        </div>
+      </AnimatePresence>
+
+      {/* --- 4. LISTE HISTORIQUE --- */}
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+           <h3 className="font-bold text-lg text-gray-800 dark:text-white mb-6 flex items-center gap-2">
+               <History className="w-5 h-5 text-gray-400"/> Historique des Transactions
+           </h3>
+           
+           {transactions.length === 0 ? (
+               <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
+                   <p className="text-sm">Aucune transaction récente.</p>
+               </div>
+           ) : (
+               <div className="space-y-4">
+                   {transactions.map((tx) => (
+                       <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 transition">
+                            <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-full ${tx.type === 'CREDIT' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                    {tx.type === 'CREDIT' ? <ArrowDownLeft className="w-5 h-5"/> : <ArrowUpRight className="w-5 h-5"/>}
+                                </div>
+                                <div>
+                                    <p className="font-bold text-gray-800 dark:text-white text-sm">{tx.type === 'CREDIT' ? 'Recharge Compte' : 'Paiement Service'}</p>
+                                    <p className="text-xs text-gray-500">{tx.date.toLocaleTimeString()} • {tx.method}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className={`font-bold text-lg ${tx.type === 'CREDIT' ? 'text-green-600' : 'text-red-500'}`}>
+                                    {tx.type === 'CREDIT' ? '+' : '-'} {tx.amount.toLocaleString()} F
+                                </p>
+                                <span className="text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-bold">COMPLÉTÉ</span>
+                            </div>
+                       </div>
+                   ))}
+               </div>
+           )}
       </div>
 
-      {/* Modal de recharge */}
-      <AnimatePresence>
-        {showPaymentForm && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-              onClick={() => setShowPaymentForm(false)}
-            />
-            
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="bg-white rounded-2xl shadow-xl border border-orange-100 max-h-[90vh] overflow-y-auto">
-                <div className="p-2 border-b border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-900">Recharger mon compte</h2>
-                    <button
-                      onClick={() => setShowPaymentForm(false)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <X className="h-5 w-5 text-gray-500" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="p-6 space-y-6">
-                  {/* Montant */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Montant de recharge
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={rechargeAmount}
-                        onChange={(e) => setRechargeAmount(e.target.value)}
-                        placeholder="Ex: 5000"
-                        min="1000"
-                        step="1000"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                      />
-                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500 text-sm">FCFA</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Montant minimum: 1000 FCFA (multiples de 1000)
-                    </p>
-                  </div>
-
-                  {/* Méthode de paiement */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Méthode de paiement
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => setPaymentMethod('ORANGE_MONEY')}
-                        className={`p-4 border-2 rounded-xl flex flex-col items-center space-y-2 transition-all ${
-                          paymentMethod === 'ORANGE_MONEY'
-                            ? 'border-orange-500 bg-orange-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <Smartphone className="h-6 w-6 text-orange-600" />
-                        <span className="font-medium text-sm">Orange Money</span>
-                      </button>
-                      
-                      <button
-                        onClick={() => setPaymentMethod('VISA_CARD')}
-                        className={`p-4 border-2 rounded-xl flex flex-col items-center space-y-2 transition-all ${
-                          paymentMethod === 'VISA_CARD'
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <CreditCard className="h-6 w-6 text-blue-600" />
-                        <span className="font-medium text-sm">Carte Visa</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Formulaire Orange Money */}
-                  {paymentMethod === 'ORANGE_MONEY' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Numéro Orange Money
-                        </label>
-                        <input
-                          type="tel"
-                          value={orangePhone}
-                          onChange={(e) => setOrangePhone(e.target.value)}
-                          placeholder="Ex: 691234567"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Code PIN Orange Money
-                        </label>
-                        <input
-                          type="password"
-                          value={orangePin}
-                          onChange={(e) => setOrangePin(e.target.value)}
-                          placeholder="••••"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Formulaire Carte Visa */}
-                  {paymentMethod === 'VISA_CARD' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Numéro de carte
-                        </label>
-                        <input
-                          type="text"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          placeholder="1234 5678 9012 3456"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Date d'expiration
-                          </label>
-                          <input
-                            type="text"
-                            value={cardExpiry}
-                            onChange={(e) => setCardExpiry(e.target.value)}
-                            placeholder="MM/AA"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Code CVC
-                          </label>
-                          <input
-                            type="text"
-                            value={cardCVC}
-                            onChange={(e) => setCardCVC(e.target.value)}
-                            placeholder="123"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Nom du titulaire
-                        </label>
-                        <input
-                          type="text"
-                          value={cardHolder}
-                          onChange={(e) => setCardHolder(e.target.value)}
-                          placeholder="Jean Dupont"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Boutons */}
-                  <div className="flex space-x-3 pt-4">
-                    <button
-                      onClick={() => setShowPaymentForm(false)}
-                      className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      onClick={handleRecharge}
-                      disabled={isRecharging || !validateAmount(rechargeAmount)}
-                      className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-center space-x-2"
-                    >
-                      {isRecharging ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                          <span>Traitement...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4" />
-                          <span>Recharger {rechargeAmount && formatAmount(parseFloat(rechargeAmount))}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
-};
-
-export default CreditPage;
+}

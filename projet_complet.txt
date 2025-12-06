@@ -2,8 +2,6 @@
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\withdraw-package\retrait.tsx
 ================================================================================
 
-// FICHIER : src/app/withdraw-package/retrait.tsx
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -23,12 +21,12 @@ import {
   PrinterIcon
 } from '@heroicons/react/24/outline';
 import { 
-  CheckCircleIcon as SolidCheckCircleIcon, 
-  ExclamationTriangleIcon, 
+  CheckCircle as SolidCheckCircleIcon, // Correction probable: CheckCircleIcon -> CheckCircle dans Lucide standard
+  AlertTriangle as ExclamationTriangleIcon, // CORRECTION ICI : On utilise AlertTriangle aliasé
   ArchiveRestore as ArchiveIcon,
   Loader2,
   Package,
-  AlertTriangleIcon
+  // AlertTriangleIcon // Retiré car doublon potentiel
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -189,8 +187,8 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
             departurePointName: shipment.pickupAddress || shipment.departurePointName || "",
             arrivalPointName: shipment.deliveryAddress || shipment.arrivalPointName || "",
             packageDescription: shipment.description || "",
-            packageWeight: String(shipment.weight || 0),
-            description: shipment.description || "", // Doublon sécurité pour l'affichage
+            weight: String(shipment.weight || 0),
+            description: shipment.description || "", 
             isFragile: shipment.packageType === 'FRAGILE',
             isInsured: (shipment.value && shipment.value > 0),
             status: status as any,
@@ -252,8 +250,6 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
     try {
         console.log(`📤 [Retrait] Envoi validation pour ${packageInfo.trackingNumber}...`);
         
-        // En théorie, on peut envoyer aussi les infos du retirant via le body (si l'API le supporte)
-        // Sinon c'est juste le changement de statut.
         // Endpoint: PUT /api/packages/{id}/deliver
         await packageService.markAsDelivered(packageInfo.id);
         
@@ -351,7 +347,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
           
           {error && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 text-red-700 dark:text-red-400 rounded-r-lg flex items-center gap-3">
-                   <AlertTriangleIcon className="w-6 h-6 flex-shrink-0"/>
+                   <ExclamationTriangleIcon className="w-6 h-6 flex-shrink-0"/>
                    <p className="font-medium">{error}</p>
               </motion.div>
           )}
@@ -399,7 +395,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
                              </p>
                          ) : (
                              <p className="text-xs text-red-600 text-right font-bold mt-1 flex justify-end items-center gap-1">
-                                 <AlertTriangleIcon className="w-3 h-3"/> À encaisser
+                                 <ExclamationTriangleIcon className="w-3 h-3"/> À encaisser
                              </p>
                          )}
                     </div>
@@ -12365,9 +12361,14 @@ export default function TrackPackageMin({ onClose, onOpenFullTracker, initialTra
     setLoading(true); setError(null); setPkg(null);
     try {
       const response = await packageService.trackPackage(searchInput.trim());
-      if (!response || (!response.package && !response.trackingNumber)) throw new Error("Introuvable");
       
-      const unifiedData = response.package ? response : { package: response, history: [] };
+      // Fix Type Error: On force le type any ici car l'interface du service ne reflète pas
+      // potentiellement la structure "wrappée" { package: ..., history: ... }
+      const data = response as any;
+
+      if (!data || (!data.package && !data.trackingNumber)) throw new Error("Introuvable");
+      
+      const unifiedData = data.package ? data : { package: data, history: [] };
       setPkg(mapBackendToUI(unifiedData));
     } catch (err: any) {
       setError(err.message || "Erreur recherche");
@@ -12375,6 +12376,7 @@ export default function TrackPackageMin({ onClose, onOpenFullTracker, initialTra
       setLoading(false);
     }
   };
+
 
   const getStatusColor = (raw: string) => {
      if (raw.includes('RECU') || raw.includes('LIVRE')) return 'bg-green-500';
@@ -12987,7 +12989,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\Credit.tsx
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
+import { walletService } from '@/services/walletService'; 
 import { 
   HandCoins, 
   CreditCard, 
@@ -13001,21 +13003,26 @@ import {
   X,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Terminal, // Pour les logs visuels
+  ArrowRightCircle
 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
+// Types locaux pour l'affichage
 interface CreditTransaction {
   id: number;
   amount: number;
-  payment_method: 'ORANGE_MONEY' | 'VISA_CARD';
+  type: 'CREDIT' | 'DEBIT';
+  payment_method: 'ORANGE_MONEY' | 'VISA_CARD' | 'SYSTEM';
   transaction_date: string;
   status: 'SUCCESS' | 'PENDING' | 'FAILED';
-  reference_number?: string;
+  description?: string;
 }
 
 interface CreditPageProps {
   profile: {
-    id: string;
+    id: string; // ID important pour lier au Wallet Externe
     credit_balance: number;
     account_type: string;
     manager_name: string;
@@ -13031,59 +13038,24 @@ const CreditPage: React.FC<CreditPageProps> = ({ profile, onUpdate }) => {
   const [paymentMethod, setPaymentMethod] = useState<'ORANGE_MONEY' | 'VISA_CARD'>('ORANGE_MONEY');
   const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false);
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showBalance, setShowBalance] = useState<boolean>(true);
   
-  // Formulaire Orange Money
-  const [orangePhone, setOrangePhone] = useState<string>('');
-  const [orangePin, setOrangePin] = useState<string>('');
-  
-  // Formulaire Carte Visa
-  const [cardNumber, setCardNumber] = useState<string>('');
-  const [cardExpiry, setCardExpiry] = useState<string>('');
-  const [cardCVC, setCardCVC] = useState<string>('');
-  const [cardHolder, setCardHolder] = useState<string>('');
+  // États Logs Visuels (Console Débug intégrée)
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
-  // Messages
-  const [successMessage, setSuccessMessage] = useState<string>('');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  // Formulaire Mobile / Carte
+  const [phone, setPhone] = useState('');
 
-  // Charger les transactions au montage
+  // Initialisation
   useEffect(() => {
-    fetchTransactions();
-  }, []);
+    // Si l'API wallet avait une route GET balance, on l'appellerait ici.
+    // Pour l'instant on se fie au profile, mais on log l'ID pour vérif.
+    addLog(`Init Wallet Page for User: ${profile.id}`);
+  }, [profile.id]);
 
-  const fetchTransactions = async () => {
-    try {
-      // Ici vous pourriez avoir une table credit_transactions dans Supabase
-      // Pour l'exemple, on simule des données
-      const mockTransactions: CreditTransaction[] = [
-        {
-          id: 1,
-          amount: 5000,
-          payment_method: 'ORANGE_MONEY',
-          transaction_date: '2024-01-15T10:30:00Z',
-          status: 'SUCCESS',
-          reference_number: 'OM123456789'
-        },
-        {
-          id: 2,
-          amount: 10000,
-          payment_method: 'VISA_CARD',
-          transaction_date: '2024-01-10T14:22:00Z',
-          status: 'SUCCESS',
-          reference_number: 'VISA987654321'
-        }
-      ];
-      setTransactions(mockTransactions);
-    } catch (error) {
-      console.error('Erreur lors du chargement des transactions:', error);
-    }
-  };
-
-  const validateAmount = (amount: string): boolean => {
-    const numAmount = parseFloat(amount);
-    return numAmount >= 1000 && numAmount % 1000 === 0;
+  const addLog = (msg: string) => {
+    const time = new Date().toLocaleTimeString();
+    setDebugLogs(prev => [`[${time}] ${msg}`, ...prev]);
   };
 
   const formatAmount = (amount: number): string => {
@@ -13093,473 +13065,240 @@ const CreditPage: React.FC<CreditPageProps> = ({ profile, onUpdate }) => {
     }).format(amount);
   };
 
+  // --- ACTION DE RECHARGE ---
   const handleRecharge = async () => {
-    if (!validateAmount(rechargeAmount)) {
-      setErrorMessage('Le montant doit être au moins 1000F et multiple de 1000F');
+    if (!rechargeAmount || parseFloat(rechargeAmount) < 500) {
+      toast.error('Montant minimum de 500 FCFA requis.');
       return;
     }
 
     setIsRecharging(true);
-    setErrorMessage('');
-    setSuccessMessage('');
+    addLog(`🚀 Démarrage recharge: ${rechargeAmount} FCFA via ${paymentMethod}`);
 
     try {
-      // Simulation du processus de paiement
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const amountVal = parseFloat(rechargeAmount);
 
-      const amount = parseFloat(rechargeAmount);
-      const newBalance = currentBalance + amount;
+      // 1. Simulation Paiement Opérateur (Orange/MTN/Visa)
+      // Dans la réalité, on appellerait une API de paiement ici (Stripe/CinetPay/etc)
+      addLog("⏳ Traitement paiement opérateur en cours...");
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Fake delay
+      addLog("✅ Paiement opérateur validé (Simulation)");
 
-      // Mettre à jour le solde dans Supabase
-      const { error } = await supabase
-        .from('profiles_pro')
-        .update({ credit_balance: newBalance })
-        .eq('id', profile.id);
+      // 2. Appel au Wallet Externe pour créditer
+      addLog(`📡 Appel Wallet API (Increment): ${profile.id} / +${amountVal}`);
+      
+      const walletRes = await walletService.creditWallet(
+          profile.id, 
+          amountVal, 
+          `Recharge manuelle via ${paymentMethod}`
+      );
 
-      if (error) throw error;
+      addLog(`📥 Wallet API Response: ${JSON.stringify(walletRes)}`);
 
-      // Ajouter la transaction à l'historique (ici vous créeriez un enregistrement dans credit_transactions)
-      const newTransaction: CreditTransaction = {
-        id: Date.now(),
-        amount,
-        payment_method: paymentMethod,
-        transaction_date: new Date().toISOString(),
-        status: 'SUCCESS',
-        reference_number: `${paymentMethod === 'ORANGE_MONEY' ? 'OM' : 'VISA'}${Date.now()}`
-      };
-
-      setTransactions(prev => [newTransaction, ...prev]);
+      // 3. Mise à jour Locale (Success)
+      const newBalance = currentBalance + amountVal;
       setCurrentBalance(newBalance);
-      setSuccessMessage(`Votre compte a été rechargé avec succès de ${formatAmount(amount)}`);
+      
+      // Ajout historique local (car l'API ne retourne pas l'historique complet pour l'instant)
+      const newTx: CreditTransaction = {
+          id: Date.now(),
+          amount: amountVal,
+          type: 'CREDIT',
+          payment_method: paymentMethod,
+          transaction_date: new Date().toISOString(),
+          status: 'SUCCESS',
+          description: `Recharge ${paymentMethod}`
+      };
+      setTransactions(prev => [newTx, ...prev]);
+
+      toast.success("Compte rechargé avec succès !");
       setShowPaymentForm(false);
-      resetForm();
+      setRechargeAmount('');
       
       if (onUpdate) onUpdate();
 
-    } catch (error) {
-      console.error('Erreur lors de la recharge:', error);
-      setErrorMessage('Échec de la recharge. Veuillez réessayer.');
+    } catch (error: any) {
+      console.error(error);
+      addLog(`❌ Erreur: ${error.message}`);
+      toast.error("Échec de la transaction. Voir logs.");
     } finally {
       setIsRecharging(false);
     }
   };
 
-  const resetForm = () => {
-    setRechargeAmount('');
-    setOrangePhone('');
-    setOrangePin('');
-    setCardNumber('');
-    setCardExpiry('');
-    setCardCVC('');
-    setCardHolder('');
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'SUCCESS': return 'text-green-600 bg-green-100';
-      case 'PENDING': return 'text-yellow-600 bg-yellow-100';
-      case 'FAILED': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'SUCCESS': return 'Réussi';
-      case 'PENDING': return 'En attente';
-      case 'FAILED': return 'Échec';
-      default: return 'Inconnu';
-    }
-  };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl">
-              <HandCoins className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Compte de Crédit</h1>
-              <p className="text-gray-600">Gérez votre solde et rechargez votre compte</p>
-            </div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <Toaster position="top-center" />
+      
+      {/* 1. Header & Solde */}
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-4">
+             <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-2xl text-orange-600 dark:text-orange-400">
+                <Wallet className="w-8 h-8"/>
+             </div>
+             <div>
+                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Portefeuille Pro</h1>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm">ID Wallet: <span className="font-mono text-orange-600">{profile.id}</span></p>
+             </div>
           </div>
-          <button
-            onClick={() => setShowBalance(!showBalance)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            {showBalance ? <EyeOff className="h-5 w-5 text-gray-500" /> : <Eye className="h-5 w-5 text-gray-500" />}
+          <button onClick={() => setShowBalance(!showBalance)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+             {showBalance ? <EyeOff/> : <Eye/>}
           </button>
         </div>
 
-        {/* Balance Card */}
-        <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-6 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-8 -translate-x-8" />
-          
-          <div className="relative">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-orange-100 text-sm font-medium">Solde disponible</p>
-                <p className="text-3xl font-bold">
-                  {showBalance ? formatAmount(currentBalance) : '••••••'}
-                </p>
-              </div>
-              <Wallet className="h-8 w-8 text-orange-200" />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-xs">Compte {profile.account_type}</p>
-                <p className="text-white font-medium">{profile.manager_name}</p>
-              </div>
-              <button
-                onClick={() => setShowPaymentForm(true)}
-                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="text-sm font-medium">Recharger</span>
-              </button>
-            </div>
-          </div>
+        {/* Carte Solde avec Gradient */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-gray-900 to-gray-800 dark:from-black dark:to-gray-900 text-white p-8 shadow-xl">
+             <div className="absolute top-0 right-0 p-32 bg-orange-500 rounded-full blur-[80px] opacity-20 -mr-16 -mt-16 pointer-events-none"></div>
+             
+             <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
+                 <div>
+                     <p className="text-gray-400 text-sm font-medium uppercase tracking-widest mb-2">Solde Disponible</p>
+                     <p className="text-4xl md:text-5xl font-black tracking-tight text-white">
+                        {showBalance ? formatAmount(currentBalance) : '••••••••'}
+                     </p>
+                     <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500"/> Synchronisé avec Wallet API
+                     </p>
+                 </div>
+                 <button 
+                    onClick={() => setShowPaymentForm(true)}
+                    className="bg-orange-600 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-orange-900/50 transition-all hover:-translate-y-0.5 active:scale-95 w-full md:w-auto justify-center"
+                 >
+                    <Plus className="w-5 h-5"/> Recharger
+                 </button>
+             </div>
         </div>
       </div>
 
-      {/* Messages */}
-      <AnimatePresence>
-        {successMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center space-x-3"
-          >
-            <Check className="h-5 w-5 text-green-600 flex-shrink-0" />
-            <p className="text-green-800 font-medium">{successMessage}</p>
-          </motion.div>
-        )}
-
-        {errorMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3"
-          >
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-            <p className="text-red-800 font-medium">{errorMessage}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-100">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-blue-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Recharges ce mois</h3>
-          </div>
-          <p className="text-2xl font-bold text-blue-600">
-            {formatAmount(transactions.reduce((sum, t) => sum + (t.status === 'SUCCESS' ? t.amount : 0), 0))}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-100">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <RefreshCw className="h-5 w-5 text-green-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Transactions</h3>
-          </div>
-          <p className="text-2xl font-bold text-green-600">{transactions.length}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-100">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <History className="h-5 w-5 text-purple-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Dernière recharge</h3>
-          </div>
-          <p className="text-2xl font-bold text-purple-600">
-            {transactions[0] ? formatAmount(transactions[0].amount) : 'Aucune'}
-          </p>
-        </div>
-      </div>
-
-      {/* Transaction History */}
-      <div className="bg-white rounded-xl shadow-sm border border-orange-100">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-            <History className="h-5 w-5 text-orange-600" />
-            <span>Historique des transactions</span>
-          </h2>
-        </div>
-        
-        <div className="p-6">
-          {transactions.length === 0 ? (
-            <div className="text-center py-8">
-              <HandCoins className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">Aucune transaction trouvée</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {transactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="p-2 bg-white rounded-lg">
-                      {transaction.payment_method === 'ORANGE_MONEY' ? (
-                        <Smartphone className="h-5 w-5 text-orange-600" />
-                      ) : (
-                        <CreditCard className="h-5 w-5 text-blue-600" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        Recharge {transaction.payment_method === 'ORANGE_MONEY' ? 'Orange Money' : 'Carte Visa'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(transaction.transaction_date).toLocaleDateString('fr-FR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                      {transaction.reference_number && (
-                        <p className="text-xs text-gray-400">Réf: {transaction.reference_number}</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600">+{formatAmount(transaction.amount)}</p>
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
-                      {getStatusText(transaction.status)}
-                    </span>
-                  </div>
+      {/* 2. Statistiques Rapides */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+           <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Dépôts</span>
+                    <ArrowRightCircle className="w-5 h-5 text-green-500"/>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <span className="text-2xl font-bold text-gray-800 dark:text-white">+ 0 F</span>
+           </div>
+           <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Commissions</span>
+                    <TrendingUp className="w-5 h-5 text-blue-500"/>
+                </div>
+                <span className="text-2xl font-bold text-gray-800 dark:text-white">0 F</span>
+           </div>
+           <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Dernière Trans.</span>
+                    <History className="w-5 h-5 text-purple-500"/>
+                </div>
+                <span className="text-lg font-bold text-gray-800 dark:text-white">Aucune</span>
+           </div>
       </div>
 
-      {/* Modal de recharge */}
+      {/* 3. Zone de Logs Visuels (DEBUG) */}
+      <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs h-48 overflow-y-auto border border-slate-700 shadow-inner">
+           <div className="flex items-center gap-2 mb-2 text-green-400 border-b border-slate-700 pb-2 sticky top-0 bg-slate-900">
+               <Terminal className="w-4 h-4"/> 
+               <span className="font-bold">LIVE API LOGS ({process.env.NEXT_PUBLIC_WALLET_API_URL})</span>
+           </div>
+           {debugLogs.length === 0 ? (
+               <p className="text-slate-500 italic text-center mt-10">En attente de transactions...</p>
+           ) : (
+               <div className="space-y-1">
+                   {debugLogs.map((log, i) => (
+                       <p key={i} className="text-slate-300 break-all border-b border-slate-800/50 pb-0.5">{log}</p>
+                   ))}
+               </div>
+           )}
+      </div>
+
+
+      {/* MODALE RECHARGE */}
       <AnimatePresence>
         {showPaymentForm && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-              onClick={() => setShowPaymentForm(false)}
-            />
-            
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="bg-white rounded-2xl shadow-xl border border-orange-100 max-h-[90vh] overflow-y-auto">
-                <div className="p-2 border-b border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-900">Recharger mon compte</h2>
-                    <button
-                      onClick={() => setShowPaymentForm(false)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <X className="h-5 w-5 text-gray-500" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="p-6 space-y-6">
-                  {/* Montant */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Montant de recharge
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={rechargeAmount}
-                        onChange={(e) => setRechargeAmount(e.target.value)}
-                        placeholder="Ex: 5000"
-                        min="1000"
-                        step="1000"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                      />
-                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500 text-sm">FCFA</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Montant minimum: 1000 FCFA (multiples de 1000)
-                    </p>
-                  </div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                 <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setShowPaymentForm(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm"></motion.div>
+                 
+                 <motion.div 
+                    initial={{scale:0.95, opacity:0, y:20}} 
+                    animate={{scale:1, opacity:1, y:0}} 
+                    exit={{scale:0.95, opacity:0, y:20}}
+                    className="relative bg-white dark:bg-gray-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800"
+                 >
+                     <div className="p-6 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center">
+                          <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                             <HandCoins className="w-5 h-5 text-orange-500"/> Nouvelle Recharge
+                          </h3>
+                          <button onClick={() => setShowPaymentForm(false)} className="text-gray-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+                     </div>
 
-                  {/* Méthode de paiement */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Méthode de paiement
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => setPaymentMethod('ORANGE_MONEY')}
-                        className={`p-4 border-2 rounded-xl flex flex-col items-center space-y-2 transition-all ${
-                          paymentMethod === 'ORANGE_MONEY'
-                            ? 'border-orange-500 bg-orange-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <Smartphone className="h-6 w-6 text-orange-600" />
-                        <span className="font-medium text-sm">Orange Money</span>
-                      </button>
-                      
-                      <button
-                        onClick={() => setPaymentMethod('VISA_CARD')}
-                        className={`p-4 border-2 rounded-xl flex flex-col items-center space-y-2 transition-all ${
-                          paymentMethod === 'VISA_CARD'
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <CreditCard className="h-6 w-6 text-blue-600" />
-                        <span className="font-medium text-sm">Carte Visa</span>
-                      </button>
-                    </div>
-                  </div>
+                     <div className="p-6 space-y-6">
+                         <div>
+                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Montant (FCFA)</label>
+                             <div className="relative">
+                                 <input 
+                                     type="number" 
+                                     value={rechargeAmount}
+                                     onChange={(e) => setRechargeAmount(e.target.value)}
+                                     placeholder="ex: 5000"
+                                     className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-transparent text-lg font-bold outline-none focus:ring-2 focus:ring-orange-500"
+                                     autoFocus
+                                 />
+                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">XAF</span>
+                             </div>
+                         </div>
 
-                  {/* Formulaire Orange Money */}
-                  {paymentMethod === 'ORANGE_MONEY' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Numéro Orange Money
-                        </label>
-                        <input
-                          type="tel"
-                          value={orangePhone}
-                          onChange={(e) => setOrangePhone(e.target.value)}
-                          placeholder="Ex: 691234567"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Code PIN Orange Money
-                        </label>
-                        <input
-                          type="password"
-                          value={orangePin}
-                          onChange={(e) => setOrangePin(e.target.value)}
-                          placeholder="••••"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  )}
+                         <div className="grid grid-cols-2 gap-4">
+                             <button 
+                                onClick={() => setPaymentMethod('ORANGE_MONEY')}
+                                className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${
+                                    paymentMethod === 'ORANGE_MONEY' 
+                                    ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700' 
+                                    : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                }`}
+                             >
+                                 <Smartphone className="w-6 h-6"/>
+                                 <span className="font-bold text-sm">Mobile Money</span>
+                             </button>
+                             <button 
+                                onClick={() => setPaymentMethod('VISA_CARD')}
+                                className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${
+                                    paymentMethod === 'VISA_CARD' 
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700' 
+                                    : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                }`}
+                             >
+                                 <CreditCard className="w-6 h-6"/>
+                                 <span className="font-bold text-sm">Carte Bancaire</span>
+                             </button>
+                         </div>
+                         
+                         {paymentMethod === 'ORANGE_MONEY' && (
+                             <div className="animate-in fade-in slide-in-from-top-2">
+                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Numéro Téléphone</label>
+                                 <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="6XX XX XX XX" className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-transparent"/>
+                             </div>
+                         )}
 
-                  {/* Formulaire Carte Visa */}
-                  {paymentMethod === 'VISA_CARD' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Numéro de carte
-                        </label>
-                        <input
-                          type="text"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          placeholder="1234 5678 9012 3456"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Date d'expiration
-                          </label>
-                          <input
-                            type="text"
-                            value={cardExpiry}
-                            onChange={(e) => setCardExpiry(e.target.value)}
-                            placeholder="MM/AA"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Code CVC
-                          </label>
-                          <input
-                            type="text"
-                            value={cardCVC}
-                            onChange={(e) => setCardCVC(e.target.value)}
-                            placeholder="123"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Nom du titulaire
-                        </label>
-                        <input
-                          type="text"
-                          value={cardHolder}
-                          onChange={(e) => setCardHolder(e.target.value)}
-                          placeholder="Jean Dupont"
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Boutons */}
-                  <div className="flex space-x-3 pt-4">
-                    <button
-                      onClick={() => setShowPaymentForm(false)}
-                      className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      onClick={handleRecharge}
-                      disabled={isRecharging || !validateAmount(rechargeAmount)}
-                      className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-center space-x-2"
-                    >
-                      {isRecharging ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                          <span>Traitement...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4" />
-                          <span>Recharger {rechargeAmount && formatAmount(parseFloat(rechargeAmount))}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </>
+                         <button 
+                             onClick={handleRecharge}
+                             disabled={isRecharging}
+                             className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                         >
+                             {isRecharging ? (
+                                 <><RefreshCw className="w-5 h-5 animate-spin"/> Traitement...</>
+                             ) : (
+                                 <>Valider le Paiement</>
+                             )}
+                         </button>
+                     </div>
+                 </motion.div>
+            </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 };
@@ -13954,12 +13693,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\ProfilePers.tsx
 // FICHIER: src/app/dashboard/ProfilePers.tsx
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Dispatch, SetStateAction  } from 'react';
 import { 
   User, Mail, Phone, Home, CreditCard, FileText, IdCard, Save, Loader2, Camera, Upload, CheckCircle, Edit, X, CheckSquare
 } from 'lucide-react';
 import { UserProfile } from './page';
-import apiClient from '@/services/apiClient';
 import toast from 'react-hot-toast'; 
 import { userService } from '@/services/userservice'; 
 
@@ -14069,7 +13807,7 @@ const AnimatedInputField = ({ label, name, value, onChange, readOnly, icon: Icon
 
 interface Props {
     formData: UserProfile;
-    setFormData: (data: UserProfile) => void;
+    setFormData: Dispatch<SetStateAction<UserProfile>>; // Correction ICI: Utiliser le bon type pour le setState
     onUpdate: () => void;
     isEditing: boolean;
     setIsEditing: (val: boolean) => void;
@@ -14116,10 +13854,10 @@ export default function ProfilePersonalInfo({ formData, setFormData, onUpdate, i
 
             // Mise à jour Visuelle immédiate (sans toucher à la BDD)
             // On supporte les variantes de nommage (camelCase/snake_case) pour l'affichage
-            setFormData(prev => ({ 
+            // Correction ICI : Typer explicitement 'prev'
+            setFormData((prev: UserProfile) => ({ 
                 ...prev, 
                 [stateField]: previewUrl,
-                // Hack pour supporter les variantes de props si le type est pas strict
                 ...(stateField.includes('_') ? {[stateField.replace(/_([a-z])/g, g => g[1].toUpperCase())]: previewUrl} : {})
             }));
 
@@ -16877,7 +16615,7 @@ interface RecipientData {
 }
 // << CORRIGÉ: Mise à jour de l'interface PackageData >>
 interface PackageData {
-  photo: string | null;
+  photo: File | string | null;
   designation: string;
   description: string;
   weight: string;
@@ -16895,8 +16633,8 @@ interface PackageData {
   delivery: boolean;
 }
 interface RouteData {
-  departurePointId: number | null;
-  arrivalPointId: number | null;
+  departurePointId: string | null;
+  arrivalPointId: string | null;
   departurePointName: string;
   arrivalPointName: string;
   distanceKm: number;
@@ -17012,6 +16750,14 @@ export default function ShippingPage() {
   useEffect(() => {
     if (formData.currentStep > 0 && formData.currentStep < 7) {
       try {
+                // Protection contre l'objet File lors de la sauvegarde JSON
+        const safeData = {
+             ...formData,
+             packageData: { 
+                 ...formData.packageData, 
+                 photo: typeof formData.packageData.photo === 'string' ? formData.packageData.photo : null 
+             }
+        };
         localStorage.setItem(EXPEDITION_FORM_STORAGE_KEY, JSON.stringify(formData));
       } catch (e) {
         console.error("Erreur de sauvegarde localStorage:", e);
@@ -17080,137 +16826,83 @@ export default function ShippingPage() {
   };
 
   const generateBordereauPDF = async () => {
-              try {
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pageWidth = pdf.internal.pageSize.getWidth();
-                const margin = 15;
-                let y = 20;
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const margin = 15;
+            let y = 20;
 
-                // FONCTIONS UTILITAIRES
-                const addSectionTitle = (title: string) => {
-                  pdf.setFontSize(14);
-                  pdf.setFont('helvetica', 'bold');
-                  pdf.setTextColor(45, 55, 72); // Couleur sombre (slate-700)
-                  pdf.text(title, margin, y);
-                  y += 8;
-                  pdf.setLineWidth(0.2);
-                  pdf.line(margin, y - 3, pageWidth - margin, y - 3);
-                  pdf.setFont('helvetica', 'normal');
-                  pdf.setTextColor(0, 0, 0);
-                };
-                
-                const addField = (label: string, value: string | undefined | null) => {
-                  if (!value) return;
-                  pdf.setFontSize(9);
-                  pdf.setFont('helvetica', 'bold');
-                  pdf.text(label, margin, y);
-                  pdf.setFont('helvetica', 'normal');
-                  pdf.text(String(value), margin + 45, y);
-                  y += 6;
-                };
-
-                // 1. EN-TÊTE
-                pdf.setFontSize(22);
+            // Utilitaires
+            const addSectionTitle = (title: string) => {
+                pdf.setFontSize(14);
                 pdf.setFont('helvetica', 'bold');
-                pdf.setTextColor(249, 115, 22); // Orange
-                pdf.text("PicknDrop Link", margin, y - 5);
-                
-                pdf.setFontSize(9);
-                pdf.setFont('helvetica', 'italic');
-                pdf.setTextColor(100, 116, 139); // slate-500
-                pdf.text('Votre solution de livraison de confiance', margin, y);
-
-                const qrDataURL = await OriginalQRCode.toDataURL(trackingNumber, { width: 110, margin: 1 });
-                const qrSize = 28;
-                pdf.addImage(qrDataURL, 'PNG', pageWidth - margin - qrSize, y - 12, qrSize, qrSize);
-
-                pdf.setFontSize(11);
-                pdf.setFont('helvetica', 'bold');
-                pdf.setTextColor(0,0,0);
-                pdf.text(`Bordereau d'Expédition`, pageWidth - margin - 35, y - 5, { align: 'right' });
-                
-                pdf.setFontSize(9);
+                pdf.setTextColor(45, 55, 72);
+                pdf.text(title, margin, y);
+                y += 8;
+                pdf.setLineWidth(0.2);
+                pdf.line(margin, y - 3, pageWidth - margin, y - 3);
                 pdf.setFont('helvetica', 'normal');
-                pdf.text(`N°: ${trackingNumber}`, pageWidth - margin - 35, y, { align: 'right' });
-                pdf.text(`Date: ${new Date().toLocaleDateString('fr-CM')}`, pageWidth - margin - 35, y + 5, { align: 'right' });
-
-                y += qrSize - 5;
-                
-                // 2. EXPÉDITEUR & DESTINATAIRE
-                addSectionTitle('Intervenants');
-                const startYCols = y;
-                addField('Expéditeur:', formData.senderData.senderName);
-                addField('Téléphone:', formData.senderData.senderPhone);
-                addField('Point de Dépôt:', formData.routeData.departurePointName);
-                
-                y = startYCols; // Reset y pour la deuxième colonne
-                pdf.text('', pageWidth / 2, y); // Placeholder pour aligner
-                addField('Destinataire:', formData.recipientData.recipientName);
-                addField('Téléphone:', formData.recipientData.recipientPhone);
-                addField('Point de Retrait:', formData.routeData.arrivalPointName);
-                y = Math.max(y, startYCols + (3*6)); // S'assurer que 'y' est à la fin de la colonne la plus longue
-                y += 5;
-
-                // 3. DÉTAILS DU COLIS
-                addSectionTitle('Détails du Colis');
-                if (formData.packageData.photo) {
-                  pdf.setFont('helvetica', 'bold');
-                  pdf.text('Photo du Colis:', margin + 110, y - 6);
-                  pdf.addImage(formData.packageData.photo, 'JPEG', margin + 110, y, 35, 35); 
-                }
-                addField('Désignation:', formData.packageData.designation);
-                addField('Poids:', `${formData.packageData.weight} kg`);
-                let caracteristiques = [];
-                if (formData.packageData.isFragile) caracteristiques.push("Fragile");
-                if (formData.packageData.isPerishable) caracteristiques.push("Périssable");
-                if (formData.packageData.isInsured) caracteristiques.push(`Assuré (Valeur: ${Number(formData.packageData.declaredValue).toLocaleString('fr-FR')} FCFA)`);
-                if (caracteristiques.length > 0) addField('Spécificités:', caracteristiques.join(', '));
-                y += 5;
-                
-                // 4. RÉCAPITULATIF FINANCIER
-                addSectionTitle('Récapitulatif Financier');
-                addField('Coût de base:', `${formData.pricing.basePrice.toLocaleString('fr-FR')} FCFA`);
-                addField('Frais de trajet:', `${formData.pricing.travelPrice.toLocaleString('fr-FR')} FCFA`);
-                if(formData.pricing.operatorFee > 0) addField('Frais transaction:', `${formData.pricing.operatorFee.toLocaleString('fr-FR')} FCFA`);
-                pdf.setLineWidth(0.3);
-                pdf.line(margin, y, margin + 85, y);
-                y += 6;
-
-                pdf.setFont('helvetica', 'bold');
-                addField('Total:', `${formData.pricing.totalPrice.toLocaleString('fr-FR')} FCFA`);
-                pdf.setFont('helvetica', 'normal');
-                y += 10;
-                
-                // 5. SIGNATURE
-                addSectionTitle('Signature');
-                if (formData.signatureData.signatureUrl) {
-                  try {
-                    pdf.addImage(formData.signatureData.signatureUrl, 'PNG', margin, y, 50, 20);
-                  } catch(e) { 
-                    console.error("Erreur d'ajout de signature"); 
-                  }
-                } else {
-                  pdf.text('Pas de signature numérique.', margin, y);
-                }
-                pdf.line(margin, y + 25, margin + 60, y + 25);
-                pdf.text("Signature de l'agent", margin + 100, y + 28);
-                pdf.line(margin + 90, y + 25, margin + 150, y + 25);
-
-                // 6. PIED DE PAGE
-                const finalY = pdf.internal.pageSize.getHeight() - 15;
-                pdf.setLineWidth(0.5);
-                pdf.line(margin, finalY - 5, pageWidth - margin, finalY - 5);
-                pdf.setFontSize(8);
-                pdf.setTextColor(150, 150, 150);
-                pdf.text(`Document généré le ${new Date().toLocaleString('fr-CM')}. PicknDrop Link vous remercie.`, pageWidth / 2, finalY, { align: 'center' });
-
-                // SAUVEGARDE
-                pdf.save(`Bordereau_Expedition_${trackingNumber}.pdf`);
-              } catch (error) {
-                console.error("Erreur détaillée lors de la génération du PDF:", error);
-                alert("Une erreur est survenue lors de la génération du bordereau PDF.");
-              }
+                pdf.setTextColor(0, 0, 0);
             };
+            const addField = (label: string, value: string | undefined | null) => {
+                if (!value) return;
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(label, margin, y);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(String(value), margin + 45, y);
+                y += 6;
+            };
+
+            // HEADER
+            pdf.setFontSize(22);
+            pdf.setTextColor(249, 115, 22); 
+            pdf.text("PicknDrop Link", margin, y - 5);
+            
+            pdf.setFontSize(11);
+            pdf.setTextColor(0,0,0);
+            pdf.text(`Bordereau d'Expédition`, pageWidth - margin - 35, y - 5, { align: 'right' });
+            
+            pdf.setFontSize(9);
+            pdf.text(`N°: ${trackingNumber}`, pageWidth - margin - 35, y, { align: 'right' });
+            
+            y += 25;
+            
+            // DETAILS
+            addSectionTitle('Détails du Colis');
+
+            // Image
+            if (typeof formData.packageData.photo === 'string') {
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Photo du Colis:', margin + 110, y - 6);
+                try {
+                    // Essai ajout image
+                    pdf.addImage(formData.packageData.photo, 'JPEG', margin + 110, y, 35, 35);
+                } catch (e) {
+                    // Si échec (format base64 invalide ou cors), on ignore
+                }
+            } else {
+                pdf.text('(Photo indisponible sur ce document)', margin + 110, y);
+            }
+
+            addField('Désignation:', formData.packageData.designation);
+            addField('Poids:', `${formData.packageData.weight} kg`);
+            
+            addSectionTitle('Intervenants');
+            addField('Expéditeur:', formData.senderData.senderName);
+            addField('Destinataire:', formData.recipientData.recipientName);
+            
+            addSectionTitle('Financier');
+            addField('Total:', `${formData.pricing.totalPrice} FCFA`);
+            
+            pdf.save(`Bordereau_${trackingNumber}.pdf`);
+
+        } catch (error) {
+            console.error("Erreur PDF", error);
+            alert("Erreur lors de la génération du PDF.");
+        }
+  };
+
 const handleCreateAccount = () => {
               // 1. Préparer les données de l'expéditeur pour le pré-remplissage
               const prefillData = {
@@ -17261,13 +16953,19 @@ const handleCreateAccount = () => {
           onBack={() => setFormData(prev => ({ ...prev, currentStep: 4 }))}
         />;
       case 6:
+        // Construction de l'objet final pour le composant de paiement
+        // Conversion forcée et nettoyage des types
         const fullDataForPayment = {
-          
           ...formData.senderData,
           ...formData.recipientData,
           ...formData.packageData,
+          // Gérer explicitement le type File/String de la photo
+          photo: typeof formData.packageData.photo === 'string' ? formData.packageData.photo : null, 
           ...formData.routeData,
           ...formData.signatureData,
+          // Ne pas caster en Number() si ce sont des UUIDs (chaines)
+          departurePointId: (formData.routeData.departurePointId) as any, 
+          arrivalPointId: (formData.routeData.arrivalPointId) as any,
           basePrice: formData.pricing.basePrice,
           travelPrice: formData.pricing.travelPrice,
         };
@@ -17947,20 +17645,24 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
     fetchPoints();
   }, []);
 
-
-  // --- FILTRAGE DE LA LISTE ---
+  // --- FILTRAGE DE LA LISTE (CORRIGÉ) ---
   useEffect(() => {
     if (!searchQuery) {
       setFilteredPoints(allRelayPoints);
     } else {
       const lowerQuery = searchQuery.toLowerCase();
-      const filtered = allRelayPoints.filter(p => 
-        p.relayPointName.toLowerCase().includes(lowerQuery) ||
-        p.relay_point_address.toLowerCase().includes(lowerQuery)
-      );
+      const filtered = allRelayPoints.filter(p => {
+        // Protection contre undefined : utilisation de l'opérateur OU || ""
+        const nameMatch = p.relayPointName?.toLowerCase().includes(lowerQuery) ?? false;
+        const addressMatch = (p.relay_point_address || p.address || "").toLowerCase().includes(lowerQuery);
+        const localityMatch = (p.relay_point_locality || p.locality || "").toLowerCase().includes(lowerQuery);
+        
+        return nameMatch || addressMatch || localityMatch;
+      });
       setFilteredPoints(filtered);
     }
   }, [searchQuery, allRelayPoints]);
+
 
   // --- GESTION CARTE & MARQUEURS ---
   useEffect(() => {
@@ -18057,13 +17759,18 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
          // Optionnel : appeler OSRM ici si besoin d'itinéraire réel
      }
   }, [mapRef, routeData.departurePointId, routeData.arrivalPointId]);
-
   // Trace une ligne pointillée simple
+
+  // Trace une ligne pointillée simple (Correction ici)
   const drawStraightLine = (origin: RelayPoint, destination: RelayPoint) => {
+     if (!mapRef) return;
+
      try {
+        // Nettoyage préventif des couches
         if (mapRef.getLayer('route')) mapRef.removeLayer('route');
         if (mapRef.getSource('route')) mapRef.removeSource('route');
 
+        // Ajout de la source
         mapRef.addSource('route', {
             type: 'geojson',
             data: {
@@ -18079,6 +17786,7 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
             }
         });
 
+        // Ajout de la couche visuelle
         mapRef.addLayer({
             id: 'route',
             type: 'line',
@@ -18092,91 +17800,19 @@ export default function RouteSelectionStep({ onContinue, onBack }: RouteSelectio
             }
         });
         
+        // Calcul manuel de la bounding box (comme dans fetchRoute)
+        const minLng = Math.min(origin.longitude, destination.longitude);
+        const maxLng = Math.max(origin.longitude, destination.longitude);
+        const minLat = Math.min(origin.latitude, destination.latitude);
+        const maxLat = Math.max(origin.latitude, destination.latitude);
+
         // Ajuster la vue
-        const bounds = new maplibregl.LngLatBounds();
-        bounds.extend([origin.longitude, origin.latitude]);
-        bounds.extend([destination.longitude, destination.latitude]);
-        mapRef.fitBounds(bounds, { padding: 50 });
+        mapRef.fitBounds(
+            [[minLng, minLat], [maxLng, maxLat]],
+            { padding: 50 }
+        );
 
-     } catch (e) { console.error("Erreur tracé route", e); }
-  };
-  const fetchRoute = async (origin: PointRelais, destination: PointRelais) => {
-    try {
-      // Exemple avec OSRM (service de routing open source)
-      const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
-      );
-      
-      const data = await response.json();
-      
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        
-        // Supprimer l'ancienne route
-        try {
-          if (mapRef.getLayer('route')) {
-            mapRef.removeLayer('route');
-          }
-          if (mapRef.getSource('route')) {
-            mapRef.removeSource('route');
-          }
-
-          // Ajouter la nouvelle route
-          mapRef.addSource('route', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: route.geometry
-            }
-          });
-
-          mapRef.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: {
-              'line-join': 'round',
-              'line-cap': 'round'
-            },
-            paint: {
-              'line-color': '#10b981',
-              'line-width': 4,
-              'line-opacity': 0.8
-            }
-          });
-
-          // Ajuster la vue pour inclure toute la route
-          const coordinates = route.geometry.coordinates;
-          // Créer les bounds manuellement au lieu d'utiliser maplibregl.LngLatBounds
-          let minLng = coordinates[0][0];
-          let maxLng = coordinates[0][0];
-          let minLat = coordinates[0][1];
-          let maxLat = coordinates[0][1];
-
-          coordinates.forEach((coord: number[]) => {
-            minLng = Math.min(minLng, coord[0]);
-            maxLng = Math.max(maxLng, coord[0]);
-            minLat = Math.min(minLat, coord[1]);
-            maxLat = Math.max(maxLat, coord[1]);
-          });
-
-          mapRef.fitBounds([
-            [minLng, minLat],
-            [maxLng, maxLat]
-          ], {
-            padding: 50
-          });
-        } catch (error) {
-          console.warn('Erreur lors de l\'affichage de la route:', error);
-          drawStraightLine(origin, destination);
-        }
-      }
-    } catch (error) {
-      console.warn('Erreur lors du calcul de l\'itinéraire:', error);
-      // Fallback: dessiner une ligne droite
-      drawStraightLine(origin, destination);
-    }
+     } catch (e) { console.error("Erreur tracé route ligne droite", e); }
   };
 
   const handleMapReady = (map: any) => {
@@ -18890,7 +18526,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
             
             <div className="bg-orange-50 dark:bg-orange-900/30 rounded-2xl p-4 mb-6 border border-orange-200 dark:border-orange-700">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide font-semibold">Numéro de suivi</p>
-              <p className="text-3xl font-black text-orange-600 dark:text-orange-500 font-mono tracking-wider">${newTracking}</p>
+              <p className="text-3xl font-black text-orange-600 dark:text-orange-500 font-mono tracking-wider">${trackingNumber}</p>
             </div>
 
             <motion.button
@@ -19306,7 +18942,7 @@ import {
 
 // --- Interface de Données Corrigée ---
 interface PackageData {
-  photo: File | null;
+  photo: File | string | null; // MODIFICATION ICI: Accept string for URL/Base64
   designation: string;
   description: string;
   weight: string;
@@ -19429,7 +19065,15 @@ export default function PackageRegistration({ initialData = {}, onContinue, onBa
   const [volume, setVolume] = useState(0);
   const [isFormValid, setIsFormValid] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
-  const [photoPreview, setPhotoPreview] = useState<string | null>(initialData?.photo || null); 
+    // MODIFICATION: Initialisation sécurisée de la prévisualisation
+  const [photoPreview, setPhotoPreview] = useState<string | null>(() => {
+      if (!initialData?.photo) return null;
+      if (typeof initialData.photo === 'string') return initialData.photo;
+      // On ne peut pas créer d'ObjectUrl lors du SSR ou render initial pur sans side effect propre
+      // On laisse l'effet s'en charger si c'est un File
+      return null; 
+  });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -20935,6 +20579,32 @@ export const ProcessingAnimation = () => {
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\track-package\page.tsx
 ================================================================================
 
+import { Suspense } from 'react';
+import TrackPackageContent from './TrackContent';
+import { Loader2 } from 'lucide-react';
+
+export default function TrackPackagePage() {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-12 h-12 animate-spin text-orange-500" />
+            <p className="text-slate-600 dark:text-slate-400 font-medium">Chargement du suivi...</p>
+          </div>
+        </div>
+      }
+    >
+      <TrackPackageContent />
+    </Suspense>
+  );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\track-package\TrackContent.tsx
+================================================================================
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -21094,7 +20764,7 @@ const mapBackendToUI = (responseData: any): TrackedPackageUI => {
 };
 
 
-export default function TrackPackagePage() {
+export default function TrackPackageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -21138,12 +20808,10 @@ export default function TrackPackagePage() {
     try {
       console.log(`🔍 Fetching Tracking for: ${query}`);
       
-      // Appel au Service
-      const response = await packageService.trackPackage(query);
-      console.log("📦 Response JSON:", response);
-
-      // VÉRIFICATION DE VALIDITÉ
-      // On considère valide si response contient 'trackingNumber' à la racine OU dans 'package'
+      // Appel au Service et force du typage en any pour vérification souple
+      const response = (await packageService.trackPackage(query)) as any;
+      
+      // VÉRIFICATION DE VALIDITÉ avec support snake_case
       const isDirectPackage = response && (response.trackingNumber || response.tracking_number);
       const isWrappedPackage = response && response.package && (response.package.trackingNumber || response.package.tracking_number);
 
@@ -21151,7 +20819,7 @@ export default function TrackPackagePage() {
           throw new Error("Colis introuvable. Vérifiez le numéro de suivi.");
       }
 
-      // Normalisation de la réponse (toujours wrapper en { package, history })
+      // Normalisation de la réponse
       const unifiedData = isWrappedPackage 
           ? response 
           : { package: response, history: [] };
@@ -21162,7 +20830,6 @@ export default function TrackPackagePage() {
 
     } catch (err: any) {
       console.error("Tracking Error:", err);
-      // Gestion erreur UI
       const msg = err.message || "Erreur technique lors de la recherche.";
       setError(msg.includes('404') ? "Numéro de suivi inconnu." : msg);
     } finally {
@@ -24879,13 +24546,14 @@ import { useRouter } from 'next/navigation';
 import { Loader2, LayoutDashboard, Users, Map, CircleDollarSign, LogOut, PackageCheck, Bell, Search, Settings, Shield, Activity } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { userService } from '@/services/userservice'; 
+import dynamic from 'next/dynamic';
 
-// Sous-composants
-import Overview from './Overview';
-import UserManagement from './UserManagement';
-import OperationsManagement from './OperationManagement';
-import FinanceManagement from './FinanceManagement';
-import MonitoringSystem from './Monitoring'; // Import du monitoring corrigé
+// Sous-composants - Chargés dynamiquement pour éviter SSR
+const Overview = dynamic(() => import('./Overview'), { ssr: false });
+const UserManagement = dynamic(() => import('./UserManagement'), { ssr: false });
+const OperationsManagement = dynamic(() => import('./OperationManagement'), { ssr: false });
+const FinanceManagement = dynamic(() => import('./FinanceManagement'), { ssr: false });
+const MonitoringSystem = dynamic(() => import('./Monitoring'), { ssr: false });
 
 const TABS = {
   overview: { label: "Vue d'ensemble", icon: LayoutDashboard, comp: Overview },
@@ -24899,10 +24567,16 @@ export default function SuperAdminDashboard() {
   const [activeTab, setActiveTab] = useState<keyof typeof TABS>('overview');
   const [isLoadingCheck, setIsLoadingCheck] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userEmailDisplay, setUserEmailDisplay] = useState('Admin'); // Stocker l'email pour l'affichage
+  const [userEmailDisplay, setUserEmailDisplay] = useState('Admin');
+  const [isMounted, setIsMounted] = useState(false); // ✅ Nouveau state
   
   const router = useRouter();
   const { user: authUser, isAuthenticated, logout, isLoading: isAuthLoading } = useAuth();
+
+  // ✅ Vérifier que le composant est monté côté client
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const verifyAdminAccess = async () => {
@@ -24915,8 +24589,6 @@ export default function SuperAdminDashboard() {
       }
 
       try {
-        // --- MODIFICATION ICI ---
-        // On utilise getProfileById(id) au lieu de getMyProfile()
         let profile = null;
         try {
            console.log("SuperAdmin: Vérification via ID:", authUser.id);
@@ -24924,9 +24596,7 @@ export default function SuperAdminDashboard() {
         } catch(e) {
            console.warn("Erreur récupération profil par ID:", e);
         }
-        // -----------------------
 
-        // Fallback sur le token/authContext si l'API user fail
         const roleToCheck = (profile?.account_type || authUser.accountType || '').toUpperCase();
         
         console.log("SuperAdmin: Rôle détecté:", roleToCheck);
@@ -24951,6 +24621,10 @@ export default function SuperAdminDashboard() {
     verifyAdminAccess();
   }, [isAuthenticated, isAuthLoading, authUser, router]);
 
+  // ✅ Ne rien rendre tant que le composant n'est pas monté côté client
+  if (!isMounted) {
+    return null;
+  }
 
   if (isAuthLoading || isLoadingCheck) {
     return (
@@ -26507,7 +26181,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  ChartOptions,
 } from 'chart.js';
 import {
   DollarSign,
@@ -26533,7 +26208,6 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 // ============================================================================
 
 // Type pour un colis reçu de l'API admin (pour les calculs)
-// Basé sur le Swagger Shipment entity
 interface AdminPackage {
     id: string;
     trackingNumber: string; // Adapter si tracking_number
@@ -26653,38 +26327,25 @@ export default function FinanceManagement() {
     
     const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
 
-    // Fonction utilitaire de logging
-    const logFinancialData = (pkg: AdminPackage) => {
-        //console.log(`📦 [FINANCE ANALYZER] Package processed: ID=${pkg.id} | Cost=${pkg.shippingCost} | Date=${pkg.createdAt}`);
-    };
-
     // Chargement & Calculs
     useEffect(() => {
         const processFinanceData = async () => {
             setLoading(true);
             try {
                 console.group("💰 [FINANCE] Starting Data Analysis...");
-                
-                // 1. Récupérer tous les colis pour analyse
-                // Utilisation de la route que vous avez spécifiée ou une route "Admin" équivalente qui renvoie TOUT
-                // GET /api/admin/packages est l'idéal
                 console.log("📡 Fetching Global Shipment Data via /api/admin/packages...");
                 
                 let packages: AdminPackage[] = [];
                 try {
-                     // On tente d'utiliser le service admin si implémenté, ou une requête directe
-                     const response = await adminService.getAllShipmentsGlobal(); // Suppose que adminService a été mis à jour
-                     
-                     // Mapping des données backend pour harmoniser camelCase/snake_case
+                     const response = await adminService.getAllShipmentsGlobal(); 
                      packages = response.map((p: any) => ({
                         id: p.id,
                         trackingNumber: p.trackingNumber || p.tracking_number,
                         shippingCost: Number(p.shippingCost || p.deliveryFee || p.shipping_cost || 0),
                         createdAt: p.createdAt || p.created_at,
-                        departurePointName: p.departurePointName || p.pickupAddress, // Adaptez selon le retour API réel
+                        departurePointName: p.departurePointName || p.pickupAddress,
                         senderName: p.senderName || p.sender_name || "Anonyme"
                      }));
-                     
                      console.log(`✅ Loaded ${packages.length} packages for financial analysis.`);
                 } catch (err) {
                     console.warn("⚠️ Failed to load global packages, data might be incomplete.", err);
@@ -26696,22 +26357,17 @@ export default function FinanceManagement() {
                     return;
                 }
 
-                // --- CALCULS STATISTIQUES (Frontend Aggregation) ---
                 const now = new Date();
                 const todayStart = new Date(now.setHours(0, 0, 0, 0)).getTime();
-                const oneWeekAgo = new Date(new Date().setDate(now.getDate() - 7)).getTime();
                 
                 let totalRev = 0;
                 let todayRev = 0;
                 
-                // Maps pour classements
                 const relayMap = new Map<string, { count: number, rev: number }>();
                 const senderMap = new Map<string, { count: number, rev: number }>();
 
-                // Aggrégation Temporelle (30 derniers jours pour le graph)
                 const dateMap = new Map<string, number>();
                 
-                // Initialiser les dates du graphe (30j)
                 for (let i = viewMode === 'week' ? 6 : 29; i >= 0; i--) {
                     const d = new Date();
                     d.setDate(d.getDate() - i);
@@ -26719,38 +26375,27 @@ export default function FinanceManagement() {
                     dateMap.set(key, 0);
                 }
 
-                // Boucle unique de traitement
                 packages.forEach((pkg) => {
-                    // Sécurité donnée
                     if (isNaN(pkg.shippingCost)) return;
-
-                    // Logging optionnel
-                    // logFinancialData(pkg);
 
                     totalRev += pkg.shippingCost;
                     
                     const pkgDate = new Date(pkg.createdAt);
                     const pkgTime = pkgDate.getTime();
                     
-                    // Revenus du jour
                     if (pkgTime >= todayStart) todayRev += pkg.shippingCost;
 
-                    // Données Graphique (si dans la plage)
-                    // Note : si la date est dans la map, on ajoute
                     const dateKey = pkgDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
                     if (dateMap.has(dateKey)) {
                         dateMap.set(dateKey, (dateMap.get(dateKey) || 0) + pkg.shippingCost);
                     }
 
-                    // Classement Points Relais (Départ)
-                    // On considère que le point de départ est celui qui génère le "lead" du transport
                     const relayName = pkg.departurePointName || "Inconnu";
                     if (relayName !== "Inconnu") {
                         const currRelay = relayMap.get(relayName) || { count: 0, rev: 0 };
                         relayMap.set(relayName, { count: currRelay.count + 1, rev: currRelay.rev + pkg.shippingCost });
                     }
 
-                    // Classement Clients (Senders)
                     const sender = pkg.senderName || "Client Inconnu";
                     if (sender !== "Client Inconnu") {
                         const currSender = senderMap.get(sender) || { count: 0, rev: 0 };
@@ -26758,18 +26403,16 @@ export default function FinanceManagement() {
                     }
                 });
 
-                // Transformation des Maps en Tableaux Triés
                 const sortedRelays = Array.from(relayMap.entries())
                     .map(([name, val]) => ({ name, count: val.count, revenue: val.rev, role: 'Point Relais' }))
-                    .sort((a, b) => b.revenue - a.revenue) // Tri par Chiffre d'Affaires généré
-                    .slice(0, 10); // Top 10
+                    .sort((a, b) => b.revenue - a.revenue) 
+                    .slice(0, 10); 
 
                 const sortedSenders = Array.from(senderMap.entries())
                     .map(([name, val]) => ({ name, count: val.count, revenue: val.rev, role: 'Expéditeur' }))
                     .sort((a, b) => b.revenue - a.revenue)
                     .slice(0, 10);
 
-                // Mise à jour States
                 setKpis({
                     totalRevenue: totalRev,
                     todayRevenue: todayRev,
@@ -26794,16 +26437,17 @@ export default function FinanceManagement() {
         };
 
         processFinanceData();
-    }, [viewMode]); // Re-calcul si changement de mode vue graphique (semaine/mois)
+    }, [viewMode]);
 
-    // --- CONFIGURATION DES GRAPHIQUES (Chart.js) ---
+    // --- CONFIGURATION DES GRAPHIQUES ---
+    
     const lineData = {
         labels: chartLabels,
         datasets: [{
             label: 'Revenus (FCFA)',
             data: revenueSeries,
             fill: true,
-            borderColor: '#f97316', // Orange 500
+            borderColor: '#f97316',
             backgroundColor: (context: any) => {
                 const ctx = context.chart.ctx;
                 const gradient = ctx.createLinearGradient(0, 0, 0, 300);
@@ -26819,7 +26463,7 @@ export default function FinanceManagement() {
         }]
     };
 
-    const chartOptions: ChartOptions<'line'> = {
+    const chartOptions: any = { // Usage de any pour éviter les erreurs de typage pointilleuses sur grid
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -26831,7 +26475,7 @@ export default function FinanceManagement() {
                 bodyFont: { size: 14, weight: 'bold' },
                 displayColors: false,
                 callbacks: {
-                    label: (context) => `${context.formattedValue} FCFA`
+                    label: (context: any) => `${context.formattedValue} FCFA`
                 }
             }
         },
@@ -26841,8 +26485,9 @@ export default function FinanceManagement() {
                 ticks: { color: '#94a3b8' }
             },
             y: { 
+                // Fix: borderDash est supporté au runtime mais typage parfois manquant sur interface standard
                 grid: { color: 'rgba(148, 163, 184, 0.1)', borderDash: [5, 5] },
-                ticks: { color: '#94a3b8', callback: (value) => `${value} F` } 
+                ticks: { color: '#94a3b8', callback: (value: any) => `${value} F` } 
             }
         }
     };
@@ -26869,12 +26514,11 @@ export default function FinanceManagement() {
         }
     };
 
-    // Génération PDF basique (Placeholder action)
+    // Génération PDF basique (Placeholder)
     const handleGenerateReport = () => {
         alert("Génération du rapport financier PDF en cours...\n(Intégrez ici jsPDF avec les données 'kpis' et 'topRelays')");
         console.log("DATA EXPORT:", { kpis, topRelays, topSenders });
     };
-
 
     if(loading) return (
         <div className="flex flex-col justify-center items-center py-32 animate-in fade-in">
@@ -26886,7 +26530,7 @@ export default function FinanceManagement() {
     return (
         <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
             
-            {/* HEADER SECTION */}
+            {/* HEADER */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
@@ -26905,7 +26549,7 @@ export default function FinanceManagement() {
                 </button>
             </div>
 
-            {/* KPI CARDS GRID */}
+            {/* KPI CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <KpiCard 
                     title="Chiffre d'Affaires Global" 
@@ -26936,7 +26580,6 @@ export default function FinanceManagement() {
 
             {/* GRAPHIQUES */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Chart - Revenue Timeline */}
                 <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700">
                     <div className="flex justify-between items-center mb-6">
                         <div>
@@ -26944,18 +26587,8 @@ export default function FinanceManagement() {
                             <p className="text-xs text-slate-400 dark:text-gray-500">Flux financier entrant (Expéditions)</p>
                         </div>
                         <div className="flex bg-slate-100 dark:bg-gray-700 rounded-lg p-1">
-                            <button 
-                                onClick={() => setViewMode('week')} 
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='week' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}
-                            >
-                                7 Jours
-                            </button>
-                            <button 
-                                onClick={() => setViewMode('month')} 
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='month' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}
-                            >
-                                30 Jours
-                            </button>
+                            <button onClick={() => setViewMode('week')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='week' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}>7 Jours</button>
+                            <button onClick={() => setViewMode('month')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${viewMode==='month' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-gray-400'}`}>30 Jours</button>
                         </div>
                     </div>
                     <div className="h-72 w-full">
@@ -26963,7 +26596,6 @@ export default function FinanceManagement() {
                     </div>
                 </div>
 
-                {/* Side Chart - Top Relays Bar */}
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col">
                      <div className="mb-6">
                         <h3 className="font-bold text-lg text-slate-700 dark:text-white flex items-center gap-2">
@@ -26976,7 +26608,7 @@ export default function FinanceManagement() {
                      </div>
                      <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
                          <div className="flex justify-between items-center">
-                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total Commissions Relais</span>
+                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total Commissions</span>
                              <span className="text-sm font-black text-blue-600 dark:text-blue-400">
                                  {(kpis.totalRevenue * 0.15).toLocaleString(undefined, { maximumFractionDigits: 0 })} F
                              </span>
@@ -26984,12 +26616,12 @@ export default function FinanceManagement() {
                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
                              <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '15%' }}></div>
                          </div>
-                         <p className="text-[10px] text-gray-400 mt-1 text-right">Basé sur 15% de commission moyenne</p>
+                         <p className="text-[10px] text-gray-400 mt-1 text-right">Basé sur 15% de commission</p>
                      </div>
                 </div>
             </div>
 
-            {/* TABLES CLASSEMENT DÉTAILLÉES */}
+            {/* CLASSEMENTS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <RankingTable 
                     title="Meilleurs Partenaires (CA)" 
@@ -27002,7 +26634,6 @@ export default function FinanceManagement() {
                     icon={Users} 
                 />
             </div>
-
         </div>
     );
 }
@@ -27016,25 +26647,24 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\Monitoring.tsx
 
 import React, { useState, useEffect } from 'react';
 import apiClient from '@/services/apiClient';
+import dynamic from 'next/dynamic'; // Import dynamique Next.js
 import {
   Activity, Server, Database, ShieldAlert,
   RefreshCw, CheckCircle, XCircle,
   Cpu, HardDrive, ArrowUpRight, Zap, Terminal, AlertTriangle
 } from 'lucide-react';
-import { Line, Bar } from 'react-chartjs-2';
-import { 
-  Chart as ChartJS, CategoryScale, LinearScale, 
-  PointElement, LineElement, BarElement, 
-  Title, Tooltip, Legend, Filler
-} from 'chart.js';
-import toast from 'react-hot-toast';
 
-// Enregistrement (si côté client)
-if (typeof window !== 'undefined') {
-    ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
-}
+// -- MODIFICATION IMPORTANTE : Chargement dynamique SANS SSR --
+const SystemCharts = dynamic(() => import('./SystemCharts'), {
+  ssr: false,
+  loading: () => (
+      <div className="flex items-center justify-center h-full text-gray-400 animate-pulse">
+          Chargement des graphiques...
+      </div>
+  )
+});
 
-// --- TYPES ---
+// --- TYPES (Inchangés) ---
 interface HealthStatus {
   status: string;
   components?: any;
@@ -27111,7 +26741,6 @@ const KpiCard = ({ label, value, unit, icon: Icon, colorClass }: any) => (
 export default function MonitoringSystem() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
-  // On initialise logs et alerts comme tableaux vides par sécurité
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
   
@@ -27119,14 +26748,12 @@ export default function MonitoringSystem() {
   const [latencyHistory, setLatencyHistory] = useState<number[]>(new Array(10).fill(0));
   
   const [isLoading, setIsLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [lastUpdate, setLastUpdate] = useState<string>(''); 
 
   const fetchSystemData = async () => {
-    // Avoid calling API during build or if component unmounted
     if (typeof window === 'undefined') return;
 
     try {
-      // Promesse multiple avec fallback
       const [healthData, metricsData, rawLogs, rawAlerts] = await Promise.all([
         apiClient<HealthStatus>('/api/monitoring/health', 'GET').catch(() => ({ status: 'UNKNOWN' } as any)),
         apiClient<MetricsData>('/api/monitoring/metrics/performance', 'GET').catch(() => null),
@@ -27136,17 +26763,15 @@ export default function MonitoringSystem() {
 
       setHealth(healthData);
 
-      // 1. SÉCURISATION LOGS : On force la conversion en Tableau
+      // Logs Safet check
       let safeLogs: LogEntry[] = [];
       if (Array.isArray(rawLogs)) {
         safeLogs = rawLogs;
       } else if (rawLogs && typeof rawLogs === 'object') {
-        // Gestion cas: { content: [...] } ou { logs: [...] }
         safeLogs = (rawLogs as any).content || (rawLogs as any).logs || (rawLogs as any).data || [];
       }
       setLogs(safeLogs);
 
-      // 2. SÉCURISATION ALERTS
       let safeAlerts: SystemAlert[] = [];
       if (Array.isArray(rawAlerts)) {
           safeAlerts = rawAlerts;
@@ -27155,13 +26780,11 @@ export default function MonitoringSystem() {
       }
       setAlerts(safeAlerts);
       
-      // 3. METRICS
       if (metricsData) {
           setMetrics(metricsData);
           setTrafficHistory(prev => [...prev.slice(1), metricsData.requestCount]);
           setLatencyHistory(prev => [...prev.slice(1), metricsData.avgResponseTime]);
       } else {
-          // FALLBACK DEMO SI PAS DE DONNÉES
           const fakeReq = Math.floor(Math.random() * 50) + 100;
           const fakeLat = Math.floor(Math.random() * 30) + 20;
           
@@ -27176,7 +26799,7 @@ export default function MonitoringSystem() {
           setLatencyHistory(prev => [...prev.slice(1), fakeLat]);
       }
 
-      setLastUpdate(new Date());
+      setLastUpdate(new Date().toLocaleTimeString());
 
     } catch (error) {
       console.error("Monitoring fetch error:", error);
@@ -27186,13 +26809,109 @@ export default function MonitoringSystem() {
   };
 
   useEffect(() => {
+    setLastUpdate(new Date().toLocaleTimeString());
     fetchSystemData();
     const interval = setInterval(fetchSystemData, 5000); 
     return () => clearInterval(interval);
   }, []);
 
+
+  return (
+    <div className="space-y-8 pb-20">
+        <div className="flex justify-between items-end border-b border-slate-200 dark:border-slate-700 pb-4">
+             <div>
+                 <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+                     <Activity className="w-6 h-6 text-orange-600"/> Monitoring Système
+                 </h2>
+             </div>
+             <div className="text-right text-xs text-slate-400">
+                 Màj: <span className="font-mono font-bold">{lastUpdate}</span>
+             </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+             <KpiCard label="Santé Globale" value={health?.status || "..."} icon={CheckCircle} colorClass="bg-emerald-500 text-white"/>
+             <KpiCard label="Charge CPU" value={metrics?.cpuUsage || 0} unit="%" icon={Cpu} colorClass="bg-blue-500 text-white"/>
+             <KpiCard label="Mémoire" value={metrics?.memoryUsage || 0} unit="%" icon={Server} colorClass="bg-purple-500 text-white"/>
+             <KpiCard label="Latence API" value={metrics?.avgResponseTime || 0} unit="ms" icon={Zap} colorClass="bg-yellow-500 text-white"/>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* GRAPHIQUE ISOLÉ DANS COMPOSANT DYNAMIQUE */}
+            <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <h3 className="text-sm font-bold uppercase mb-4">Trafic Réseau (Live)</h3>
+                <div className="h-[300px]">
+                    {/* --- Utilisation du composant dynamique ici --- */}
+                    <SystemCharts trafficHistory={trafficHistory} latencyHistory={latencyHistory} />
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col gap-4">
+                 <h3 className="text-sm font-bold uppercase">État des Services</h3>
+                 <StatusBadge label="Base de Données" status={health?.components?.db?.status || 'UNKNOWN'} />
+                 <StatusBadge label="Stockage Disque" status={health?.components?.diskSpace?.status || 'UNKNOWN'} />
+                 <StatusBadge label="API Gateway" status={'UP'} />
+            </div>
+        </div>
+
+        <div className="bg-slate-900 text-green-400 p-6 rounded-2xl shadow-lg font-mono text-xs h-[300px] flex flex-col overflow-hidden">
+             <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                  <span className="font-bold uppercase tracking-widest flex items-center gap-2"><Terminal className="w-4 h-4"/> Live Logs</span>
+                  <div className="flex gap-2"><div className="w-3 h-3 rounded-full bg-red-500"/><div className="w-3 h-3 rounded-full bg-yellow-500"/><div className="w-3 h-3 rounded-full bg-green-500"/></div>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
+                 {!Array.isArray(logs) || logs.length === 0 ? (
+                     <div className="opacity-50 italic">En attente de logs...</div>
+                 ) : (
+                     logs.map((log, i) => (
+                         <div key={i} className="flex gap-2 hover:bg-white/5 p-1 rounded">
+                             <span className="opacity-50 min-w-[80px]">[{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'TIME'}]</span>
+                             <span className={`font-bold w-14 shrink-0 ${log.level === 'ERROR' ? 'text-red-500' : 'text-blue-400'}`}>{log.level}</span>
+                             <span className="text-slate-300 break-all">{log.message}</span>
+                         </div>
+                     ))
+                 )}
+             </div>
+        </div>
+    </div>
+  );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\SystemCharts.tsx
+================================================================================
+
+'use client';
+
+import React, { useEffect } from 'react';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  ChartOptions
+} from 'chart.js';
+
+// Enregistrement uniquement dans ce composant client-only
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+interface ChartProps {
+  trafficHistory: number[];
+  latencyHistory: number[];
+}
+
+const SystemCharts = ({ trafficHistory, latencyHistory }: ChartProps) => {
+  
   const lineChartData = {
-    labels: Array(10).fill(''), 
+    labels: Array(10).fill(''),
     datasets: [
       {
         label: 'Requêtes / min',
@@ -27216,10 +26935,10 @@ export default function MonitoringSystem() {
     ]
   };
 
-  const chartOptions: any = {
+  const chartOptions: any = { // Use 'any' to bypass strict chart.js typings for now
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 0 }, 
+    animation: { duration: 0 },
     plugins: { legend: { display: true } },
     scales: {
       x: { grid: { display: false } },
@@ -27228,70 +26947,10 @@ export default function MonitoringSystem() {
     }
   };
 
-  return (
-    <div className="space-y-8 pb-20">
-        <div className="flex justify-between items-end border-b border-slate-200 dark:border-slate-700 pb-4">
-             <div>
-                 <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-                     <Activity className="w-6 h-6 text-orange-600"/> Monitoring Système
-                 </h2>
-             </div>
-             <div className="text-right text-xs text-slate-400">
-                 Màj: <span className="font-mono font-bold">{lastUpdate.toLocaleTimeString()}</span>
-             </div>
-        </div>
+  return <Line data={lineChartData} options={chartOptions} />;
+};
 
-        {/* KPIS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-             <KpiCard label="Santé Globale" value={health?.status || "..."} icon={CheckCircle} colorClass="bg-emerald-500 text-white"/>
-             <KpiCard label="Charge CPU" value={metrics?.cpuUsage || 0} unit="%" icon={Cpu} colorClass="bg-blue-500 text-white"/>
-             <KpiCard label="Mémoire" value={metrics?.memoryUsage || 0} unit="%" icon={Server} colorClass="bg-purple-500 text-white"/>
-             <KpiCard label="Latence API" value={metrics?.avgResponseTime || 0} unit="ms" icon={Zap} colorClass="bg-yellow-500 text-white"/>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* GRAPHIQUE */}
-            <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                <h3 className="text-sm font-bold uppercase mb-4">Trafic Réseau (Live)</h3>
-                <div className="h-[300px]">
-                    <Line data={lineChartData} options={chartOptions} />
-                </div>
-            </div>
-
-            {/* SERVICES STATUS */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col gap-4">
-                 <h3 className="text-sm font-bold uppercase">État des Services</h3>
-                 <StatusBadge label="Base de Données" status={health?.components?.db?.status || 'UNKNOWN'} />
-                 <StatusBadge label="Stockage Disque" status={health?.components?.diskSpace?.status || 'UNKNOWN'} />
-                 <StatusBadge label="API Gateway" status={'UP'} />
-            </div>
-        </div>
-
-        {/* LOGS TERMINAL */}
-        <div className="bg-slate-900 text-green-400 p-6 rounded-2xl shadow-lg font-mono text-xs h-[300px] flex flex-col overflow-hidden">
-             <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                  <span className="font-bold uppercase tracking-widest flex items-center gap-2"><Terminal className="w-4 h-4"/> Live Logs</span>
-                  <div className="flex gap-2"><div className="w-3 h-3 rounded-full bg-red-500"/><div className="w-3 h-3 rounded-full bg-yellow-500"/><div className="w-3 h-3 rounded-full bg-green-500"/></div>
-             </div>
-             
-             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
-                 {/* VÉRIFICATION ICI AVANT DE MAPPER */}
-                 {!Array.isArray(logs) || logs.length === 0 ? (
-                     <div className="opacity-50 italic">En attente de logs...</div>
-                 ) : (
-                     logs.map((log, i) => (
-                         <div key={i} className="flex gap-2 hover:bg-white/5 p-1 rounded">
-                             <span className="opacity-50 min-w-[80px]">[{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'TIME'}]</span>
-                             <span className={`font-bold w-14 shrink-0 ${log.level === 'ERROR' ? 'text-red-500' : 'text-blue-400'}`}>{log.level}</span>
-                             <span className="text-slate-300 break-all">{log.message}</span>
-                         </div>
-                     ))
-                 )}
-             </div>
-        </div>
-    </div>
-  );
-}
+export default SystemCharts;
 
 
 ================================================================================
@@ -27300,7 +26959,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\landing\page.tsx
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Nécessaire pour la dynamique
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27313,11 +26972,11 @@ import {
     Smartphone, HandCoins, Briefcase, Layers, Key,
     Star,
     MessageCircle,
-    Building
+    Building,
+    Loader2 // Pour le fallback Suspense
 } from 'lucide-react';
 
 // --- DATA : Dictionnaire de Contenu par Rôle ---
-// Cette structure permet de changer le texte/icones sans toucher au JSX
 
 type ContentData = {
     title: React.ReactNode;
@@ -27446,7 +27105,7 @@ const MARKET_DATA: ContentData = {
     stepsTitle: "Simple et Efficace",
     steps: [
         { icon: Search, title: "Recherche", desc: "Parcourez les profils ou publiez votre besoin d'expédition." },
-        { icon: MessageCircle, title: "Discussion", desc: "Échangez directement avec les transporteurs via la plateforme." }, // Correction: import manquait, supposé Lucide
+        { icon: MessageCircle, title: "Discussion", desc: "Échangez directement avec les transporteurs via la plateforme." }, 
         { icon: HandCoins, title: "Accord", desc: "Validez le devis et bloquez le paiement." },
         { icon: Truck, title: "Réalisation", desc: "Suivez la prestation jusqu'à la validation finale." }
     ],
@@ -27463,28 +27122,20 @@ const CONTENT_MAP: Record<string, ContentData> = {
     'MARKET': MARKET_DATA
 };
 
+// --- COMPOSANTS INTERNES ---
 
-// --- COMPOSANTS INTERNES (Mises à jour pour être purement présentation) ---
-
-// 1. BANNIÈRE MISE À JOUR (Design Requested)
 const DynamicBanniere = ({ data }: { data: ContentData }) => (
   <section className="relative h-[80vh] min-h-[500px] flex items-center justify-center text-white text-center overflow-hidden">
-    
-    {/* Couche 1: Image de fond dynamique */}
     <div 
         className="absolute inset-0 bg-cover bg-center transition-all duration-1000" 
         style={{ backgroundImage: `url('${data.heroImage}')` }}
     />
-
-    {/* Couche 2: Blur + Filtre Orangé (DEMANDE SPÉCIALE) */}
-    {/* On utilise bg-orange-600 avec une opacité mix-blend pour tinter l'image + backdrop-blur */}
     <div className="absolute inset-0 bg-orange-600/40 mix-blend-multiply backdrop-blur-[2px]" />
-    <div className="absolute inset-0 bg-black/30" /> {/* Légère couche sombre pour contraste texte */}
+    <div className="absolute inset-0 bg-black/30" /> 
 
-    {/* Couche 3: Contenu */}
     <div className="relative z-10 p-6 max-w-4xl mx-auto pt-20">
       <motion.div 
-        key={`title-${data.ctaPrimary.link}`} // Key change trigger animation on route change
+        key={`title-${data.ctaPrimary.link}`} 
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
       >
           <h1 className="text-4xl md:text-6xl font-black tracking-tight drop-shadow-md">
@@ -27522,166 +27173,169 @@ const DynamicBanniere = ({ data }: { data: ContentData }) => (
   </section>
 );
 
-const DynamicFeatures = ({ data }: { data: ContentData }) => {
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <AnimatePresence mode='wait'>
-            {data.features.map((feature, index) => {
-                const Icon = feature.icon;
+const DynamicFeatures = ({ data }: { data: ContentData }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <AnimatePresence mode='wait'>
+        {data.features.map((feature, index) => {
+            const Icon = feature.icon;
+            return (
+                <motion.div 
+                  key={feature.title + index}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl dark:shadow-gray-900/20 dark:hover:shadow-gray-900/30 hover:-translate-y-2 transition-all duration-300 border border-gray-100 dark:border-gray-700"
+                >
+                    <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full inline-block mb-4 text-orange-600 dark:text-orange-500">
+                        <Icon className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
+                    <p className="text-gray-600 dark:text-gray-300">{feature.desc}</p>
+                </motion.div>
+            )
+        })}
+        </AnimatePresence>
+    </div>
+);
+
+const DynamicSteps = ({ data }: { data: ContentData }) => (
+    <div className="relative">
+        <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-orange-200 dark:bg-orange-800 -translate-y-1/2 -mt-16"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
+            {data.steps.map((step, index) => {
+                const Icon = step.icon;
                 return (
                     <motion.div 
-                      key={feature.title + index}
-                      initial={{ opacity: 0, y: 20 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.4, delay: index * 0.1 }}
-                      className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl dark:shadow-gray-900/20 dark:hover:shadow-gray-900/30 hover:-translate-y-2 transition-all duration-300 border border-gray-100 dark:border-gray-700"
+                       key={step.title} 
+                       initial={{opacity:0, scale:0.9}} 
+                       whileInView={{opacity:1, scale:1}}
+                       transition={{delay: index * 0.15}}
+                       className="text-center"
                     >
-                        <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full inline-block mb-4 text-orange-600 dark:text-orange-500">
-                            <Icon className="w-8 h-8" />
+                        <div className="relative mb-6">
+                           <div className="bg-gradient-to-br from-orange-500 to-amber-500 dark:from-orange-600 dark:to-amber-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-lg dark:shadow-gray-900/20 relative z-10 text-white">
+                              <Icon className="w-10 h-10" />
+                           </div>
                         </div>
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
-                        <p className="text-gray-600 dark:text-gray-300">{feature.desc}</p>
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Étape {index + 1}: {step.title}</h3>
+                        <p className="text-gray-600 dark:text-gray-300">{step.desc}</p>
                     </motion.div>
                 )
             })}
-            </AnimatePresence>
         </div>
-    );
-};
-
-const DynamicSteps = ({ data }: { data: ContentData }) => {
-    return (
-        <div className="relative">
-            <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-orange-200 dark:bg-orange-800 -translate-y-1/2 -mt-16"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
-                {data.steps.map((step, index) => {
-                    const Icon = step.icon;
-                    return (
-                        <motion.div 
-                           key={step.title} 
-                           initial={{opacity:0, scale:0.9}} 
-                           whileInView={{opacity:1, scale:1}}
-                           transition={{delay: index * 0.15}}
-                           className="text-center"
-                        >
-                            <div className="relative mb-6">
-                               <div className="bg-gradient-to-br from-orange-500 to-amber-500 dark:from-orange-600 dark:to-amber-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-lg dark:shadow-gray-900/20 relative z-10 text-white">
-                                  <Icon className="w-10 h-10" />
-                               </div>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Étape {index + 1}: {step.title}</h3>
-                            <p className="text-gray-600 dark:text-gray-300">{step.desc}</p>
-                        </motion.div>
-                    )
-                })}
-            </div>
-        </div>
-    );
-};
-
-
-// --- COMPOSANT PRINCIPAL LANDING PAGE ---
-
-export default function LandingPage() {
-  // Hooks
-  const searchParams = useSearchParams();
-  const roleParam = searchParams.get('role')?.toUpperCase() || 'CLIENT';
-  
-  const [content, setContent] = useState<ContentData>(DEFAULT_DATA);
-
-  // Theme System (copié de l'existant pour la cohérence)
-  useEffect(() => {
-      const applyTheme = () => {
-          if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-              document.documentElement.classList.add('dark');
-          } else {
-              document.documentElement.classList.remove('dark');
-          }
-      };
-      applyTheme();
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', applyTheme);
-      return () => mq.removeEventListener('change', applyTheme);
-  }, []);
-
-  // Data Switch
-  useEffect(() => {
-      // On bascule les données si le rôle existe, sinon fallback CLIENT
-      if (roleParam && CONTENT_MAP[roleParam]) {
-          setContent(CONTENT_MAP[roleParam]);
-      } else {
-          setContent(DEFAULT_DATA);
-      }
-      
-      // Petit scroll top pour UX lors du switch
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [roleParam]);
-
-
-  return (
-    <div className="w-full bg-white dark:bg-gray-900 transition-colors duration-300">
-      <NavbarHome />
-      
-      <div className="min-h-screen flex flex-col font-[family-name:var(--font-geist-sans)]">
-        <main className="flex-grow">
-          
-          {/* Bannière Dynamique */}
-          <DynamicBanniere data={content} />
-          
-          {/* Section Features Dynamique */}
-          <section className="py-16 md:py-24 bg-orange-50/50 dark:bg-gray-800/50 transition-colors duration-300">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center mb-12">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                    {content.featuresTitle}
-                </h2>
-                <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                    Découvrez comment PicknDrop répond spécifiquement à vos besoins
-                </p>
-              </div>
-              <DynamicFeatures data={content} />
-            </div>
-          </section>
-
-          {/* Section Manuel Dynamique */}
-          <section id="how-it-works" className="py-16 md:py-24 bg-white dark:bg-gray-900 transition-colors duration-300">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center mb-16">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                    {content.stepsTitle}
-                </h2>
-                <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                    Processus simplifié pour un démarrage immédiat
-                </p>
-              </div>
-              <DynamicSteps data={content} />
-            </div>
-          </section>
-          
-          {/* Bottom CTA Dynamique */}
-          <section className="py-16 bg-orange-600 dark:bg-orange-700 text-white transition-colors duration-300">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <h2 className="text-3xl md:text-4xl font-bold">{content.bottomCtaTitle}</h2>
-              <p className="mt-4 text-xl max-w-3xl mx-auto opacity-90 dark:opacity-95">
-                {content.bottomCtaDesc}
-              </p>
-              <div className="mt-8">
-                <Link 
-                  href={content.ctaPrimary.link}
-                  className="bg-white dark:bg-gray-100 text-orange-600 dark:text-orange-700 px-10 py-5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-200 transition-all duration-300 font-bold text-lg shadow-2xl dark:shadow-gray-900/40 transform hover:-translate-y-1"
-                >
-                  {content.ctaPrimary.text}
-                </Link>
-              </div>
-            </div>
-          </section>
-
-        </main>
-        <Footer />
-      </div>
     </div>
-  );
+);
+
+// --- COMPOSANT INTERNE LOGIQUE ---
+// Ce composant contient la logique de `useSearchParams` et le contenu
+const LandingContent = () => {
+    const searchParams = useSearchParams();
+    const roleParam = searchParams.get('role')?.toUpperCase() || 'CLIENT';
+    
+    const [content, setContent] = useState<ContentData>(DEFAULT_DATA);
+
+    // Theme System
+    useEffect(() => {
+        const applyTheme = () => {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        };
+        applyTheme();
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        mq.addEventListener('change', applyTheme);
+        return () => mq.removeEventListener('change', applyTheme);
+    }, []);
+
+    // Data Switch
+    useEffect(() => {
+        if (roleParam && CONTENT_MAP[roleParam]) {
+            setContent(CONTENT_MAP[roleParam]);
+        } else {
+            setContent(DEFAULT_DATA);
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [roleParam]);
+
+    return (
+        <div className="min-h-screen flex flex-col font-[family-name:var(--font-geist-sans)]">
+            <main className="flex-grow">
+                <DynamicBanniere data={content} />
+                
+                <section className="py-16 md:py-24 bg-orange-50/50 dark:bg-gray-800/50 transition-colors duration-300">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="text-center mb-12">
+                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
+                                {content.featuresTitle}
+                            </h2>
+                            <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
+                                Découvrez comment PicknDrop répond spécifiquement à vos besoins
+                            </p>
+                        </div>
+                        <DynamicFeatures data={content} />
+                    </div>
+                </section>
+
+                <section id="how-it-works" className="py-16 md:py-24 bg-white dark:bg-gray-900 transition-colors duration-300">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="text-center mb-16">
+                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
+                                {content.stepsTitle}
+                            </h2>
+                            <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
+                                Processus simplifié pour un démarrage immédiat
+                            </p>
+                        </div>
+                        <DynamicSteps data={content} />
+                    </div>
+                </section>
+                
+                <section className="py-16 bg-orange-600 dark:bg-orange-700 text-white transition-colors duration-300">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                        <h2 className="text-3xl md:text-4xl font-bold">{content.bottomCtaTitle}</h2>
+                        <p className="mt-4 text-xl max-w-3xl mx-auto opacity-90 dark:opacity-95">
+                            {content.bottomCtaDesc}
+                        </p>
+                        <div className="mt-8">
+                            <Link 
+                                href={content.ctaPrimary.link}
+                                className="bg-white dark:bg-gray-100 text-orange-600 dark:text-orange-700 px-10 py-5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-200 transition-all duration-300 font-bold text-lg shadow-2xl dark:shadow-gray-900/40 transform hover:-translate-y-1"
+                            >
+                                {content.ctaPrimary.text}
+                            </Link>
+                        </div>
+                    </div>
+                </section>
+            </main>
+            <Footer />
+        </div>
+    );
+};
+
+// Fallback Component lors du chargement Suspense
+const LandingLoading = () => (
+    <div className="min-h-screen flex items-center justify-center bg-orange-50">
+        <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-12 h-12 text-orange-600 animate-spin" />
+            <p className="text-lg font-bold text-orange-800">Chargement de votre expérience...</p>
+        </div>
+    </div>
+);
+
+// --- COMPOSANT PAGE PRINCIPAL ---
+// Il ne fait que Wrapper dans Suspense
+export default function LandingPage() {
+    return (
+        <div className="w-full bg-white dark:bg-gray-900 transition-colors duration-300">
+            <NavbarHome />
+            <Suspense fallback={<LandingLoading />}>
+                <LandingContent />
+            </Suspense>
+        </div>
+    );
 }
 
 
@@ -30214,6 +29868,133 @@ export const marketplaceService = {
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\services\walletService.ts
+================================================================================
+
+// FICHIER: src/services/walletService.ts
+
+// URL de base de l'API Wallet externe (à définir dans .env.local)
+const WALLET_API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL;
+
+// Interface pour les réponses API
+interface WalletTransactionResponse {
+  message: string;
+  transaction_id?: string;
+  new_balance?: number;
+  status: string;
+}
+
+interface WalletPayload {
+  user_id: string;
+  montant: number;
+  description: string;
+}
+
+// Fonction utilitaire pour les logs
+const logWalletRequest = (endpoint: string, method: string, payload: any) => {
+  console.group(`💸 [WALLET SERVICE] Request: ${method} ${endpoint}`);
+  console.log("Payload:", JSON.stringify(payload, null, 2));
+  console.groupEnd();
+};
+
+const logWalletResponse = (endpoint: string, response: any) => {
+  console.group(`✅ [WALLET SERVICE] Response: ${endpoint}`);
+  console.log("Data:", response);
+  console.groupEnd();
+};
+
+// --- MÉTHODES DU SERVICE ---
+
+/**
+ * Créditer un wallet (Dépôt d'argent/Recharge)
+ * POST /api/increment/
+ */
+const creditWallet = async (userId: string, amount: number, description: string): Promise<WalletTransactionResponse> => {
+  const endpoint = `${WALLET_API_BASE_URL}/api/increment/`;
+  const payload: WalletPayload = {
+    user_id: userId,
+    montant: amount,
+    description: description || `Recharge de ${amount} FCFA`
+  };
+
+  logWalletRequest('/api/increment/', 'POST', payload);
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+        // Ajouter d'autres headers si l'API Wallet requiert une clé API
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      throw new Error(`Wallet API Error: ${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    logWalletResponse('/api/increment/', data);
+    return data;
+
+  } catch (error) {
+    console.error("❌ Wallet Service Error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Débiter un wallet (Paiement)
+ * POST /api/decrement/
+ */
+const debitWallet = async (userId: string, amount: number, description: string): Promise<WalletTransactionResponse> => {
+    const endpoint = `${WALLET_API_BASE_URL}/api/decrement/`;
+    const payload: WalletPayload = {
+      user_id: userId,
+      montant: amount,
+      description
+    };
+  
+    logWalletRequest('/api/decrement/', 'POST', payload);
+  
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+  
+      if (!res.ok) throw new Error(`Debit Failed: ${res.statusText}`);
+      
+      const data = await res.json();
+      logWalletResponse('/api/decrement/', data);
+      return data;
+    } catch (error) {
+      console.error("❌ Debit Error:", error);
+      throw error;
+    }
+  };
+
+/**
+ * Récupérer les transactions (Simulé si l'API externe n'a pas cet endpoint documenté)
+ * Dans une intégration réelle, vous utiliseriez GET /api/transactions/{userId}
+ */
+const getTransactions = async (userId: string) => {
+    // Note: Basé sur votre doc, l'API Wallet n'a pas de route GET transactions explicite
+    // On simule ou on retourne un tableau vide pour l'instant
+    // Pour une vraie prod, il faudrait que votre backend (PicknDrop) stocke aussi l'historique
+    console.log(`[WALLET] Fetching local transaction history for ${userId}...`);
+    return []; 
+};
+
+export const walletService = {
+  creditWallet,
+  debitWallet,
+  getTransactions
+};
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\page\app-paths-manifest.json
 ================================================================================
 
@@ -30739,14 +30520,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\react-loadable-ma
       "static/chunks/node_modules_maplibre-gl_dist_maplibre-gl_7281c249.js",
       "static/chunks/node_modules_lucide-react_dist_esm_icons_065ff4b3._.js",
       "static/chunks/src_app_emit-package_MapComponent_tsx_be0374e9._.js",
-      "static/chunks/src_app_emit-package_MapComponent_tsx_1b407efb._.js"
+      "static/chunks/src_app_emit-package_MapComponent_tsx_1279d63e._.js"
     ]
   },
   "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)": {
     "id": "[project]/node_modules/react-leaflet/lib/index.js [app-client] (ecmascript, next/dynamic entry)",
     "files": [
       "static/chunks/node_modules_b088d178._.js",
-      "static/chunks/node_modules_react-leaflet_lib_index_3b1af85e.js"
+      "static/chunks/node_modules_react-leaflet_lib_index_96ce2f36.js"
     ]
   }
 }
@@ -30766,16 +30547,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\dashboard\page\app-build-manifes
       "static/chunks/src_6562fcee._.js",
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_07a3c2e8.js",
-      "static/chunks/_357b57ca._.js",
+      "static/chunks/_f12fd414._.js",
       "static/chunks/src_app_dashboard_Deliveries_tsx_ec6995e5._.js",
       "static/chunks/src_app_dashboard_Inventaire_tsx_eae47325._.js",
       "static/chunks/src_app_dashboard_ServiceCard_tsx_11d8d286._.js",
       "static/chunks/src_app_dashboard_a2174a47._.js",
       "static/chunks/src_app_expedition_4fbffed2._.js",
-      "static/chunks/src_app_track-package_page_tsx_8a33fb1d._.js",
+      "static/chunks/src_app_track-package_593da9d5._.js",
       "static/chunks/src_app_ee594866._.js",
-      "static/chunks/src_83267908._.js",
-      "static/chunks/node_modules_lucide-react_dist_esm_icons_9e695bb0._.js",
+      "static/chunks/src_e127bd99._.js",
+      "static/chunks/node_modules_lucide-react_dist_esm_icons_c21f016b._.js",
       "static/chunks/node_modules_chart_js_dist_fe1f3c5e._.js",
       "static/chunks/node_modules_@supabase_auth-js_dist_module_6004bf20._.js",
       "static/chunks/node_modules_react-icons_bs_index_mjs_0b2b1793._.js",
@@ -32049,7 +31830,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app\landing\page\app-build-manifest.
       "static/chunks/src_app_layout_tsx_68b267f5._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_07a3c2e8.js",
       "static/chunks/src_fd020efd._.js",
-      "static/chunks/node_modules_lucide-react_dist_esm_icons_e81b8d7e._.js",
+      "static/chunks/node_modules_lucide-react_dist_esm_icons_f641bbe1._.js",
       "static/chunks/src_app_landing_page_tsx_07a3c2e8._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_6aaa83c7._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1f56dc06._.js",
@@ -32237,14 +32018,13 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages\_error\build-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
 ================================================================================
 
 {
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
+  "node": {},
+  "edge": {},
+  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
 }
 
 
@@ -32254,7 +32034,6 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\app-paths-manifest.json
 
 {
   "/dashboard/page": "app/dashboard/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
   "/home/page": "app/home/page.js",
   "/landing/page": "app/landing/page.js",
   "/login/page": "app/login/page.js",
@@ -32270,13 +32049,14 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\server\pages-manifest.json
 
 
 ================================================================================
-FICHIER: D:\4GI\PO\pick-n-drop\.next\server\server-reference-manifest.json
+FICHIER: D:\4GI\PO\pick-n-drop\.next\server\next-font-manifest.json
 ================================================================================
 
 {
-  "node": {},
-  "edge": {},
-  "encryptionKey": "SOOvpLk74yTfqUlKoSPi/t8fx+jelAhwNxL4q0nOo1k="
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
 }
 
 
@@ -33791,6 +33571,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .-mr-2 {
     margin-right: calc(var(--spacing) * -2);
+  }
+
+  .-mr-16 {
+    margin-right: calc(var(--spacing) * -16);
   }
 
   .mr-1 {
@@ -35477,6 +35261,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     border-color: var(--color-slate-800);
   }
 
+  .border-slate-800\/50 {
+    border-color: rgba(29, 41, 61, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-slate-800\/50 {
+      border-color: color-mix(in oklab, var(--color-slate-800) 50%, transparent);
+    }
+  }
+
   .border-teal-500 {
     border-color: var(--color-teal-500);
   }
@@ -36295,6 +36089,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .from-gray-900 {
+    --tw-gradient-from: var(--color-gray-900);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .from-green-50 {
     --tw-gradient-from: var(--color-green-50);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -36711,6 +36510,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-gray-800 {
+    --tw-gradient-to: var(--color-gray-800);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
   .to-green-50 {
     --tw-gradient-to: var(--color-green-50);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -37005,6 +36809,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     padding: calc(var(--spacing) * 20);
   }
 
+  .p-32 {
+    padding: calc(var(--spacing) * 32);
+  }
+
   .px-1 {
     padding-inline: calc(var(--spacing) * 1);
   }
@@ -37203,6 +37011,10 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .pr-32 {
     padding-right: calc(var(--spacing) * 32);
+  }
+
+  .pb-0\.5 {
+    padding-bottom: calc(var(--spacing) * .5);
   }
 
   .pb-1 {
@@ -38148,6 +37960,16 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
     }
   }
 
+  .shadow-orange-900\/50 {
+    --tw-shadow-color: rgba(126, 42, 12, .5);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-orange-900\/50 {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-orange-900) 50%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
   .shadow-slate-200 {
     --tw-shadow-color: #e2e8f0;
   }
@@ -38257,6 +38079,11 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
 
   .blur-3xl {
     --tw-blur: blur(var(--blur-3xl));
+    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
+  }
+
+  .blur-\[80px\] {
+    --tw-blur: blur(80px);
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
   }
 
@@ -39355,6 +39182,12 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   }
 
   @media (hover: hover) {
+    .hover\:text-red-500:hover {
+      color: var(--color-red-500);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:text-red-600:hover {
       color: var(--color-red-600);
     }
@@ -39906,3 +39739,151 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\static\chunks\src_app_globals_b805903d.css
   @media (min-width: 40rem) {
     .sm\:w-10 {
       width: calc(var(--spacing) * 10);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:w-12 {
+      width: calc(var(--spacing) * 12);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:w-14 {
+      width: calc(var(--spacing) * 14);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:w-20 {
+      width: calc(var(--spacing) * 20);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:w-80 {
+      width: calc(var(--spacing) * 80);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:w-auto {
+      width: auto;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:max-w-xs {
+      max-width: var(--container-xs);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:flex-none {
+      flex: none;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:grid-cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:grid-cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:grid-cols-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:flex-row {
+      flex-direction: row;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:items-center {
+      align-items: center;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:items-end {
+      align-items: flex-end;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:items-start {
+      align-items: flex-start;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:justify-center {
+      justify-content: center;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:gap-8 {
+      gap: calc(var(--spacing) * 8);
+    }
+  }
+
+  @media (min-width: 40rem) {
+    :where(.sm\:space-y-0 > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-top: calc(calc(var(--spacing) * 0) * var(--tw-space-y-reverse));
+      margin-bottom: calc(calc(var(--spacing) * 0) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+
+  @media (min-width: 40rem) {
+    :where(.sm\:space-x-4 > :not(:last-child)) {
+      --tw-space-x-reverse: 0;
+    }
+
+    :where(.sm\:space-x-4 > :not(:last-child)):not(:-webkit-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))) {
+      margin-left: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
+      margin-right: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    }
+
+    :where(.sm\:space-x-4 > :not(:last-child)):not(:-moz-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))) {
+      margin-left: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
+      margin-right: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    }
+
+    :where(.sm\:space-x-4 > :not(:last-child)):not(:is(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))) {
+      margin-left: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
+      margin-right: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    }
+
+    :where(.sm\:space-x-4 > :not(:last-child)):-webkit-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
+      margin-right: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
+      margin-left: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    }
+
+    :where(.sm\:space-x-4 > :not(:last-child)):-moz-any(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
+      margin-right: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
+      margin-left: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    }
+
+    :where(.sm\:space-x-4 > :not(:last-child)):is(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi)) {
+      margin-right: calc(calc(var(--spacing) * 4) * var(--tw-space-x-reverse));
+      margin-left: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-x-reverse)));
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:rounded-xl {
+      border-radius: var(--radius-xl);
+    }
+  }

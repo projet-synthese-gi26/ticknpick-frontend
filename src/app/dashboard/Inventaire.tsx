@@ -13,7 +13,7 @@ import { relayPointService, RelayPoint } from '@/services/relayPointService';
 import { DepotColis } from '../depot/depot';
 import { WithdrawPackagePage } from '../withdraw-package/retrait';
 
-type ParcelStatusUI = 'En attente de dépôt' | 'En stock' | 'Retiré' | 'En transit' | 'Au départ' | 'Annulé';
+type ParcelStatusUI = 'En attente de dépôt' | 'En stock' | 'Retiré' | 'En transit' | 'Au départ' | 'Annulé'| 'Arrivé au relais';
 type ParcelType = 'Standard' | 'Express';
 
 interface Parcel {
@@ -319,20 +319,32 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
 
   const mapStatus = useCallback((rawStatus: string, isFromMe: boolean, isToMe: boolean): ParcelStatusUI => {
     const s = (rawStatus || '').toUpperCase();
+    
     if (isFromMe) {
+      // Colis partant de chez moi
       if (['PRE_REGISTERED', 'PENDING_DEPOSIT', 'EN_ATTENTE_DE_DEPOT', 'PENDING'].some(k => s.includes(k))) return 'En attente de dépôt';
       if (['AU_DEPART', 'AT_DEPARTURE_RELAY_POINT'].some(k => s.includes(k))) return 'Au départ';
       if (['RECU', 'DELIVERED', 'COMPLETED', 'WITHDRAWN', 'LIVRE'].some(k => s.includes(k))) return 'Retiré';
       return 'En transit';
     }
+    
     if (isToMe) {
-      if (['EN_TRANSIT', 'IN_TRANSIT'].some(k => s.includes(k))) return 'En transit';
-      if (['ARRIVE_AU_RELAIS', 'AT_ARRIVAL_RELAY_POINT', 'AT_RELAY_POINT', 'ARRIVED'].some(k => s.includes(k))) return 'En stock';
+      // Colis venant vers moi (RELAIS D'ARRIVÉE)
+      
+      // *** MODIFICATION DEMANDÉE ICI ***
+      // Si EN_TRANSIT (vers moi), je l'affiche comme 'Arrivé au relais' 
+      // Cela permet au gestionnaire de valider la réception/retrait directement
+      if (['ARRIVE_AU_RELAIS', 'AT_ARRIVAL_RELAY_POINT', 'AT_RELAY_POINT', 'ARRIVED', 'EN_TRANSIT', 'IN_TRANSIT', 'DEPART', 'TRANSIT'].some(k => s.includes(k))) {
+          return 'Arrivé au relais'; // J'affiche ce statut pour tout ce qui est transit+arrivée
+      }
+
       if (['RECU', 'DELIVERED', 'COMPLETED', 'WITHDRAWN', 'LIVRE'].some(k => s.includes(k))) return 'Retiré';
     }
+
     if (['ANNULE', 'CANCELLED', 'REJECTED'].some(k => s.includes(k))) return 'Annulé';
     return 'En transit';
   }, []);
+
 
   const fetchInventory = useCallback(async () => {
     if (!profile?.id) return;

@@ -35,6 +35,7 @@ interface FinalData {
   recipientName: string;
   recipientPhone: string;
   recipientEmail: string;
+  senderAddress: string; // On utilisera ça
   // --- AJOUT : On supporte aussi recipientAddress ---
   recipientAddress?: string;
   
@@ -297,8 +298,15 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
         let cleanRecipientPhone = allData.recipientPhone.replace(/\s+/g, '');
         if (!cleanRecipientPhone.startsWith('+')) cleanRecipientPhone = '+237' + cleanRecipientPhone;
 
+                // Nettoyage Téléphone Sender (Optionnel, bon format pour API)
+        let cleanSenderPhone = allData.senderPhone.replace(/\s+/g, '');
+        // Pas de force +237 si c'est déjà saisi, mais recommandé
+
         // 4. CONSTRUCTION DU PAYLOAD COMPLET
         const payload: PackageCreationPayload = {
+            senderName: allData.senderName,
+            senderPhone: cleanSenderPhone, 
+            
             // Infos Destinataire
             recipientName: allData.recipientName,
             recipientPhone: cleanRecipientPhone,

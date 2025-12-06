@@ -23,12 +23,25 @@ export interface BackendPackage {
     recipientPhone?: string;
 }
 
+// Nouvelle interface pour le retour du paiement
+export interface PaymentProcessResponse {
+    message: string;
+    status: string;
+    transactionId?: string;
+}
+
 // Interface DTO pour la Création (POST)
 // Correspond strictement au JSON attendu par votre Backend
 export interface PackageCreationPayload {
   recipientName: string;
   recipientPhone: string;
   recipientAddress: string;
+
+    // --- AJOUTS NOUVEAUX CHAMPS ---
+  senderName?: string;      // Nom de l'expéditeur
+  senderPhone?: string;     // Téléphone de l'expéditeur
+  senderAddress?: string;   // Adresse précise si besoin
+  // -----------------------------
   
   pickupAddress: string;    // Adresse Départ
   deliveryAddress: string;  // Adresse Arrivée
@@ -84,6 +97,11 @@ const markAsDelivered = async (packageId: string): Promise<any> => {
 // (Pour l'inventaire pro, on garde getPackagesByRelayPoint ici si besoin, déjà traité)
 const getPackagesByRelayPoint = async (id: string) => apiClient(`/api/packages/relay-point/${id}`, 'GET');
 
+const processPayment = async (packageId: string, paymentData: { paymentMethod: string, paymentType: 'PREPAID' | 'POSTPAID' }): Promise<PaymentProcessResponse> => {
+    return apiClient<PaymentProcessResponse>(`/api/payments/process/${packageId}`, 'POST', paymentData);
+};
+
+
 export const packageService = {
   createPackage,
   trackPackage,
@@ -91,4 +109,5 @@ export const packageService = {
   getPackagesByRelayPoint,
   markAsDelivered, // NOUVEAU
   getPackageByTracking,
+  processPayment, // NOUVEAU
 };
