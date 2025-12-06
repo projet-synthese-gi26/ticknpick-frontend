@@ -269,8 +269,7 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
       pdf.setFont("helvetica", "normal");
       pdf.text(`Relais : ${relay?.relayPointName || "N/A"}`, 20, y);
       pdf.text(`Localisation : ${relay?.relay_point_locality || relay?.locality || ""}, ${relay?.address || relay?.relay_point_address || ""}`, 20, y + 5);
-      // User connecté
-      pdf.text(`Agent / Propriétaire : ${authUser?.name || authUser?.manager_name || "N/A"}`, 20, y + 10);
+
       pdf.text(`Date & Heure : ${new Date().toLocaleString()}`, 20, y + 15);
       
       y += 25;
