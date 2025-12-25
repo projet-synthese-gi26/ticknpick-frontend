@@ -5,10 +5,20 @@ import { motion } from 'framer-motion';
 import { 
   Package, MapPin, Truck, Search, 
   Layers, ArrowRight, UserPlus, Globe, Building,
-  LucideIcon
+  LucideIcon,
+  Zap,
+  Store,
+  Blocks,
+  Cpu,
+  ScanSearch
+} from 'lucide-react';
+import { 
+  Users, Bike, Bus, ShoppingBag, Building2, 
+  HeartHandshake
 } from 'lucide-react';
 import FooterHome from '@/components/FooterHome';
 import { Snowfall } from '@/components/ChristmasTheme';
+import TargetAudienceSection  from '@/components/TargetAudience';
 
 
 // === TYPES ===
@@ -53,58 +63,174 @@ const FEATURES_DATA: FeatureItem[] = [
     id: "link",
     role: "CLIENT",
     title: "PicknDrop Link",
-    subtitle: "Particuliers & E-Commerce",
-    description: "Pré-enregistrez vos colis, trouvez un point de dépôt et suivez l'acheminement en temps réel. La solution idéale pour envoyer des colis sans adresse formelle.",
+    subtitle: "Pré-enregistrement & Transit",
+    description: "La solution pour les particuliers et le commerce de proximité. Gérez le pré-enregistrement, le dépôt et le retrait via des micro-hubs, même dans les zones sans adresse formelle.",
     image: "/images/land.jpeg",
     icon: MapPin,
     theme: "orange",
-    details: ["Pré-enregistrement Rapide", "QR Code de suivi unique", "Notifications SMS", "Historique complet"]
+    details: ["Entrée principale utilisateur", "QR Code Sécurisé", "Micro-hubs (Call-box/Boutiques)", "Optimisé réseaux faibles"]
   },
   {
-    id: "market",
-    role: "MARKET",
-    title: "PicknDrop Market",
-    subtitle: "La Marketplace Logistique",
-    description: "Trouvez un livreur indépendant, une agence ou publiez votre annonce d'expédition. Comparez les prix et les disponibilités instantanément.",
-    image: "/images/expedition.avif",
-    icon: Globe,
+    id: "go",
+    role: "GO", 
+    title: "PicknDrop Go",
+    subtitle: "Annonces & Disponibilités",
+    description: "Marketplace d'opportunités en temps réel. Publiez des annonces de colis à collecter et matchez avec les disponibilités des freelances et benskinneurs grâce à la géolocalisation.",
+    image: "/images/livrer.jpeg", 
+    icon: Zap,
     theme: "green",
-    details: ["Mise en relation directe", "Comparaison de prix", "Notation des prestataires", "Paiement sécurisé"]
+    details: ["Matching Intelligent", "Visibilité Temps Réel", "Connexion Client-Freelance", "Opportunités inclusives"]
   },
   {
     id: "agency",
     role: "AGENCY",
     title: "PicknDrop Agency",
-    subtitle: "Gestion Pro",
-    description: "Un ERP léger et puissant pour les agences de transport. Gérez votre flotte, vos bordereaux et vos opérations multi-sites.",
+    subtitle: "ERP Logistique Complet",
+    description: "Un outil de gestion professionnel pour les agences de transport. Centralisez votre flotte, pilotez vos flux multi-sites, gérez la facturation et les bordereaux électroniques.",
     image: "/images/image4.jpg",
     icon: Layers,
     theme: "blue",
-    details: ["Gestion de flotte", "Multi-agences", "Bordereaux électroniques", "Comptabilité intégrée"]
+    details: ["Pilotage Multi-sites & Agents", "Planification de tournées", "Suivi & Facturation", "Mode Offline-First"]
   },
   {
     id: "point",
     role: "FREELANCE",
     title: "PicknDrop Point",
-    subtitle: "Réseau de Partenaires",
-    description: "Transformez votre commerce en hub logistique. Gérez les entrées et sorties de colis et gagnez des commissions.",
+    subtitle: "Gestion Points Relais",
+    description: "Convertissez instantanément boutiques, stations ou cybercafés en acteurs logistiques légitimes. Gérez les entrées/sorties, validez les colis et suivez vos commissions.",
     image: "/images/image2.jpg",
-    icon: Building,
+    icon: Store,
     theme: "red",
-    details: ["Scan rapide", "Gestion des stocks", "Commissions automatiques", "Visibilité accrue"]
+    details: ["Enregistrement Rapide", "Gestion files d'attente", "Commissions automatiques", "Rapports journaliers"]
   },
   {
     id: "freelancer",
     role: "LIVREUR",
     title: "PicknDrop Freelancer",
-    subtitle: "Pour les Livreurs Indépendants",
-    description: "Gérez vos courses, optimisez vos trajets et structurez vos revenus. Idéal pour les 'Benskinneurs' et coursiers.",
+    subtitle: "Pour Livreurs Indépendants",
+    description: "L'application dédiée pour professionnaliser les benskinneurs et transporteurs individuels. Gagnez en crédibilité avec un profil pro, un historique de course et des paiements sécurisés.",
     image: "/images/livrer.jpeg",
     icon: Truck,
     theme: "purple",
-    details: ["Disponibilité en temps réel", "Optimisation trajets", "Historique des courses", "Profil certifié"]
+    details: ["Profil Pro & Réputation", "Gestion des missions", "Optimisation trajets", "Revenus structurés"]
+  },
+  {
+    id: "market",
+    role: "MARKET",
+    title: "PicknDrop Market",
+    subtitle: "Vitrine & Recherche",
+    description: "Le moteur de découverte public. Le point d'entrée pour trouver une agence, un point relais, un livreur ou comparer les offres de services logistiques disponibles.",
+    image: "/images/expedition.avif",
+    icon: Search,
+    theme: "orange",
+    details: ["Moteur de recherche", "Comparateur Prix/Délais", "Trouver une Agence", "Vitrine des services"]
   }
 ];
+
+// === DONNÉES TRANSVERSALES ===
+const TECH_FEATURES = [
+  {
+    title: "PicknDrop Search",
+    subtitle: "Recherche & Tracking Universels",
+    icon: ScanSearch,
+    color: "bg-blue-500",
+    text_color: "text-blue-500",
+    description: "Un moteur de recherche multi-critères couvrant l'ensemble de l'écosystème.",
+    points: [
+      "Tracking global de bout en bout",
+      "Recherche par QR Code, nom, plage horaire",
+      "Localisation précise des points relais",
+      "Filtrage intelligent et historique"
+    ]
+  },
+  {
+    title: "PicknDrop Core",
+    subtitle: "Le Noyau Partagé & API",
+    icon: Cpu,
+    color: "bg-purple-500",
+    text_color: "text-purple-500",
+    description: "La colonne vertébrale technologique. Le moteur partagé par l'ensemble de la suite.",
+    points: [
+      "Orchestration des services (Microservices)",
+      "Modèle scalable, PWA, temps réel",
+      "Sécurité & Authentification centralisée",
+      "Intégration mobile & IoT (Mode Offline)"
+    ]
+  },
+  {
+    title: "PicknDrop Confidence",
+    subtitle: "Trust Layer Blockchain",
+    icon: Blocks,
+    color: "bg-emerald-500",
+    text_color: "text-emerald-500",
+    description: "L'assurance confiance pour amener la logistique informelle au niveau international.",
+    points: [
+      "Validation immuable des opérations",
+      "Preuve de dépôt / livraison",
+      "Réduction des litiges",
+      "Traçabilité renforcée"
+    ]
+  }
+];
+
+const TransversalSection = () => {
+  return (
+    <section className="py-24 bg-slate-900 text-white relative overflow-hidden">
+        {/* Background Patterns */}
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-orange-500/10 rounded-full blur-[120px] pointer-events-none"/>
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none"/>
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="text-center mb-20 space-y-4">
+                <span className="inline-block px-4 py-1.5 rounded-full border border-orange-500/50 bg-orange-500/10 text-orange-400 text-xs font-black uppercase tracking-widest mb-2">
+                    Infrastructure & Technologie
+                </span>
+                <h2 className="text-3xl md:text-5xl font-black">La Puissance Transversale ⚡</h2>
+                <p className="text-slate-400 max-w-2xl mx-auto text-lg">
+                    Au-delà des modules, une architecture robuste assure la cohésion, la sécurité et la traçabilité de tout le système PicknDrop.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {TECH_FEATURES.map((tech, idx) => {
+                    const Icon = tech.icon;
+                    return (
+                        <motion.div 
+                           key={tech.title}
+                           initial={{ opacity: 0, y: 30 }}
+                           whileInView={{ opacity: 1, y: 0 }}
+                           viewport={{ once: true }}
+                           transition={{ duration: 0.5, delay: idx * 0.2 }}
+                           className="bg-slate-800/50 backdrop-blur-md rounded-[2rem] p-8 border border-slate-700 hover:border-slate-500 hover:bg-slate-800 transition-all duration-300 group flex flex-col h-full"
+                        >
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform ${tech.color} text-white`}>
+                                <Icon className="w-7 h-7" />
+                            </div>
+                            
+                            <h3 className="text-2xl font-bold mb-1 group-hover:text-white transition-colors">{tech.title}</h3>
+                            <p className={`text-xs font-bold uppercase tracking-widest mb-4 ${tech.text_color}`}>{tech.subtitle}</p>
+                            
+                            <p className="text-slate-400 mb-8 leading-relaxed text-sm flex-grow">
+                                {tech.description}
+                            </p>
+                            
+                            <ul className="space-y-3 mt-auto">
+                                {tech.points.map((point, i) => (
+                                    <li key={i} className="flex items-start gap-3 text-sm text-slate-300">
+                                        <div className={`mt-1.5 w-1 h-1 rounded-full flex-shrink-0 ${tech.color}`} />
+                                        <span>{point}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </motion.div>
+                    )
+                })}
+            </div>
+        </div>
+    </section>
+  )
+}
+
 
 // === SOUS COMPOSANT : FEATURE SECTION ===
 
@@ -300,7 +426,14 @@ export default function PortalPage() {
           <FeatureSection key={item.id} item={item} index={index} />
         ))}
 
-        {/* CTA Final */}
+        {/* 4. SECTION FONCTIONNALITÉS TRANSVERSALES (NOUVEAU) */}
+      <TransversalSection />
+
+      {/* 5. NOUVELLE SECTION : POUR QUI ? (Cibles) */}
+      <TargetAudienceSection />
+      </div>
+
+              {/* CTA Final */}
         <section className="py-12 sm:py-16 lg:py-20 px-4 sm:px-6">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
@@ -320,8 +453,6 @@ export default function PortalPage() {
             </div>
           </motion.div>
         </section>
-
-      </div>
 
       <FooterHome />
     </div>
