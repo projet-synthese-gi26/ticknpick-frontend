@@ -4,17 +4,43 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   Package, MapPin, Truck, Search, 
-  Layers, ArrowRight, UserPlus, Globe, Building 
+  Layers, ArrowRight, UserPlus, Globe, Building,
+  LucideIcon
 } from 'lucide-react';
 import FooterHome from '@/components/FooterHome';
 import { Snowfall } from '@/components/ChristmasTheme';
 
 
+// === TYPES ===
+
+interface ColorTheme {
+  badge: string;
+  button: string;
+  border: string;
+}
+
+interface FeatureItem {
+  id: string;
+  role: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  image: string;
+  icon: LucideIcon;
+  theme: keyof typeof COLOR_THEMES;
+  details: string[];
+}
+
+interface FeatureSectionProps {
+  item: FeatureItem;
+  index: number;
+}
+
 // === CONFIGURATION DES DONNÉES ===
 
 const SANTA_BG_IMAGE = "/images/image7.png";
 
-const COLOR_THEMES = {
+const COLOR_THEMES: Record<string, ColorTheme> = {
   orange: { badge: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300", button: "bg-orange-600 hover:bg-orange-700 text-white", border: "border-orange-500" },
   green: { badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300", button: "bg-emerald-600 hover:bg-emerald-700 text-white", border: "border-emerald-500" },
   blue: { badge: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300", button: "bg-blue-600 hover:bg-blue-700 text-white", border: "border-blue-500" },
@@ -22,7 +48,7 @@ const COLOR_THEMES = {
   red: { badge: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300", button: "bg-red-600 hover:bg-red-700 text-white", border: "border-red-500" },
 };
 
-const FEATURES_DATA = [
+const FEATURES_DATA: FeatureItem[] = [
   {
     id: "link",
     role: "CLIENT",
@@ -82,7 +108,7 @@ const FEATURES_DATA = [
 
 // === SOUS COMPOSANT : FEATURE SECTION ===
 
-const FeatureSection = ({ item, index }) => {
+const FeatureSection: React.FC<FeatureSectionProps> = ({ item, index }) => {
   const isEven = index % 2 === 0;
   const theme = COLOR_THEMES[item.theme];
   const Icon = item.icon;
@@ -286,7 +312,7 @@ export default function PortalPage() {
             
             <div className="relative z-10">
               <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-black text-white mb-4 sm:mb-6">Prêt à connecter l'Afrique ?</h2>
-              <p className="text-base sm:text-lg lg:text-xl text-white/90 mb-6 sm:mb-10 max-w-2xl mx-auto">Rejoignez une communauté de milliers d'utilisateurs et transformez la façon dont nous échangons des biens.</p>
+              <p className="text-base sm:text-lg lg:text-xl text-white/90 mb-6 sm:mb-10 max-w-2xl mx-auto">Rejoignez une communauté de milliers d'utilisateurs et transformez la façon dont nous échangeons des biens.</p>
               
               <a href="/register" className="inline-flex items-center gap-2 sm:gap-3 bg-white text-orange-700 px-6 sm:px-8 lg:px-10 py-3 sm:py-4 lg:py-5 rounded-full font-bold text-base sm:text-lg lg:text-xl shadow-xl hover:bg-orange-50 hover:scale-105 transition-all">
                 Commencer maintenant <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6"/>
