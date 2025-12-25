@@ -1,349 +1,301 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-// Utilisation de <img> standard pour éviter les erreurs de configuration de domaine Next.js
 import { motion } from 'framer-motion';
 import { 
-  Package, ShoppingBag, Truck, MapPin, Search, 
-  Layers, ShieldCheck, Globe, Users, ArrowRight 
+  Package, MapPin, Truck, Search, 
+  Layers, ArrowRight, UserPlus, Globe, Building 
 } from 'lucide-react';
-import { Snowfall, FairyLights } from '@/components/ChristmasTheme';
-import NavbarHome from '@/components/NavbarHome';
 import FooterHome from '@/components/FooterHome';
+import { Snowfall } from '@/components/ChristmasTheme';
 
-// URL de l'image du Père Noël
+
+// === CONFIGURATION DES DONNÉES ===
+
 const SANTA_BG_IMAGE = "/images/image7.png";
 
-// --- SOUS-COMPOSANTS STYLE "CHROME" ---
+const COLOR_THEMES = {
+  orange: { badge: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300", button: "bg-orange-600 hover:bg-orange-700 text-white", border: "border-orange-500" },
+  green: { badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300", button: "bg-emerald-600 hover:bg-emerald-700 text-white", border: "border-emerald-500" },
+  blue: { badge: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300", button: "bg-blue-600 hover:bg-blue-700 text-white", border: "border-blue-500" },
+  purple: { badge: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300", button: "bg-purple-600 hover:bg-purple-700 text-white", border: "border-purple-500" },
+  red: { badge: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300", button: "bg-red-600 hover:bg-red-700 text-white", border: "border-red-500" },
+};
 
-const ModuleCard = ({ 
-  title, subtitle, description, icon: Icon, href, color = "orange", badge, delay = 0 
-}: {
-  title: string, subtitle?: string, description: string, icon: any, href: string, color?: "orange"|"red"|"green"|"blue"|"purple", badge?: string, delay?: number
-}) => {
-  // Mapping des couleurs pour le thème de Noël + PicknDrop
-  const theme = {
-    orange: { bg: 'bg-orange-50 dark:bg-orange-950/20', text: 'text-orange-700 dark:text-orange-400', border: 'hover:border-orange-500', badge: 'bg-orange-200 text-orange-900' },
-    red:    { bg: 'bg-red-50 dark:bg-red-950/20',       text: 'text-red-700 dark:text-red-400',       border: 'hover:border-red-500',    badge: 'bg-red-200 text-red-900' },
-    green:  { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-400', border: 'hover:border-emerald-500', badge: 'bg-emerald-200 text-emerald-900' },
-    blue:   { bg: 'bg-blue-50 dark:bg-blue-950/20',     text: 'text-blue-700 dark:text-blue-400',     border: 'hover:border-blue-500',   badge: 'bg-blue-200 text-blue-900' },
-    purple: { bg: 'bg-purple-50 dark:bg-purple-950/20', text: 'text-purple-700 dark:text-purple-400', border: 'hover:border-purple-500', badge: 'bg-purple-200 text-purple-900' },
-  }[color];
+const FEATURES_DATA = [
+  {
+    id: "link",
+    role: "CLIENT",
+    title: "PicknDrop Link",
+    subtitle: "Particuliers & E-Commerce",
+    description: "Pré-enregistrez vos colis, trouvez un point de dépôt et suivez l'acheminement en temps réel. La solution idéale pour envoyer des colis sans adresse formelle.",
+    image: "/images/land.jpeg",
+    icon: MapPin,
+    theme: "orange",
+    details: ["Pré-enregistrement Rapide", "QR Code de suivi unique", "Notifications SMS", "Historique complet"]
+  },
+  {
+    id: "market",
+    role: "MARKET",
+    title: "PicknDrop Market",
+    subtitle: "La Marketplace Logistique",
+    description: "Trouvez un livreur indépendant, une agence ou publiez votre annonce d'expédition. Comparez les prix et les disponibilités instantanément.",
+    image: "/images/expedition.avif",
+    icon: Globe,
+    theme: "green",
+    details: ["Mise en relation directe", "Comparaison de prix", "Notation des prestataires", "Paiement sécurisé"]
+  },
+  {
+    id: "agency",
+    role: "AGENCY",
+    title: "PicknDrop Agency",
+    subtitle: "Gestion Pro",
+    description: "Un ERP léger et puissant pour les agences de transport. Gérez votre flotte, vos bordereaux et vos opérations multi-sites.",
+    image: "/images/image4.jpg",
+    icon: Layers,
+    theme: "blue",
+    details: ["Gestion de flotte", "Multi-agences", "Bordereaux électroniques", "Comptabilité intégrée"]
+  },
+  {
+    id: "point",
+    role: "FREELANCE",
+    title: "PicknDrop Point",
+    subtitle: "Réseau de Partenaires",
+    description: "Transformez votre commerce en hub logistique. Gérez les entrées et sorties de colis et gagnez des commissions.",
+    image: "/images/image2.jpg",
+    icon: Building,
+    theme: "red",
+    details: ["Scan rapide", "Gestion des stocks", "Commissions automatiques", "Visibilité accrue"]
+  },
+  {
+    id: "freelancer",
+    role: "LIVREUR",
+    title: "PicknDrop Freelancer",
+    subtitle: "Pour les Livreurs Indépendants",
+    description: "Gérez vos courses, optimisez vos trajets et structurez vos revenus. Idéal pour les 'Benskinneurs' et coursiers.",
+    image: "/images/livrer.jpeg",
+    icon: Truck,
+    theme: "purple",
+    details: ["Disponibilité en temps réel", "Optimisation trajets", "Historique des courses", "Profil certifié"]
+  }
+];
+
+// === SOUS COMPOSANT : FEATURE SECTION ===
+
+const FeatureSection = ({ item, index }) => {
+  const isEven = index % 2 === 0;
+  const theme = COLOR_THEMES[item.theme];
+  const Icon = item.icon;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: delay, duration: 0.5 }}
-      className={`group relative flex flex-col p-8 rounded-[2rem] bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 ${theme.border} transition-all duration-300 shadow-sm hover:shadow-xl`}
-    >
-       {/* Badge décoratif Noël */}
-      {badge && (
-        <span className={`absolute top-6 right-6 px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full ${theme.badge}`}>
-          {badge}
-        </span>
-      )}
-      
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${theme.bg}`}>
-        <Icon className={`w-7 h-7 ${theme.text}`} />
-      </div>
+    <section className="py-12 md:py-20 lg:py-24 overflow-hidden border-b border-gray-100 dark:border-slate-800 last:border-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className={`flex flex-col ${isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'} items-center gap-8 lg:gap-16`}>
+          
+          {/* VISUEL */}
+          <motion.div 
+            initial={{ opacity: 0, x: isEven ? -50 : 50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6 }}
+            className="flex-1 w-full"
+          >
+            <div className="relative group rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl bg-gray-900 aspect-[4/3] border-2 lg:border-4 border-white dark:border-slate-700">
+              <img 
+                src={item.image} 
+                alt={item.title} 
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
+              
+              {/* Badge Flottant */}
+              <div className="absolute bottom-4 left-4 right-4 p-3 lg:p-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-xl lg:rounded-2xl shadow-lg border border-white/20">
+                <div className="flex items-center gap-2 lg:gap-3">
+                  <div className={`p-1.5 lg:p-2 rounded-lg ${theme.badge}`}>
+                    <Icon className="w-4 h-4 lg:w-5 lg:h-5"/>
+                  </div>
+                  <div>
+                    <p className="text-[10px] lg:text-xs font-bold text-gray-500 uppercase tracking-wide">{item.subtitle}</p>
+                    <p className="text-sm lg:text-lg font-bold text-gray-900 dark:text-white leading-tight">{item.title}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
 
-      <div className="flex-1">
-        <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
-          {title}
-        </h3>
-        {subtitle && <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">{subtitle}</p>}
-        <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm">
-          {description}
-        </p>
-      </div>
+          {/* DESCRIPTION */}
+          <motion.div 
+            initial={{ opacity: 0, x: isEven ? 50 : -50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="flex-1 space-y-4 lg:space-y-6"
+          >
+            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${theme.badge}`}>
+              <Icon className="w-3 h-3 lg:w-4 lg:h-4"/> Module {index + 1}
+            </div>
+            
+            <h2 className="text-2xl md:text-3xl lg:text-5xl font-black text-slate-900 dark:text-white leading-tight">
+              {item.title}.
+            </h2>
+            
+            <p className="text-base lg:text-lg text-slate-600 dark:text-gray-300 leading-relaxed">
+              {item.description}
+            </p>
+            
+            {/* Liste des points forts */}
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 lg:gap-3 pt-2">
+              {item.details.map((detail, i) => (
+                <li key={i} className="flex items-center gap-2 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  <div className={`w-1.5 h-1.5 rounded-full ${theme.button.split(' ')[0]}`}></div>
+                  {detail}
+                </li>
+              ))}
+            </ul>
 
-      <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-         <span className={`text-sm font-bold flex items-center gap-2 group-hover:gap-4 transition-all ${theme.text}`}>
-           Explorer <ArrowRight className="w-4 h-4"/>
-         </span>
-         {/* Décoration subtile : Petit sapin au survol */}
-         <span className="text-xl opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0 duration-300">🎄</span>
-      </div>
+            <div className="pt-4 lg:pt-6">
+              <a 
+                href={`/landing?role=${item.role}`}
+                className={`inline-flex items-center gap-2 px-6 lg:px-8 py-3 lg:py-3.5 rounded-xl font-bold text-sm lg:text-base text-white shadow-lg transition-transform transform active:scale-95 ${theme.button}`}
+              >
+                Découvrir <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5"/>
+              </a>
+            </div>
+          </motion.div>
 
-      <Link href={href} className="absolute inset-0 z-10" aria-label={`Aller vers ${title}`} />
-    </motion.div>
+        </div>
+      </div>
+    </section>
   );
 };
 
-const Badge = ({ children }: { children: React.ReactNode }) => (
-    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-red-300 dark:border-red-700 shadow-lg mb-6">
-        <span className="text-xl animate-spin" style={{ animationDuration: '3s' }}>⭐</span>
-        <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-ping"/>
-        <span className="text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-400">{children}</span>
-    </div>
-);
-
-const SectionWrapper = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-    <div className={`max-w-6xl mx-auto px-6 py-20 ${className}`}>
-        {children}
-    </div>
-);
-
-
-// ============================================================================
-// PAGE PRINCIPALE PORTAIL
-// ============================================================================
+// === PAGE PRINCIPALE ===
 
 export default function PortalPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0c15] text-slate-900 dark:text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
       
-      {/* 1. Ambiance de Noël */}
+      {/* Ambiance de Noël */}
       <Snowfall />
 
-      {/* 2. Hero Section Tropicalisée */}
-      <section className="relative min-h-[90vh] flex flex-col justify-center overflow-hidden">
-         {/* Background avec <img> pour compatibilité rapide */}
-         <div className="absolute inset-0 z-0">
-             <img 
-                src={SANTA_BG_IMAGE} 
-                alt="PicknDrop Christmas Africa"
-                className="absolute inset-0 w-full h-full object-cover object-center"
-             />
-             {/* Dégradé pour lisibilité : Noir transparent -> Transparent */}
-             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/70 to-slate-900/40" />
-             {/* Filtre de bruit subtil pour texture moderne */}
-             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
-         </div>
-
-         {/* Contenu Hero */}
-         <div className="relative z-10 container mx-auto px-6 pt-20">
-             <FairyLights />
-             
-             <motion.div 
-               initial={{ opacity: 0, y: 40 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ duration: 0.8, ease: "easeOut" }}
-               className="max-w-4xl"
-             >
-                {/* Badge Saisonnier */}
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-bold uppercase tracking-wider mb-6">
-                    <span className="animate-pulse">🎁</span> Spécial Fêtes 2024
-                </div>
-
-                <h1 className="text-5xl md:text-7xl font-black text-white leading-[1.1] mb-6 drop-shadow-lg">
-                  La Logistique Réinventée <br/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-200">
-                     avec PicknDrop
-                  </span>
-                </h1>
-                
-                <p className="text-xl text-slate-100 max-w-2xl leading-relaxed mb-10 font-medium drop-shadow-md">
-                  Une plateforme complète pour envoyer, recevoir, livrer et suivre chaque colis, 
-                  du quartier au continent. 
-                  <span className="block mt-2 text-emerald-300 font-bold">Pas d'adresse ? Pas de problème. 🎅🏿</span>
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-4">
-                    {/* LIEN HERO 1: vers Landing Client */}
-                    <Link href="/landing?role=CLIENT" className="px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold text-lg transition-transform hover:scale-105 shadow-xl shadow-orange-900/50 flex items-center justify-center gap-3 border-b-4 border-orange-800">
-                       <Package className="w-6 h-6"/> Envoyer un colis
-                    </Link>
-                    {/* LIEN HERO 2: vers Section Modules */}
-                    <Link href="#ecosystem" className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl font-bold text-lg backdrop-blur-md transition-transform hover:scale-105 flex items-center justify-center">
-                       Découvrir l'univers
-                    </Link>
-                </div>
-             </motion.div>
-         </div>
-
-         {/* Bandeau Décoratif Bas de Hero */}
-         <div className="absolute bottom-0 w-full h-24 bg-gradient-to-t from-slate-50 dark:from-[#0b0c15] to-transparent z-10" />
-      </section>
-
-      {/* 3. Section Écosystème (Grid Bento Style) */}
-      <section id="ecosystem" className="py-24 px-6 relative">
-          <div className="container mx-auto">
-              
-              <div className="text-center mb-16 space-y-4">
-                  <h2 className="text-sm font-black text-orange-500 uppercase tracking-[0.2em]">🎄 L'Écosystème PicknDrop 🎄</h2>
-                  <h3 className="text-3xl md:text-5xl font-black text-slate-800 dark:text-white">Modulaire, Scalable, Unifié.</h3>
-                  <div className="flex justify-center gap-2 text-3xl">🎅 🤶 🎁 ⭐</div>
-              </div>
-
-              {/* Grille Style "Chrome What's New" */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  
-                  {/* Carte 1 : LINK -> Landing CLIENT */}
-                  <ModuleCard 
-                      title="PicknDrop Link"
-                      subtitle="Pour Particuliers"
-                      description="Pré-enregistrement et circulation simplifiée. Idéal pour e-commerce informel et commerçants de proximité."
-                      icon={MapPin}
-                      color="orange"
-                      badge="Populaire"
-                      href="/landing?role=CLIENT" 
-                      delay={0.1}
-                  />
-
-                  {/* Carte 2 : MARKET -> Landing MARKET */}
-                  <ModuleCard 
-                      title="PicknDrop Market"
-                      subtitle="Place de Marché"
-                      description="Trouvez un livreur ou un service logistique fiable. Le moteur de découverte des colis et services publiés."
-                      icon={ShoppingBag}
-                      color="green"
-                      badge="Nouveau"
-                      href="/landing?role=MARKET" 
-                      delay={0.2}
-                  />
-
-                  {/* Carte 3 : AGENCY -> Landing AGENCY */}
-                  <ModuleCard 
-                      title="PicknDrop Agency"
-                      subtitle="Gestion Pro"
-                      description="Suite complète pour les agences de transport. Gestion de flotte, bordereaux électroniques et pilotage multi-sites."
-                      icon={Layers}
-                      color="blue"
-                      href="/landing?role=AGENCY" 
-                      delay={0.3}
-                  />
-
-                  {/* Carte 4 : POINT (Relais) -> Landing FREELANCE (Points relais) */}
-                  <motion.div 
-                     initial={{ opacity: 0, y: 30 }}
-                     whileInView={{ opacity: 1, y: 0 }}
-                     viewport={{ once: true }}
-                     transition={{ delay: 0.4, duration: 0.5 }}
-                     className="lg:col-span-2 group relative p-10 rounded-[2.5rem] bg-slate-900 text-white overflow-hidden shadow-2xl flex flex-col md:flex-row items-center gap-8 border-4 border-slate-800 hover:border-slate-700 transition-colors"
-                  >
-                      {/* Background decor */}
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/20 blur-[80px] rounded-full" />
-                      
-                      <div className="flex-1 relative z-10 space-y-6">
-                          <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/20 text-orange-300 rounded-lg text-xs font-bold uppercase tracking-wider border border-orange-500/30">
-                             <Search className="w-3 h-3"/> Infrastructure
-                          </div>
-                          <h3 className="text-3xl md:text-4xl font-black leading-tight">PicknDrop Point & <br/> Search</h3>
-                          <p className="text-slate-300 text-lg leading-relaxed">
-                             Convertissez votre boutique en micro-hub logistique ou suivez n'importe quel colis via notre tracking universel (QR Code, ID, Localisation).
-                          </p>
-                          {/* Lien vers Landing FREELANCE */}
-                          <Link href="/landing?role=FREELANCE" className="inline-flex items-center gap-3 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-orange-50 transition-colors">
-                              Devenir Point Relais <ArrowRight className="w-5 h-5"/>
-                          </Link>
-                      </div>
-                      
-                      {/* Illustration stylisée */}
-                      <div className="flex-1 w-full flex justify-center relative">
-                           <div className="relative w-64 h-48 bg-slate-800 rounded-2xl border border-slate-700 p-4 shadow-xl rotate-3 group-hover:rotate-0 transition-transform duration-500">
-                               <div className="flex items-center gap-3 mb-4 border-b border-slate-700 pb-3">
-                                   <div className="w-3 h-3 rounded-full bg-red-500"/>
-                                   <div className="w-3 h-3 rounded-full bg-yellow-500"/>
-                                   <div className="w-3 h-3 rounded-full bg-green-500"/>
-                               </div>
-                               <div className="space-y-3">
-                                   <div className="h-2 w-3/4 bg-slate-700 rounded animate-pulse"/>
-                                   <div className="h-2 w-1/2 bg-slate-700 rounded animate-pulse delay-75"/>
-                                   <div className="h-20 w-full bg-orange-500/10 rounded border border-orange-500/20 flex items-center justify-center">
-                                       <span className="text-4xl">📍📦</span>
-                                   </div>
-                               </div>
-                           </div>
-                      </div>
-                  </motion.div>
-
-                  {/* Carte 5 : FREELANCER (LIVREUR) -> Landing LIVREUR */}
-                  <ModuleCard 
-                      title="Freelancer"
-                      subtitle="Pour les Pros"
-                      description="Solution dédiée aux livreurs indépendants (Benskinneurs). Gestion de courses, réputation et revenus structurés."
-                      icon={Truck}
-                      color="purple"
-                      href="/landing?role=LIVREUR"
-                      delay={0.5}
-                  />
-
-              </div>
-          </div>
-      </section>
-
-      {/* 4. Section Technologique */}
-      <section className="py-24 bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-800 relative">
-          <div className="container mx-auto px-6">
-               <div className="max-w-4xl mx-auto mb-16 text-center">
-                   <h2 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white mb-6">
-                       PicknDrop <span className="text-orange-600">Core</span> & <span className="text-emerald-600">Confidence</span>
-                   </h2>
-                   <p className="text-lg text-slate-600 dark:text-slate-300">
-                       Le noyau partagé qui orchestre tout. Une colonne vertébrale technologique robuste doublée d'une couche de confiance Blockchain pour une traçabilité totale en Afrique.
-                   </p>
-               </div>
-
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {[
-                        { 
-                          icon: Globe, color: "text-blue-500", 
-                          title: "Scalable & API First", 
-                          desc: "Une architecture microservices unifiée prête à l'échelle continentale."
-                        },
-                        { 
-                          icon: ShieldCheck, color: "text-emerald-500", 
-                          title: "Blockchain Trust", 
-                          desc: "Validation immuable des opérations. Preuve de dépôt et de livraison sécurisée." 
-                        },
-                        { 
-                          icon: Users, color: "text-purple-500", 
-                          title: "Inclusivité Numérique", 
-                          desc: "Interfaces optimisées pour les téléphones basiques et les réseaux à faible débit." 
-                        }
-                    ].map((feat, i) => (
-                        <div key={i} className="flex flex-col items-center text-center p-6">
-                            <div className={`p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 mb-4 ${feat.color}`}>
-                                <feat.icon className="w-8 h-8" />
-                            </div>
-                            <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{feat.title}</h4>
-                            <p className="text-slate-500 dark:text-slate-400">{feat.desc}</p>
-                        </div>
-                    ))}
-               </div>
+      {/* Hero Section */}
+      <section className="relative min-h-[500px] sm:min-h-[600px] lg:min-h-[95vh] flex flex-col justify-start overflow-hidden">
+        
+        {/* HEADER */}
+        <header className="absolute top-0 left-0 w-full z-40 p-4 sm:p-6 md:p-8 flex justify-between items-center">
+          {/* Logo */}
+          <div className="flex items-center gap-2 group">
+            <div className="bg-orange-600 p-1.5 sm:p-2 rounded-lg sm:rounded-xl text-white shadow-lg group-hover:rotate-12 transition-transform">
+              <Package className="w-5 h-5 sm:w-6 sm:h-6"/>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-md">
+              Pick<span className="text-orange-500">n</span>Drop
+            </h1>
           </div>
           
-          <div className="absolute bottom-0 left-10 text-6xl opacity-20 pointer-events-none translate-y-1/2">🎄</div>
-          <div className="absolute top-10 right-10 text-5xl opacity-20 pointer-events-none -translate-y-1/2">🎁</div>
+          {/* Actions */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            <a href="/login" className="hidden sm:flex text-xs sm:text-sm font-bold text-white hover:text-orange-300 transition-colors">
+              Se connecter
+            </a>
+            <a 
+              href="#modules"
+              className="px-3 sm:px-6 py-2 sm:py-2.5 bg-white text-orange-700 font-bold rounded-full text-xs sm:text-sm shadow-xl hover:bg-orange-50 transition-all flex items-center gap-1 sm:gap-2"
+            >
+              <UserPlus className="w-3 h-3 sm:w-4 sm:h-4"/> Découvrir
+            </a>
+          </div>
+        </header>
+
+        {/* Background Hero - Image complètement visible */}
+        <div className="absolute inset-0 z-0">
+          {/* Overlay léger pour contraste texte */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-transparent z-10" />
+          
+          {/* Image Santa - Positionnement optimisé */}
+          <div className="absolute inset-0 w-full h-full">
+            <img 
+              src={SANTA_BG_IMAGE} 
+              alt="Noël Logistique Afrique"
+              className="w-full h-full object-cover object-center"
+              style={{ objectPosition: 'center 30%' }}
+            />
+          </div>
+          
+          {/* Dégradé bas vers vague */}
+          <div className="absolute bottom-0 w-full h-32 sm:h-48 bg-gradient-to-t from-slate-50 dark:from-[#0b0c15] to-transparent z-10" />
+        </div>
+
+        {/* Contenu Hero */}
+        <div className="relative z-20 flex-1 flex flex-col justify-center items-center text-center px-4 pt-24 sm:pt-32 pb-32 sm:pb-40">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="max-w-4xl mx-auto"
+          >
+            <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-4 sm:mb-6 animate-pulse">
+              <span>🎁</span> Offre Spéciale Fêtes
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight mb-4 sm:mb-6 drop-shadow-2xl px-4">
+              Envoyez. Recevez. <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-yellow-200 to-orange-400">
+                Célébrez sans limite.
+              </span>
+            </h1>
+            
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-slate-100 font-medium mb-6 sm:mb-10 max-w-2xl mx-auto drop-shadow-lg leading-relaxed px-4">
+              Une plateforme logistique unifiée pour l'Afrique. <br className="hidden sm:block"/>
+              Du quartier au village, nous connectons tout le monde.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
+              <a href="/expedition" className="px-6 sm:px-8 py-3 sm:py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base lg:text-lg shadow-[0_10px_40px_-10px_rgba(234,88,12,0.6)] hover:shadow-orange-600/60 hover:-translate-y-1 transition-all flex items-center justify-center gap-2 sm:gap-3">
+                <Package className="w-4 h-4 sm:w-5 sm:h-5"/> Envoyer maintenant
+              </a>
+              <a href="/track-package" className="px-6 sm:px-8 py-3 sm:py-4 bg-white/10 hover:bg-white/20 text-white border border-white/30 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base lg:text-lg backdrop-blur-sm transition-all flex items-center justify-center gap-2 sm:gap-3">
+                <Search className="w-4 h-4 sm:w-5 sm:h-5"/> Suivre un colis
+              </a>
+            </div>
+          </motion.div>
+        </div>
       </section>
 
-      {/* 5. Impact & Vision */}
-      <section className="py-20 px-6">
-          <SectionWrapper className="text-center">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              className="bg-gradient-to-br from-red-50 via-orange-50 to-green-50 dark:from-red-950/20 dark:via-orange-950/20 dark:to-green-950/20 py-20 px-6 rounded-[3rem] border-4 border-red-200 dark:border-red-800 relative overflow-hidden"
-            >
-              <div className="absolute top-4 left-4 text-6xl opacity-30 animate-pulse">⭐</div>
-              <div className="absolute bottom-4 right-4 text-6xl opacity-30 animate-bounce">🎄</div>
+      {/* MODULES */}
+      <div id="modules" className="bg-slate-50 dark:bg-[#0b0c15] pb-12 sm:pb-16 lg:pb-24">
+        
+        <div className="container mx-auto text-center pt-6 sm:pt-10 pb-8 sm:pb-12 lg:pb-16 px-4">
+          <h2 className="text-xs sm:text-sm font-black text-orange-600 dark:text-orange-500 uppercase tracking-[0.2em] mb-2 sm:mb-3">La Suite PicknDrop</h2>
+          <h3 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white">Découvrez nos solutions</h3>
+        </div>
+
+        {FEATURES_DATA.map((item, index) => (
+          <FeatureSection key={item.id} item={item} index={index} />
+        ))}
+
+        {/* CTA Final */}
+        <section className="py-12 sm:py-16 lg:py-20 px-4 sm:px-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            className="max-w-5xl mx-auto rounded-2xl sm:rounded-3xl lg:rounded-[3rem] p-8 sm:p-12 lg:p-20 relative overflow-hidden bg-gradient-to-r from-red-600 via-orange-600 to-yellow-600 shadow-2xl text-center"
+          >
+            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+            <Snowfall />
+            
+            <div className="relative z-10">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-black text-white mb-4 sm:mb-6">Prêt à connecter l'Afrique ?</h2>
+              <p className="text-base sm:text-lg lg:text-xl text-white/90 mb-6 sm:mb-10 max-w-2xl mx-auto">Rejoignez une communauté de milliers d'utilisateurs et transformez la façon dont nous échangons des biens.</p>
               
-              <div className="relative z-10">
-                <div className="flex justify-center gap-3 text-4xl mb-6">
-                  <span>🎁</span><span>🎄</span><span>⭐</span>
-                </div>
-                
-                <h3 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white mb-6">Conçu pour l'Afrique, Pensé pour le Monde. 🌍</h3>
-                <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10">
-                   De Douala à Lagos, nous transformons l'informel en une logistique structurée, traçable et créatrice d'emplois.
-                   Rejoignez la révolution dès aujourd'hui.
-                </p>
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
-                  <Link href="/register" className="bg-gradient-to-r from-red-600 to-green-600 hover:from-red-700 hover:to-green-700 text-white font-bold py-4 px-10 rounded-2xl shadow-xl transition-all active:scale-95 border-2 border-yellow-300">
-                    🎁 Créer mon compte gratuitement
-                  </Link>
-                  <Link href="/landing?role=MARKET" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-2 border-red-300 dark:border-red-700 font-bold py-4 px-10 rounded-2xl shadow-sm hover:bg-slate-50 transition-all">
-                    🎄 Voir le Marketplace
-                  </Link>
-                </div>
-              </div>
-            </motion.div>
-          </SectionWrapper>
-      </section>
+              <a href="/register" className="inline-flex items-center gap-2 sm:gap-3 bg-white text-orange-700 px-6 sm:px-8 lg:px-10 py-3 sm:py-4 lg:py-5 rounded-full font-bold text-base sm:text-lg lg:text-xl shadow-xl hover:bg-orange-50 hover:scale-105 transition-all">
+                Commencer maintenant <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6"/>
+              </a>
+            </div>
+          </motion.div>
+        </section>
+
+      </div>
 
       <FooterHome />
     </div>
