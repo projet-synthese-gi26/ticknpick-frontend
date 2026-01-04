@@ -48,7 +48,7 @@ interface FeatureSectionProps {
 
 // === CONFIGURATION DES DONNÉES ===
 
-const SANTA_BG_IMAGE = "/images/image7.png";
+const SANTA_BG_IMAGE = "/images/pick2.png";
 
 const COLOR_THEMES: Record<string, ColorTheme> = {
   orange: { badge: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300", button: "bg-orange-600 hover:bg-orange-700 text-white", border: "border-orange-500" },
@@ -65,7 +65,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "PicknDrop Link",
     subtitle: "Pré-enregistrement & Transit",
     description: "La solution pour les particuliers et le commerce de proximité. Gérez le pré-enregistrement, le dépôt et le retrait via des micro-hubs, même dans les zones sans adresse formelle.",
-    image: "/images/land.jpeg",
+    image: "/images/link.png",
     icon: MapPin,
     theme: "orange",
     details: ["Entrée principale utilisateur", "QR Code Sécurisé", "Micro-hubs (Call-box/Boutiques)", "Optimisé réseaux faibles"]
@@ -76,7 +76,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "PicknDrop Go",
     subtitle: "Annonces & Disponibilités",
     description: "Marketplace d'opportunités en temps réel. Publiez des annonces de colis à collecter et matchez avec les disponibilités des freelances et benskinneurs grâce à la géolocalisation.",
-    image: "/images/livrer.jpeg", 
+    image: "/images/go.png", 
     icon: Zap,
     theme: "green",
     details: ["Matching Intelligent", "Visibilité Temps Réel", "Connexion Client-Freelance", "Opportunités inclusives"]
@@ -87,7 +87,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "PicknDrop Agency",
     subtitle: "ERP Logistique Complet",
     description: "Un outil de gestion professionnel pour les agences de transport. Centralisez votre flotte, pilotez vos flux multi-sites, gérez la facturation et les bordereaux électroniques.",
-    image: "/images/image4.jpg",
+    image: "/images/image4.png",
     icon: Layers,
     theme: "blue",
     details: ["Pilotage Multi-sites & Agents", "Planification de tournées", "Suivi & Facturation", "Mode Offline-First"]
@@ -98,7 +98,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "PicknDrop Point",
     subtitle: "Gestion Points Relais",
     description: "Convertissez instantanément boutiques, stations ou cybercafés en acteurs logistiques légitimes. Gérez les entrées/sorties, validez les colis et suivez vos commissions.",
-    image: "/images/image2.jpg",
+    image: "/images/point.png",
     icon: Store,
     theme: "red",
     details: ["Enregistrement Rapide", "Gestion files d'attente", "Commissions automatiques", "Rapports journaliers"]
@@ -109,7 +109,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "PicknDrop Freelancer",
     subtitle: "Pour Livreurs Indépendants",
     description: "L'application dédiée pour professionnaliser les benskinneurs et transporteurs individuels. Gagnez en crédibilité avec un profil pro, un historique de course et des paiements sécurisés.",
-    image: "/images/livrer.jpeg",
+    image: "/images/free.png",
     icon: Truck,
     theme: "purple",
     details: ["Profil Pro & Réputation", "Gestion des missions", "Optimisation trajets", "Revenus structurés"]
@@ -120,7 +120,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "PicknDrop Market",
     subtitle: "Vitrine & Recherche",
     description: "Le moteur de découverte public. Le point d'entrée pour trouver une agence, un point relais, un livreur ou comparer les offres de services logistiques disponibles.",
-    image: "/images/expedition.avif",
+    image: "/images/market.png",
     icon: Search,
     theme: "orange",
     details: ["Moteur de recherche", "Comparateur Prix/Délais", "Trouver une Agence", "Vitrine des services"]
@@ -275,32 +275,30 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({ item, index }) => {
             </div>
           </motion.div>
 
-          {/* DESCRIPTION */}
+          {/* --- BLOC CONTENU / DESCRIPTION --- */}
           <motion.div 
             initial={{ opacity: 0, x: isEven ? 50 : -50 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex-1 space-y-4 lg:space-y-6"
+            className="flex-1 space-y-5 lg:space-y-6"
           >
-            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${theme.badge}`}>
-              <Icon className="w-3 h-3 lg:w-4 lg:h-4"/> Module {index + 1}
-            </div>
-            
-            <h2 className="text-2xl md:text-3xl lg:text-5xl font-black text-slate-900 dark:text-white leading-tight">
-              {item.title}.
+            {/* Titre aligné directement sans badge au-dessus */}
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white leading-tight tracking-tight">
+              {item.title}<span className={`text-${item.theme}-500`}>.</span>
             </h2>
             
-            <p className="text-base lg:text-lg text-slate-600 dark:text-gray-300 leading-relaxed">
+            <p className="text-base lg:text-lg text-slate-600 dark:text-gray-300 leading-relaxed opacity-90">
               {item.description}
             </p>
             
             {/* Liste des points forts */}
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 lg:gap-3 pt-2">
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 pt-2">
               {item.details.map((detail, i) => (
-                <li key={i} className="flex items-center gap-2 text-xs lg:text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  <div className={`w-1.5 h-1.5 rounded-full ${theme.button.split(' ')[0]}`}></div>
-                  {detail}
+                <li key={i} className="flex items-start gap-2.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {/* Petit point de couleur pour garder le lien avec le thème */}
+                  <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${theme.button.split(' ')[0]}`}></div>
+                  <span>{detail}</span>
                 </li>
               ))}
             </ul>
@@ -308,9 +306,10 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({ item, index }) => {
             <div className="pt-4 lg:pt-6">
               <a 
                 href={`/landing?role=${item.role}`}
-                className={`inline-flex items-center gap-2 px-6 lg:px-8 py-3 lg:py-3.5 rounded-xl font-bold text-sm lg:text-base text-white shadow-lg transition-transform transform active:scale-95 ${theme.button}`}
+                className={`group inline-flex items-center gap-2 px-6 lg:px-8 py-3 lg:py-3.5 rounded-xl font-bold text-sm lg:text-base text-white shadow-lg shadow-${item.theme}-500/20 transition-all duration-300 hover:shadow-${item.theme}-500/40 hover:-translate-y-0.5 active:scale-95 ${theme.button}`}
               >
-                Découvrir <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5"/>
+                Découvrir
+                <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 transition-transform group-hover:translate-x-1"/>
               </a>
             </div>
           </motion.div>
@@ -326,9 +325,6 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({ item, index }) => {
 export default function PortalPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0c15] text-slate-900 dark:text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
-      
-      {/* Ambiance de Noël */}
-      <Snowfall />
 
       {/* Hero Section */}
       <section className="relative min-h-[500px] sm:min-h-[600px] lg:min-h-[95vh] flex flex-col justify-start overflow-hidden">
@@ -369,7 +365,7 @@ export default function PortalPage() {
             <img 
               src={SANTA_BG_IMAGE} 
               alt="Noël Logistique Afrique"
-              className="w-full h-full object-cover object-center"
+              className="w-full h-full object-cover object-center "
               style={{ objectPosition: 'center 30%' }}
             />
           </div>
@@ -441,7 +437,6 @@ export default function PortalPage() {
             className="max-w-5xl mx-auto rounded-2xl sm:rounded-3xl lg:rounded-[3rem] p-8 sm:p-12 lg:p-20 relative overflow-hidden bg-gradient-to-r from-red-600 via-orange-600 to-yellow-600 shadow-2xl text-center"
           >
             <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-            <Snowfall />
             
             <div className="relative z-10">
               <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-black text-white mb-4 sm:mb-6">Prêt à connecter l'Afrique ?</h2>
