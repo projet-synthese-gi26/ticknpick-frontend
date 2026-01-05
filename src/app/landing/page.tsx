@@ -2,379 +2,533 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation'; // Nécessaire pour la dynamique
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import NavbarHome from '@/components/NavbarHome';
 import Footer from '@/components/FooterHome';
-// Imports de toutes les icônes nécessaires pour les différents scénarios
 import { 
     Shield, Truck, MapPin, Search, ClipboardPenLine, Box, Map, Smile, 
-    Bike, Coins, Users, Store, BarChart3, UserCheck, BadgeCheck, 
+    Coins, Users, Store, BarChart3, UserCheck, BadgeCheck, 
     Smartphone, HandCoins, Briefcase, Layers, Key,
-    Star,
-    MessageCircle,
-    Building,
-    Loader2 // Pour le fallback Suspense
+    Star, MessageCircle, Building, Loader2, ArrowRight, Zap, Globe, CheckCircle,
+    Sparkles, Radio, PackageOpen, ScanLine, Wallet, Share2, Workflow, Database, Link as LinkIcon, Bus
 } from 'lucide-react';
 
-// --- DATA : Dictionnaire de Contenu par Rôle ---
+// --- TYPES DE DONNÉES ---
+type Step = { icon: React.ElementType; title: string; desc: string };
+type Feature = { icon: React.ElementType; title: string; desc: string; tag?: string };
+type Stat = { value: string; label: string };
 
 type ContentData = {
-    title: React.ReactNode;
-    description: string;
+    themeColor: string;
+    heroTitle: React.ReactNode;
+    heroSubtitle: string;
     heroImage: string;
+    benefits: Stat[];
+    featuresTitle: string;
+    featuresDescription: string;
+    features: Feature[];
+    stepsTitle: string;
+    steps: Step[];
     ctaPrimary: { text: string; link: string };
     ctaSecondary: { text: string; link: string };
-    featuresTitle: string;
-    features: Array<{ icon: React.ElementType, title: string, desc: string }>;
-    stepsTitle: string;
-    steps: Array<{ icon: React.ElementType, title: string, desc: string }>;
-    bottomCtaTitle: string;
-    bottomCtaDesc: string;
 };
 
-// Contenu par défaut (CLIENT / Expéditeur)
-const DEFAULT_DATA: ContentData = {
-    title: <>L'envoi de colis au Cameroun,<br /><span className="text-amber-300 dark:text-amber-200">simplifié.</span></>,
-    description: "Déposez, suivez et recevez vos paquets dans notre réseau national de points relais. Rapide, fiable et abordable.",
-    heroImage: "/images/land.jpeg",
+// ==================================================================================
+// --- DONNÉES EXHAUSTIVES BASÉES SUR LE PDF (PicknDrop System) ---
+// ==================================================================================
+
+// 1. PicknDrop Link -> CLIENT / GRAND PUBLIC
+const LINK_DATA: ContentData = {
+    themeColor: "orange",
+    heroImage: "/images/link.jpeg",
+    heroTitle: <>La logistique unifiée,<br /><span className="text-orange-600">Sans adresse formelle.</span></>,
+    heroSubtitle: "La réponse aux défis du dernier kilomètre africain. Pré-enregistrement, dépôt en micro-hubs et transit sécurisé pour digitaliser la chaîne logistique urbaine.",
+    benefits: [
+        { value: "QR Code", label: "Sécurité" },
+        { value: "24/7", label: "Micro-Hubs" },
+        { value: "Low-Data", label: "Optimisé" }
+    ],
+    featuresTitle: "Expédition Simplifiée",
+    featuresDescription: "Conçu pour surmonter l'absence d'adresses et la fragmentation des services.",
+    features: [
+        { icon: MapPin, title: "Zones Sans Adresse", desc: "Technologie de géolocalisation relative permettant de livrer là où le système d'adressage est incomplet ou absent.", tag: "Innovation" },
+        { icon: Store, title: "Réseau Micro-Hubs", desc: "Transformation des petites boutiques et call-box en points de relais logistiques officiels pour le dépôt et retrait.", tag: "Proximité" },
+        { icon: Smartphone, title: "Optimisé Android", desc: "Architecture légère conçue pour fonctionner fluide sur les smartphones d'entrée de gamme largement utilisés.", tag: "Tech" },
+        { icon: Search, title: "Tracking Hybride", desc: "Historique complet et retransmission des données même lors de transits complexes (multi-legs, multi-transporteurs).", tag: "Trace" }
+    ],
+    stepsTitle: "Circuit du Colis",
+    steps: [
+        { icon: ClipboardPenLine, title: "1. Pré-enregistrement", desc: "L'utilisateur génère une demande et obtient un QR code unique avant même de se déplacer." },
+        { icon: Store, title: "2. Dépôt Sécurisé", desc: "Remise au Point Relais. Le responsable scanne et valide l'entrée physique dans le réseau." },
+        { icon: Workflow, title: "3. Transit & Hops", desc: "Acheminement via la chaîne logistique (inter-hubs) avec traçabilité à chaque point de rupture." },
+        { icon: Smile, title: "4. Retrait Client", desc: "Notification SMS/Push. Le destinataire présente son code sécurisé pour retirer le paquet." }
+    ],
     ctaPrimary: { text: "Envoyer un Colis", link: "/expedition" },
-    ctaSecondary: { text: "Devenir Point Relais", link: "/register" },
-    featuresTitle: "Nos services exceptionnels",
-    features: [
-        { icon: MapPin, title: "Réseau National", desc: "Des centaines de points relais accessibles partout au Cameroun." },
-        { icon: Search, title: "Suivi en Temps Réel", desc: "Sachez toujours où se trouve votre colis, du dépôt à la fin." },
-        { icon: Shield, title: "Sécurité Garantie", desc: "Vos colis sont traités avec soin et assurés contre les imprévus." },
-        { icon: Truck, title: "Livraison Rapide", desc: "Options express pour vos envois urgents à travers le pays." }
-    ],
-    stepsTitle: "Comment ça marche ?",
-    steps: [
-        { icon: ClipboardPenLine, title: "Décrivez votre colis", desc: "Remplissez un formulaire simple en ligne." },
-        { icon: Box, title: "Déposez au point", desc: "Choisissez le relais le plus proche et déposez-y le colis." },
-        { icon: Map, title: "Suivez son voyage", desc: "Notifications et suivi en direct de l'acheminement." },
-        { icon: Smile, title: "Retrait simple", desc: "Le destinataire reçoit un code sécurisé pour le retrait." }
-    ],
-    bottomCtaTitle: "Prêt à expédier ?",
-    bottomCtaDesc: "Pas besoin de compte ! Démarrez votre expédition en quelques clics."
+    ctaSecondary: { text: "Trouver un Point Relais", link: "/map" }
 };
 
-const FREELANCE_DATA: ContentData = {
-    title: <>Monétisez votre espace,<br /><span className="text-amber-300 dark:text-amber-200">devenez partenaire.</span></>,
-    description: "Transformez votre boutique ou votre domicile en Point Relais TiiBnTick. Gagnez une commission sur chaque colis déposé ou retiré.",
-    heroImage: "/images/image2.jpg",
-    ctaPrimary: { text: "Créer mon Point Relais", link: "/register" },
-    ctaSecondary: { text: "Connexion Espace Pro", link: "/login" },
-    featuresTitle: "Pourquoi devenir partenaire ?",
+// 2. PicknDrop Go -> MARKETPLACE / FREELANCE JOBS
+const GO_DATA: ContentData = {
+    themeColor: "green",
+    heroImage: "/images/go.png",
+    heroTitle: <>Rentabilisez les trajets,<br /><span className="text-emerald-600">Connectez les flux.</span></>,
+    heroSubtitle: "La marketplace ouverte (PiiBnTick) qui matche les besoins d'expédition avec les disponibilités de transport en temps réel.",
+    benefits: [
+        { value: "Live", label: "Matching" },
+        { value: "Eco", label: "Collaboratif" },
+        { value: "B2B/C", label: "Universel" }
+    ],
+    featuresTitle: "Opportunités Logistiques",
+    featuresDescription: "Professionnaliser l'informel (Benskinneurs) en structurant les revenus.",
     features: [
-        { icon: Coins, title: "Revenus Passifs", desc: "Gagnez de l'argent sur chaque flux de colis sans effort commercial." },
-        { icon: Users, title: "Flux Client", desc: "Attirez de nouveaux clients potentiels dans votre commerce." },
-        { icon: Smartphone, title: "Gestion Mobile", desc: "Une app simple pour scanner les colis et gérer votre stock." },
-        { icon: Shield, title: "Zéro Risque", desc: "Aucun investissement de départ requis. On vous fournit le kit." }
+        { icon: Zap, title: "Matching Intelligent", desc: "Algorithme de correspondance basé sur la géolocalisation temps réel et les créneaux horaires disponibles.", tag: "IA" },
+        { icon: Users, title: "Inclusion Totale", desc: "Permet aux étudiants, particuliers, et moto-taximen (benskinneurs) de monétiser leurs déplacements.", tag: "Social" },
+        { icon: Share2, title: "Annonces Colis", desc: "Publication simple d'annonces de colis à collecter. Les transporteurs postulent instantanément.", tag: "Market" },
+        { icon: Globe, title: "Impact Afrique", desc: "Structure progressivement le secteur informel en créant des profils vérifiables et notés.", tag: "Impact" }
     ],
-    stepsTitle: "Lancez-vous en 4 étapes",
+    stepsTitle: "Comment matcher ?",
     steps: [
-        { icon: UserCheck, title: "Inscription", desc: "Créez votre compte partenaire Freelance gratuitement." },
-        { icon: Store, title: "Configuration", desc: "Renseignez vos horaires et votre capacité de stockage." },
-        { icon: BadgeCheck, title: "Validation", desc: "Nous vérifions votre identité et activons votre point." },
-        { icon: HandCoins, title: "Encaissez", desc: "Scannez des colis et recevez vos paiements chaque semaine." }
+        { icon: Search, title: "1. Publication", desc: "Un client publie une annonce de colis OU un freelance publie un trajet prévu." },
+        { icon: LinkIcon, title: "2. Connexion", desc: "La plateforme propose les meilleures correspondances (coûts, distance, temps)." },
+        { icon: MessageCircle, title: "3. Négociation", desc: "Validation des termes via messagerie intégrée et blocage des fonds (Escrow)." },
+        { icon: Star, title: "4. Exécution", desc: "Transport suivi par GPS, preuve de livraison et notation mutuelle." }
     ],
-    bottomCtaTitle: "Rejoignez le réseau",
-    bottomCtaDesc: "Plus de 500 partenaires nous font déjà confiance."
+    ctaPrimary: { text: "Voir les annonces", link: "/marketplace" },
+    ctaSecondary: { text: "Publier un Trajet", link: "/freelance/publish" }
 };
 
-const LIVREUR_DATA: ContentData = {
-    title: <>Livrez et gagnez,<br /><span className="text-amber-300 dark:text-amber-200">à votre rythme.</span></>,
-    description: "Moto, vélo ou voiture ? Devenez votre propre patron avec TiiBnTick Delivery. Acceptez des courses, livrez, encaissez.",
-    heroImage: "/images/livrer.jpeg",
-    ctaPrimary: { text: "Devenir Livreur", link: "/register" },
-    ctaSecondary: { text: "Connexion Livreur", link: "/login" },
-    featuresTitle: "Avantages Livreur",
-    features: [
-        { icon: Key, title: "Liberté Totale", desc: "Connectez-vous quand vous voulez. Aucune heure imposée." },
-        { icon: BarChart3, title: "Gains Transparents", desc: "Prix fixés à l'avance. Vous gardez 100% des pourboires." },
-        { icon: Map, title: "App Intelligente", desc: "Navigation optimisée et attribution automatique des courses." },
-        { icon: Shield, title: "Assurance", desc: "Couverture incluse pendant vos courses pour votre sérénité." }
-    ],
-    stepsTitle: "La route est à vous",
-    steps: [
-        { icon: ClipboardPenLine, title: "Enregistrement", desc: "Fournissez vos documents (Permis, CNI, photo véhicule)." },
-        { icon: Smartphone, title: "Réception", desc: "Acceptez une demande de livraison proche de vous." },
-        { icon: Box, title: "Collecte", desc: "Récupérez le colis au point de départ (Relais ou Client)." },
-        { icon: HandCoins, title: "Paiement", desc: "Livrez et recevez votre paiement immédiatement." }
-    ],
-    bottomCtaTitle: "Prenez la route",
-    bottomCtaDesc: "Votre prochaine course est peut-être à 500 mètres."
-};
-
+// 3. PicknDrop Agency -> AGENCES DE TRANSPORT (ERP)
 const AGENCY_DATA: ContentData = {
-    title: <>Passez au niveau supérieur,<br /><span className="text-amber-300 dark:text-amber-200">Digitalisez votre agence.</span></>,
-    description: "Une suite logicielle complète pour les agences de transport et logistique. Gestion de flotte, tracking avancé et comptabilité intégrée.",
-    heroImage: "/images/image4.jpg",
-    ctaPrimary: { text: "Inscrire mon Agence", link: "/register" },
-    ctaSecondary: { text: "Portail Agence", link: "/login" },
-    featuresTitle: "Solution Enterprise",
+    themeColor: "blue",
+    heroImage: "/images/image10.jpeg",
+    heroTitle: <>L'ERP Logistique<br /><span className="text-blue-600">pour l'Afrique moderne.</span></>,
+    heroSubtitle: "Pilotez votre flotte, vos hubs et vos flux financiers avec une suite 'Offline-First' conçue pour les infrastructures locales.",
+    benefits: [
+        { value: "ERP", label: "Tout-en-un" },
+        { value: "Offline", label: "Resilient" },
+        { value: "IoT", label: "Connecté" }
+    ],
+    featuresTitle: "Gestion Agence 360°",
+    featuresDescription: "Des opérations au sol jusqu'à la comptabilité, tout est centralisé.",
     features: [
-        { icon: Layers, title: "Dashboard 360", desc: "Vue globale sur tous vos véhicules, chauffeurs et colis en temps réel." },
-        { icon: Users, title: "Gestion Équipe", desc: "Créez des accès pour vos employés (guichetiers, chauffeurs)." },
-        { icon: BarChart3, title: "Analytics", desc: "Rapports détaillés sur vos performances et votre chiffre d'affaires." },
-        { icon: Briefcase, title: "API Ouverte", desc: "Intégrez TiiBnTick directement à vos systèmes existants." }
+        { icon: Layers, title: "Pilotage Multi-Sites", desc: "Vision centralisée de toutes vos agences, dépôts et hubs urbains depuis un seul dashboard admin.", tag: "Admin" },
+        { icon: Database, title: "Mode Offline-First", desc: "Continuité de service garantie même en cas de coupure internet, avec synchronisation automatique.", tag: "Tech" },
+        { icon: BarChart3, title: "Bordereaux Numériques", desc: "Automatisation de la facturation, génération de feuilles de route et rapports de performance.", tag: "Finance" },
+        { icon: Bus, title: "Gestion de Flotte", desc: "Suivi des véhicules, affectation des chauffeurs et intégration IoT (Traceurs GPS).", tag: "Fleet" }
     ],
-    stepsTitle: "Intégration fluide",
+    stepsTitle: "Digitalisation Agence",
     steps: [
-        { icon: Building, title: "Compte Pro", desc: "Créez votre profil Agence certifiée." },
-        { icon: Users, title: "Onboarding", desc: "Invitez vos collaborateurs et enregistrez votre flotte." },
-        { icon: MapPin, title: "Déploiement", desc: "Configurez vos agences physiques comme points relais officiels." },
-        { icon: BarChart3, title: "Pilotage", desc: "Suivez la croissance de votre activité logistique." }
+        { icon: Building, title: "1. Onboarding", desc: "Création de la structure mère et de ses succursales (points de vente)." },
+        { icon: Users, title: "2. Staffing", desc: "Création des comptes agents avec rôles précis (guichetier, logistique, chauffeur)." },
+        { icon: PackageOpen, title: "3. Opérations", desc: "Traitement des colis : Enregistrement, Etiquetage, Groupage, Expédition." },
+        { icon: Workflow, title: "4. Monitoring", desc: "Suivi en temps réel des camions et notification clients à l'arrivée." }
     ],
-    bottomCtaTitle: "Modernisez votre logistique",
-    bottomCtaDesc: "Rejoignez les leaders du transport au Cameroun."
+    ctaPrimary: { text: "Digitaliser mon Agence", link: "/agency/register" },
+    ctaSecondary: { text: "Demander une Démo", link: "/contact" }
 };
 
+// 4. PicknDrop Point -> POINTS RELAIS (SHOPS)
+const POINT_DATA: ContentData = {
+    themeColor: "red",
+    heroImage: "/images/point.jpeg",
+    heroTitle: <>Convertissez votre espace<br /><span className="text-red-600">en Hub Rentable.</span></>,
+    heroSubtitle: "Solution clé-en-main pour boutiques, stations et cybercafés. Devenez un micro-hub logistique et augmentez vos revenus.",
+    benefits: [
+        { value: "+$$", label: "Commissions" },
+        { value: "Trafic", label: "Visibilité" },
+        { value: "Auto", label: "Gestion" }
+    ],
+    featuresTitle: "Gestion de Relais",
+    featuresDescription: "Faites de votre commerce le cœur du quartier.",
+    features: [
+        { icon: Store, title: "Setup Instantané", desc: "Convertit un petit commerce en acteur logistique légitime sans investissement matériel lourd.", tag: "Easy" },
+        { icon: ScanLine, title: "Scan & Check", desc: "Processus rapide d'entrée/sortie de colis par scan de QR Code pour réduire les files d'attente.", tag: "Ops" },
+        { icon: Wallet, title: "Commissions Auto", desc: "Calcul automatique et transparent des revenus générés par chaque paquet manipulé.", tag: "Revenue" },
+        { icon: Briefcase, title: "Multi-Operateur", desc: "Peut évoluer pour gérer plusieurs agents au sein du même point relais.", tag: "Scale" }
+    ],
+    stepsTitle: "Devenir Partenaire",
+    steps: [
+        { icon: UserCheck, title: "1. Validation", desc: "Inscription et vérification sommaire de l'emplacement et du stock." },
+        { icon: Smartphone, title: "2. Activation", desc: "Téléchargement de l'application 'Point' et configuration des horaires." },
+        { icon: Box, title: "3. Réception", desc: "Accueil des livreurs et clients pour dépôt/retrait. Scan obligatoire." },
+        { icon: HandCoins, title: "4. Paiement", desc: "Reversement périodique des commissions sur votre mobile money/compte." }
+    ],
+    ctaPrimary: { text: "Devenir Point Relais", link: "/register?type=point" },
+    ctaSecondary: { text: "Conditions & Gains", link: "/about-points" }
+};
+
+// 5. PicknDrop Freelancer -> LIVREURS INDÉPENDANTS
+const FREELANCE_DATA: ContentData = {
+    themeColor: "purple",
+    heroImage: "/images/free.jpeg",
+    heroTitle: <>L'App des Livreurs<br /><span className="text-purple-600">Professionnels.</span></>,
+    heroSubtitle: "Sécurisez vos missions, optimisez vos revenus et construisez votre réputation numérique.",
+    benefits: [
+        { value: "Pro", label: "Statut" },
+        { value: "Secure", label: "Gains" },
+        { value: "Maps", label: "Navigation" }
+    ],
+    featuresTitle: "La Boîte à Outils Pro",
+    featuresDescription: "Donner de la crédibilité internationale aux acteurs locaux.",
+    features: [
+        { icon: Star, title: "Réputation Vérifiée", desc: "Système de notation et d'historique permettant de gagner la confiance des clients.", tag: "Trust" },
+        { icon: Map, title: "Route Optimizer", desc: "Calcul des meilleurs itinéraires prenant en compte la complexité urbaine.", tag: "Nav" },
+        { icon: Shield, title: "Blockchain Trust", desc: "Toutes les preuves de livraison sont sécurisées pour éviter les litiges (Confidence).", tag: "Secu" },
+        { icon: Wallet, title: "Revenu Structuré", desc: "Historique clair des courses et paiements sécurisés via la plateforme.", tag: "Fin" }
+    ],
+    stepsTitle: "Cycle de Mission",
+    steps: [
+        { icon: CheckCircle, title: "1. Profiling", desc: "Enregistrement CNI/Permis et véhicule. Validation du statut 'Vérifié'." },
+        { icon: Search, title: "2. Matching", desc: "Réception de notification pour des colis proches de votre position." },
+        { icon: Truck, title: "3. Livraison", desc: "Navigation assistée jusqu'au client. Preuve de livraison numérique." },
+        { icon: Coins, title: "4. Cash-out", desc: "Accès immédiat à votre portefeuille virtuel." }
+    ],
+    ctaPrimary: { text: "Télécharger l'App", link: "/download" },
+    ctaSecondary: { text: "Inscription Chauffeur", link: "/register?type=driver" }
+};
+
+// 6. PicknDrop Market -> RECHERCHE & DÉCOUVERTE
 const MARKET_DATA: ContentData = {
-    title: <>Le marché ouvert de<br /><span className="text-amber-300 dark:text-amber-200">la logistique.</span></>,
-    description: "Trouvez le meilleur transporteur au meilleur prix, ou proposez vos services sur la plus grande place de marché logistique du Cameroun.",
-    heroImage: "/images/expedition.avif",
-    ctaPrimary: { text: "Voir les Offres", link: "/marketplace" },
-    ctaSecondary: { text: "Publier une annonce", link: "/expedition" },
-    featuresTitle: "La Marketplace TiiBnTick",
+    themeColor: "orange",
+    heroImage: "/images/market.png",
+    heroTitle: <>Le moteur de recherche<br /><span className="text-orange-600">logistique universel.</span></>,
+    heroSubtitle: "La vitrine publique pour trouver, comparer et suivre n'importe quel service logistique de l'écosystème.",
+    benefits: [
+        { value: "100%", label: "Visibilité" },
+        { value: "Unified", label: "Tracking" },
+        { value: "Smart", label: "Search" }
+    ],
+    featuresTitle: "Agrégateur de Services",
+    featuresDescription: "Tout l'écosystème PicknDrop accessible en un clic.",
     features: [
-        { icon: Search, title: "Transparence", desc: "Comparez les profils, les avis et les tarifs avant de choisir." },
-        { icon: Shield, title: "Sécurité", desc: "Paiements bloqués jusqu'à confirmation de la livraison." },
-        { icon: Users, title: "Communauté", desc: "Des milliers d'acteurs connectés en temps réel." },
-        { icon: Star, title: "Qualité", desc: "Système de notation pour garantir l'excellence de service." }
+        { icon: Search, title: "Recherche Unifiée", desc: "Moteur multicritères : trouvez colis, freelances, agences ou points relais.", tag: "Search" },
+        { icon: Globe, title: "Tracking Global", desc: "Suivi de bout en bout quel que soit le transporteur, via Code ou QR.", tag: "Track" },
+        { icon: Star, title: "Comparateur", desc: "Transparence totale sur les prix, délais et la réputation des prestataires.", tag: "Compare" },
+        { icon: Building, title: "Annuaire Pro", desc: "Cartographie interactive des milliers de points de services disponibles.", tag: "Maps" }
     ],
-    stepsTitle: "Simple et Efficace",
+    stepsTitle: "Expérience Utilisateur",
     steps: [
-        { icon: Search, title: "Recherche", desc: "Parcourez les profils ou publiez votre besoin d'expédition." },
-        { icon: MessageCircle, title: "Discussion", desc: "Échangez directement avec les transporteurs via la plateforme." }, 
-        { icon: HandCoins, title: "Accord", desc: "Validez le devis et bloquez le paiement." },
-        { icon: Truck, title: "Réalisation", desc: "Suivez la prestation jusqu'à la validation finale." }
+        { icon: Search, title: "1. Besoin", desc: "L'utilisateur cherche 'Livraison Douala' ou un numéro de suivi." },
+        { icon: Layers, title: "2. Résultats", desc: "Affichage des meilleures options triées par prix/fiabilité." },
+        { icon: CheckCircle, title: "3. Action", desc: "Réservation directe ou tracking en temps réel." },
+        { icon: MessageCircle, title: "4. Feedback", desc: "L'utilisateur laisse un avis certifié sur le prestataire." }
     ],
-    bottomCtaTitle: "Connectez-vous au marché",
-    bottomCtaDesc: "L'offre et la demande n'ont jamais été aussi proches."
+    ctaPrimary: { text: "Explorer le Marché", link: "/marketplace" },
+    ctaSecondary: { text: "Suivre un Colis", link: "/tracking" }
 };
 
-// Mapping des données
 const CONTENT_MAP: Record<string, ContentData> = {
-    'CLIENT': DEFAULT_DATA,
-    'FREELANCE': FREELANCE_DATA,
-    'LIVREUR': LIVREUR_DATA,
-    'AGENCY': AGENCY_DATA,
-    'MARKET': MARKET_DATA
+    'LINK': LINK_DATA, 'GO': GO_DATA, 'AGENCY': AGENCY_DATA, 
+    'POINT': POINT_DATA, 'FREELANCER': FREELANCE_DATA, 'MARKET': MARKET_DATA
 };
 
-// --- COMPOSANTS INTERNES ---
+// --- HELPERS STYLES ---
+const getTheme = (color: string) => {
+    const maps: Record<string, any> = {
+        orange: { 
+            text: 'text-orange-600', 
+            bg: 'bg-orange-600', 
+            bgLight: 'bg-orange-50 dark:bg-orange-900/20', 
+            border: 'border-orange-200 dark:border-orange-800', 
+            gradient: 'from-orange-500 to-amber-600',
+            shadow: 'shadow-orange-500/30'
+        },
+        green: { 
+            text: 'text-emerald-600', 
+            bg: 'bg-emerald-600', 
+            bgLight: 'bg-emerald-50 dark:bg-emerald-900/20', 
+            border: 'border-emerald-200 dark:border-emerald-800', 
+            gradient: 'from-emerald-500 to-green-600',
+            shadow: 'shadow-emerald-500/30'
+        },
+        blue: { 
+            text: 'text-blue-600', 
+            bg: 'bg-blue-600', 
+            bgLight: 'bg-blue-50 dark:bg-blue-900/20', 
+            border: 'border-blue-200 dark:border-blue-800', 
+            gradient: 'from-blue-500 to-cyan-600',
+            shadow: 'shadow-blue-500/30'
+        },
+        purple: { 
+            text: 'text-purple-600', 
+            bg: 'bg-purple-600', 
+            bgLight: 'bg-purple-50 dark:bg-purple-900/20', 
+            border: 'border-purple-200 dark:border-purple-800', 
+            gradient: 'from-purple-500 to-indigo-600',
+            shadow: 'shadow-purple-500/30'
+        },
+        red: { 
+            text: 'text-red-600', 
+            bg: 'bg-red-600', 
+            bgLight: 'bg-red-50 dark:bg-red-900/20', 
+            border: 'border-red-200 dark:border-red-800', 
+            gradient: 'from-red-500 to-rose-600',
+            shadow: 'shadow-red-500/30'
+        },
+    };
+    return maps[color] || maps.orange;
+};
 
-const DynamicBanniere = ({ data }: { data: ContentData }) => (
-  <section className="relative h-[80vh] min-h-[500px] flex items-center justify-center text-white text-center overflow-hidden">
-    <div 
-        className="absolute inset-0 bg-cover bg-center transition-all duration-1000" 
-        style={{ backgroundImage: `url('${data.heroImage}')` }}
-    />
-    <div className="absolute inset-0 bg-orange-600/40 mix-blend-multiply backdrop-blur-[2px]" />
-    <div className="absolute inset-0 bg-black/30" /> 
-
-    <div className="relative z-10 p-6 max-w-4xl mx-auto pt-20">
-      <motion.div 
-        key={`title-${data.ctaPrimary.link}`} 
-        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
-      >
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight drop-shadow-md">
-            {data.title}
-          </h1>
-      </motion.div>
-
-      <motion.p 
-        key={`desc-${data.ctaPrimary.link}`}
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.2 }}
-        className="mt-6 max-w-2xl mx-auto text-lg md:text-2xl opacity-95 font-medium text-slate-50 drop-shadow"
-      >
-        {data.description}
-      </motion.p>
-
-      <motion.div 
-        key={`cta-${data.ctaPrimary.link}`}
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.4 }}
-        className="mt-10 flex flex-col sm:flex-row gap-4 justify-center"
-      >
-        <Link 
-          href={data.ctaPrimary.link} 
-          className="bg-white text-orange-600 px-8 py-4 rounded-full font-bold text-lg shadow-2xl hover:bg-orange-50 transition-transform transform hover:scale-105"
-        >
-          {data.ctaPrimary.text}
-        </Link>
-        <Link 
-          href={data.ctaSecondary.link} 
-          className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 transition-all"
-        >
-          {data.ctaSecondary.text}
-        </Link>
-      </motion.div>
-    </div>
-  </section>
-);
-
-const DynamicFeatures = ({ data }: { data: ContentData }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <AnimatePresence mode='wait'>
-        {data.features.map((feature, index) => {
-            const Icon = feature.icon;
-            return (
-                <motion.div 
-                  key={feature.title + index}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.4, delay: index * 0.1 }}
-                  className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg hover:shadow-xl dark:shadow-gray-900/20 dark:hover:shadow-gray-900/30 hover:-translate-y-2 transition-all duration-300 border border-gray-100 dark:border-gray-700"
-                >
-                    <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full inline-block mb-4 text-orange-600 dark:text-orange-500">
-                        <Icon className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
-                    <p className="text-gray-600 dark:text-gray-300">{feature.desc}</p>
-                </motion.div>
-            )
-        })}
-        </AnimatePresence>
-    </div>
-);
-
-const DynamicSteps = ({ data }: { data: ContentData }) => (
-    <div className="relative">
-        <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-orange-200 dark:bg-orange-800 -translate-y-1/2 -mt-16"></div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
-            {data.steps.map((step, index) => {
-                const Icon = step.icon;
-                return (
-                    <motion.div 
-                       key={step.title} 
-                       initial={{opacity:0, scale:0.9}} 
-                       whileInView={{opacity:1, scale:1}}
-                       transition={{delay: index * 0.15}}
-                       className="text-center"
-                    >
-                        <div className="relative mb-6">
-                           <div className="bg-gradient-to-br from-orange-500 to-amber-500 dark:from-orange-600 dark:to-amber-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-lg dark:shadow-gray-900/20 relative z-10 text-white">
-                              <Icon className="w-10 h-10" />
-                           </div>
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Étape {index + 1}: {step.title}</h3>
-                        <p className="text-gray-600 dark:text-gray-300">{step.desc}</p>
-                    </motion.div>
-                )
-            })}
+// --- SOUS-COMPOSANT : CARTE BENTO ---
+const BentoCard = ({ feature, theme, idx }: { feature: Feature, theme: any, idx: number }) => (
+    <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, delay: idx * 0.1 }}
+        whileHover={{ y: -5 }}
+        className={`group relative p-6 bg-white dark:bg-slate-900/80 rounded-3xl border border-gray-100 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-xl transition-all h-full flex flex-col`}
+    >
+        {/* Decorative Gradient Background */}
+        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-0 group-hover:opacity-10 bg-gradient-to-br ${theme.gradient} transition-opacity blur-2xl`}></div>
+        
+        {/* Icon Header */}
+        <div className="flex justify-between items-start mb-6">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${theme.bgLight} group-hover:scale-110 transition-transform`}>
+                <feature.icon className={`w-6 h-6 ${theme.text}`}/>
+            </div>
+            {feature.tag && (
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-500 group-hover:${theme.text} transition-colors`}>
+                    {feature.tag}
+                </span>
+            )}
         </div>
-    </div>
+
+        {/* Content */}
+        <h3 className="text-xl font-bold mb-3 text-slate-900 dark:text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-gray-900 group-hover:to-gray-600 dark:group-hover:from-white dark:group-hover:to-gray-400">
+            {feature.title}
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+            {feature.desc}
+        </p>
+    </motion.div>
 );
 
-// --- COMPOSANT INTERNE LOGIQUE ---
-// Ce composant contient la logique de `useSearchParams` et le contenu
+// --- COMPOSANT PRINCIPAL ---
 const LandingContent = () => {
     const searchParams = useSearchParams();
-    const roleParam = searchParams.get('role')?.toUpperCase() || 'CLIENT';
-    
-    const [content, setContent] = useState<ContentData>(DEFAULT_DATA);
+    const roleParam = searchParams.get('role')?.toUpperCase() || 'LINK';
+    const [data, setData] = useState<ContentData>(LINK_DATA);
 
-    // Theme System
     useEffect(() => {
-        const applyTheme = () => {
-            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-        };
-        applyTheme();
-        const mq = window.matchMedia('(prefers-color-scheme: dark)');
-        mq.addEventListener('change', applyTheme);
-        return () => mq.removeEventListener('change', applyTheme);
-    }, []);
-
-    // Data Switch
-    useEffect(() => {
-        if (roleParam && CONTENT_MAP[roleParam]) {
-            setContent(CONTENT_MAP[roleParam]);
-        } else {
-            setContent(DEFAULT_DATA);
-        }
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (roleParam && CONTENT_MAP[roleParam]) setData(CONTENT_MAP[roleParam]);
+        window.scrollTo({top:0, behavior:'smooth'});
     }, [roleParam]);
 
-    return (
-        <div className="min-h-screen flex flex-col font-[family-name:var(--font-geist-sans)]">
-            <main className="flex-grow">
-                <DynamicBanniere data={content} />
-                
-                <section className="py-16 md:py-24 bg-orange-50/50 dark:bg-gray-800/50 transition-colors duration-300">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                                {content.featuresTitle}
-                            </h2>
-                            <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                                Découvrez comment TiiBnTick répond spécifiquement à vos besoins
-                            </p>
-                        </div>
-                        <DynamicFeatures data={content} />
-                    </div>
-                </section>
+    const theme = getTheme(data.themeColor);
 
-                <section id="how-it-works" className="py-16 md:py-24 bg-white dark:bg-gray-900 transition-colors duration-300">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="text-center mb-16">
-                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                                {content.stepsTitle}
-                            </h2>
-                            <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                                Processus simplifié pour un démarrage immédiat
+    return (
+        <div className="min-h-screen bg-slate-50 dark:bg-[#020202] text-slate-900 dark:text-slate-200 font-sans selection:bg-gray-800 selection:text-white overflow-hidden">
+            <NavbarHome />
+
+            {/* --- HERO SECTION : Compact & Split --- */}
+            <section className="relative pt-24 pb-16 lg:pt-36 lg:pb-24 px-4 overflow-visible">
+                {/* Background Ambient Lights */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] pointer-events-none opacity-40 dark:opacity-20">
+                    <motion.div 
+                        animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+                        transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
+                        className={`absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-gradient-to-b ${theme.gradient} blur-[120px]`}
+                    />
+                    <div className="absolute top-20 left-20 w-[300px] h-[300px] bg-purple-500/30 rounded-full blur-[80px]" />
+                </div>
+
+                <div className="container mx-auto max-w-7xl relative z-10">
+                    <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+                        
+                        {/* TEXTE (Left) */}
+                        <motion.div 
+                            initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}
+                            className="text-left flex flex-col items-start"
+                        >
+                            <div className={`mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-white/5 backdrop-blur-md shadow-sm`}>
+                                <div className={`w-2 h-2 rounded-full ${theme.bg} animate-pulse`}></div>
+                                <span className="text-xs font-bold uppercase tracking-widest opacity-80">Solution PicknDrop System</span>
+                            </div>
+
+                            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[0.95] tracking-tight mb-6 text-slate-900 dark:text-white">
+                                {data.heroTitle}
+                            </h1>
+                            <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 font-medium leading-relaxed max-w-lg mb-8">
+                                {data.heroSubtitle}
                             </p>
-                        </div>
-                        <DynamicSteps data={content} />
+
+                            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+                                <Link 
+                                    href={data.ctaPrimary.link} 
+                                    className={`relative group overflow-hidden px-8 py-4 rounded-2xl bg-gradient-to-r ${theme.gradient} text-white font-bold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1`}
+                                >
+                                    <span className="relative z-10 flex items-center gap-2">{data.ctaPrimary.text} <ArrowRight size={20}/></span>
+                                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                                </Link>
+                                <Link 
+                                    href={data.ctaSecondary.link} 
+                                    className="px-8 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-white/5 font-bold hover:bg-white hover:border-slate-300 transition-all backdrop-blur-md"
+                                >
+                                    {data.ctaSecondary.text}
+                                </Link>
+                            </div>
+
+                            {/* Stats Inline */}
+                            <div className="mt-12 flex gap-8 border-t border-slate-200 dark:border-slate-800 pt-8 w-full">
+                                {data.benefits.map((b, i) => (
+                                    <div key={i}>
+                                        <p className={`text-2xl font-black ${theme.text}`}>{b.value}</p>
+                                        <p className="text-xs font-bold uppercase tracking-wider opacity-60">{b.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+
+                        {/* VISUEL (Right) - Carte Flottante 3D */}
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.8, rotateY: -15 }} 
+                            animate={{ opacity: 1, scale: 1, rotateY: 0 }} 
+                            transition={{ duration: 0.8 }}
+                            className="relative perspective-1000 group"
+                        >
+                             <div className="relative aspect-[4/3] rounded-[2.5rem] bg-gray-100 dark:bg-gray-800 overflow-hidden shadow-2xl ring-1 ring-white/10 ring-offset-1 dark:ring-offset-gray-900">
+                                <img src={data.heroImage} alt="Hero" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+                                
+                                {/* Overlay Gradient */}
+                                <div className={`absolute inset-0 bg-gradient-to-t ${theme.gradient} mix-blend-color opacity-20 group-hover:opacity-30 transition-opacity`}/>
+                                
+                                {/* UI Floating Element simulates Dashboard */}
+                                <motion.div 
+                                    animate={{ y: [0, -10, 0] }}
+                                    transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                                    className="absolute bottom-6 left-6 right-6 p-4 bg-white/95 dark:bg-black/90 backdrop-blur-xl rounded-2xl border border-white/20 shadow-xl"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-xl ${theme.bg}`}>
+                                            <PackageOpen className="text-white w-6 h-6"/>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="h-2 bg-gray-200 dark:bg-gray-800 rounded-full w-3/4 mb-2 overflow-hidden">
+                                                <motion.div 
+                                                   initial={{ width: 0 }} whileInView={{ width: '75%' }} transition={{ duration: 1.5 }}
+                                                   className={`h-full ${theme.bg}`}
+                                                />
+                                            </div>
+                                            <div className="flex justify-between text-xs font-bold opacity-60">
+                                                <span>Traitement...</span>
+                                                <span>75%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                             </div>
+                        </motion.div>
                     </div>
-                </section>
-                
-                <section className="py-16 bg-orange-600 dark:bg-orange-700 text-white transition-colors duration-300">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <h2 className="text-3xl md:text-4xl font-bold">{content.bottomCtaTitle}</h2>
-                        <p className="mt-4 text-xl max-w-3xl mx-auto opacity-90 dark:opacity-95">
-                            {content.bottomCtaDesc}
+                </div>
+            </section>
+
+            {/* --- FEATURES GRID : Bento Style --- */}
+            <section className="py-20 relative">
+                <div className="container mx-auto px-4 max-w-7xl">
+                    <div className="text-center max-w-3xl mx-auto mb-16">
+                        <motion.h2 
+                             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                             className="text-3xl md:text-5xl font-black mb-6 tracking-tight text-slate-900 dark:text-white"
+                        >
+                            {data.featuresTitle}
+                        </motion.h2>
+                        <p className="text-lg text-slate-500 dark:text-slate-400 font-medium">
+                            {data.featuresDescription}
                         </p>
-                        <div className="mt-8">
-                            <Link 
-                                href={content.ctaPrimary.link}
-                                className="bg-white dark:bg-gray-100 text-orange-600 dark:text-orange-700 px-10 py-5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-200 transition-all duration-300 font-bold text-lg shadow-2xl dark:shadow-gray-900/40 transform hover:-translate-y-1"
-                            >
-                                {content.ctaPrimary.text}
-                            </Link>
-                        </div>
                     </div>
-                </section>
-            </main>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {data.features.map((feat, idx) => (
+                            <BentoCard key={idx} feature={feat} theme={theme} idx={idx} />
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* --- WORKFLOW STEPS : Timeline --- */}
+            <section className="py-20 bg-slate-100 dark:bg-slate-900/50">
+                <div className="container mx-auto px-4 max-w-7xl">
+                    <div className="mb-12 md:flex justify-between items-end">
+                         <div>
+                             <span className={`text-xs font-black uppercase tracking-[0.2em] ${theme.text}`}>Workflow</span>
+                             <h2 className="text-3xl font-bold mt-2 text-slate-900 dark:text-white">{data.stepsTitle}</h2>
+                         </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
+                        {/* Connecting Line (Desktop) */}
+                        <div className="hidden md:block absolute top-12 left-0 right-0 h-0.5 bg-slate-200 dark:bg-slate-800 -z-10"></div>
+                        
+                        {data.steps.map((step, idx) => (
+                            <motion.div 
+                                key={idx}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.15 }}
+                                className="relative bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm"
+                            >
+                                <div className={`w-12 h-12 rounded-xl mb-4 flex items-center justify-center text-white shadow-lg ${theme.bg}`}>
+                                    <span className="font-black text-lg">{idx + 1}</span>
+                                </div>
+                                <h4 className="font-bold text-lg mb-2 text-slate-900 dark:text-white">{step.title}</h4>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{step.desc}</p>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* --- FOOTER CTA : Compact --- */}
+            <section className="py-24 px-4">
+                <div className="container mx-auto max-w-5xl">
+                    <motion.div 
+                        whileHover={{ scale: 1.01 }}
+                        className={`rounded-[3rem] p-12 text-center text-white bg-gradient-to-br ${theme.gradient} relative overflow-hidden shadow-2xl shadow-${theme.themeColor}-900/20`}
+                    >
+                         {/* Abstract BG */}
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                        <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-white blur-[100px] opacity-20"></div>
+
+                        <div className="relative z-10 max-w-2xl mx-auto">
+                            <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-6">Prêt à transformer votre logistique ?</h2>
+                            <p className="text-lg opacity-90 mb-8 font-medium">Rejoignez la plateforme et accédez immédiatement aux outils.</p>
+                            
+                            <div className="flex justify-center gap-4">
+                                <Link 
+                                   href={data.ctaPrimary.link}
+                                   className="px-8 py-4 bg-white text-slate-900 rounded-xl font-bold hover:scale-105 transition-transform shadow-lg"
+                                >
+                                    Commencer
+                                </Link>
+                                <Link 
+                                    href="/contact"
+                                    className="px-8 py-4 bg-black/20 text-white border border-white/20 rounded-xl font-bold hover:bg-black/30 transition-colors"
+                                >
+                                    Contact
+                                </Link>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            </section>
+            
             <Footer />
         </div>
     );
 };
 
-// Fallback Component lors du chargement Suspense
-const LandingLoading = () => (
-    <div className="min-h-screen flex items-center justify-center bg-orange-50">
-        <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-12 h-12 text-orange-600 animate-spin" />
-            <p className="text-lg font-bold text-orange-800">Chargement de votre expérience...</p>
-        </div>
+// Fallback Suspense
+const Loader = () => (
+    <div className="h-screen w-full flex items-center justify-center bg-white dark:bg-black">
+        <Loader2 className="animate-spin text-slate-400 w-8 h-8"/>
     </div>
 );
 
-// --- COMPOSANT PAGE PRINCIPAL ---
-// Il ne fait que Wrapper dans Suspense
 export default function LandingPage() {
     return (
-        <div className="w-full bg-white dark:bg-gray-900 transition-colors duration-300">
-            <NavbarHome />
-            <Suspense fallback={<LandingLoading />}>
-                <LandingContent />
-            </Suspense>
-        </div>
+        <Suspense fallback={<Loader />}>
+            <LandingContent />
+        </Suspense>
     );
 }

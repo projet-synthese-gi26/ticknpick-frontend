@@ -48,7 +48,7 @@ interface FeatureSectionProps {
 
 // === CONFIGURATION DES DONNÉES ===
 
-const SANTA_BG_IMAGE = "/images/pick2.png";
+const SANTA_BG_IMAGE = "/images/hero.jpeg";
 
 const COLOR_THEMES: Record<string, ColorTheme> = {
   orange: { badge: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300", button: "bg-orange-600 hover:bg-orange-700 text-white", border: "border-orange-500" },
@@ -65,7 +65,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "TiiBnTick Link",
     subtitle: "Pré-enregistrement & Transit",
     description: "La solution pour les particuliers et le commerce de proximité. Gérez le pré-enregistrement, le dépôt et le retrait via des micro-hubs, même dans les zones sans adresse formelle.",
-    image: "/images/link.png",
+    image: "/images/link.jpeg",
     icon: MapPin,
     theme: "orange",
     details: ["Entrée principale utilisateur", "QR Code Sécurisé", "Micro-hubs (Call-box/Boutiques)", "Optimisé réseaux faibles"]
@@ -87,7 +87,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "TiiBnTick Agency",
     subtitle: "ERP Logistique Complet",
     description: "Un outil de gestion professionnel pour les agences de transport. Centralisez votre flotte, pilotez vos flux multi-sites, gérez la facturation et les bordereaux électroniques.",
-    image: "/images/image4.png",
+    image: "/images/image10.jpeg",
     icon: Layers,
     theme: "blue",
     details: ["Pilotage Multi-sites & Agents", "Planification de tournées", "Suivi & Facturation", "Mode Offline-First"]
@@ -98,7 +98,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "TiiBnTick Point",
     subtitle: "Gestion Points Relais",
     description: "Convertissez instantanément boutiques, stations ou cybercafés en acteurs logistiques légitimes. Gérez les entrées/sorties, validez les colis et suivez vos commissions.",
-    image: "/images/point.png",
+    image: "/images/point.jpeg",
     icon: Store,
     theme: "red",
     details: ["Enregistrement Rapide", "Gestion files d'attente", "Commissions automatiques", "Rapports journaliers"]
@@ -109,7 +109,7 @@ const FEATURES_DATA: FeatureItem[] = [
     title: "TiiBnTick Freelancer",
     subtitle: "Pour Livreurs Indépendants",
     description: "L'application dédiée pour professionnaliser les benskinneurs et transporteurs individuels. Gagnez en crédibilité avec un profil pro, un historique de course et des paiements sécurisés.",
-    image: "/images/free.png",
+    image: "/images/free.jpeg",
     icon: Truck,
     theme: "purple",
     details: ["Profil Pro & Réputation", "Gestion des missions", "Optimisation trajets", "Revenus structurés"]

@@ -255,7 +255,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Footer Sidebar Desktop */}
         <div className="px-4 py-4 border-t border-orange-100/50 dark:border-gray-800 bg-orange-50/30 dark:bg-gray-800/30 flex-shrink-0 space-y-2">
           <button 
-            onClick={() => router.push('/')} 
+            onClick={() => router.push('/home')} 
             className="w-full flex items-center space-x-3 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all group"
           >
             <Home className="h-4 w-4 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors" />
