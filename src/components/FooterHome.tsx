@@ -13,7 +13,7 @@ export default function Footer() {
               <div className="bg-orange-500 p-2 rounded-lg">
                 <Package className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold">PicknDrop</span>
+              <span className="text-xl font-bold">TiiBnTick</span>
             </div>
             <p className="text-gray-400">La solution simple et fiable pour tous vos envois de colis au Cameroun.</p>
           </div>
@@ -47,7 +47,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-gray-700 mt-10 pt-6 text-center text-sm text-gray-500">
-          <p>&copy; {new Date().getFullYear()} PicknDrop Cameroun. Tous droits réservés.</p>
+          <p>&copy; {new Date().getFullYear()} TiiBnTick Cameroun. Tous droits réservés.</p>
         </div>
       </div>
     </footer>

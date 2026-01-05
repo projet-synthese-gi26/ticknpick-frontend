@@ -118,7 +118,7 @@ export default function SuperAdminDashboard() {
                 <PackageCheck className="w-5 h-5"/>
              </div>
              <div>
-                 <h1 className="font-bold text-xl text-slate-900 dark:text-white leading-tight">PicknDrop</h1>
+                 <h1 className="font-bold text-xl text-slate-900 dark:text-white leading-tight">TiiBnTick</h1>
                  <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded uppercase tracking-wider">
                     Admin
                  </span>

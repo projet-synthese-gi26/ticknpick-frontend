@@ -9,7 +9,7 @@ import CookieBanner from '@/components/CookieBanner';
 import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
-  title: 'PicknDrop Link',
+  title: 'TiiBnTick Link',
   description: 'Application de gestion logistique...',
 }
 

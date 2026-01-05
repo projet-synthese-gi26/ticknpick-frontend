@@ -73,7 +73,7 @@ export default function Navbar() {
               className={`text-3xl font-bold transition-colors duration-300 
                          ${isScrolled || isOpen ? 'text-green-700' : 'text-gray-800 group-hover:text-green-700'}`}
             >
-              PicknDrop Point
+              TiiBnTick Point
             </span>
           </Link>
 

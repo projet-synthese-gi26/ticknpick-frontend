@@ -91,7 +91,7 @@ interface PaymentOptionProps {
 }
 
 const PAYMENT_OPERATOR_FEE = 100;
-const APP_NAME = "PicknDrop Link";
+const APP_NAME = "TiiBnTick Link";
 
 export default function PaymentStep({ allData, onBack, onPaymentFinalized, currentUser }: PaymentStepProps) {
   const [selectedMethod, setSelectedMethod] = useState<'cash' | 'mobile' | 'recipient'>('cash');

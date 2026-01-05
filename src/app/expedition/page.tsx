@@ -319,7 +319,7 @@ export default function ShippingPage() {
             // HEADER
             pdf.setFontSize(22);
             pdf.setTextColor(249, 115, 22); 
-            pdf.text("PicknDrop Link", margin, y - 5);
+            pdf.text("TiiBnTick Link", margin, y - 5);
             
             pdf.setFontSize(11);
             pdf.setTextColor(0,0,0);

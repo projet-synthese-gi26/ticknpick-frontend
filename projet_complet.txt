@@ -33,7 +33,7 @@ import { useAuth } from '@/context/AuthContext';
 import { relayPointService } from '@/services/relayPointService';
 import { packageService } from '@/services/packageService';
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "PicknDrop Link";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || " Link";
 
 // --- INTERFACES ---
 
@@ -781,7 +781,7 @@ export default function HomePage() {
     switch (user.role) {
       case 'CLIENT':
         config = {
-          title: "PicknDrop Link",
+          title: " Link",
           welcomeMessage: "votre espace personnel pour gérer vos envois.",
           mainIcon: <Package className='text-white h-12 w-12' />,
           services: [
@@ -794,7 +794,7 @@ export default function HomePage() {
       
       case 'LIVREUR':
         config = {
-          title: "PicknDrop Deliver",
+          title: " Deliver",
           welcomeMessage: "dans votre espace de gestion des livraisons.",
           mainIcon: <Truck className='text-white h-12 w-12' />,
           services: [
@@ -807,7 +807,7 @@ export default function HomePage() {
 
       case 'AGENCY':
         config = {
-          title: "PicknDrop Agency", // Titre spécifique Agence
+          title: " Agency", // Titre spécifique Agence
           welcomeMessage: "dans votre centre de gestion logistique.",
           mainIcon: <Building2 className='text-white h-12 w-12' />,
           services: [
@@ -822,7 +822,7 @@ export default function HomePage() {
       case 'FREELANCE':
       default:
         config = {
-          title: "PicknDrop Point", // Titre spécifique Freelance
+          title: " Point", // Titre spécifique Freelance
           welcomeMessage: "dans le système de gestion de votre point relais.",
           mainIcon: <MapPinHouse className='text-white h-12 w-12' />,
           services: [
@@ -8809,7 +8809,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Manutentionnaire',
     workZone: 'Zone B - Stockage',
     status: 'En ligne',
-    contact: { phone: '+237 699112233', email: 'c.essono@pickndrop.cm' },
+    contact: { phone: '+237 699112233', email: 'c.essono@.cm' },
     assignedTasks: [
       { id: 't-101', description: 'Ranger 50 nouveaux colis', status: 'En cours', dueDate: '2025-07-28' },
       { id: 't-102', description: 'Scanner inventaire Allée B-3', status: 'À faire', dueDate: '2025-07-28' },
@@ -8824,7 +8824,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Responsable Stock',
     workZone: 'Zone A - Réception',
     status: 'En pause',
-    contact: { phone: '+237 677445566', email: 'a.mballa@pickndrop.cm' },
+    contact: { phone: '+237 677445566', email: 'a.mballa@.cm' },
     assignedTasks: [
       { id: 't-103', description: 'Valider le lot Jumia H-56', status: 'Terminé', dueDate: '2025-07-28' },
       { id: 't-104', description: 'Assigner tâches aux manutentionnaires', status: 'En cours', dueDate: '2025-07-28' },
@@ -8839,7 +8839,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Préparateur Commandes',
     workZone: 'Zone C - Expédition',
     status: 'Hors ligne',
-    contact: { phone: '+237 655778899', email: 'm.fouda@pickndrop.cm' },
+    contact: { phone: '+237 655778899', email: 'm.fouda@.cm' },
     assignedTasks: [
       { id: 't-105', description: 'Préparer expédition pour Douala', status: 'À faire', dueDate: '2025-07-29' },
     ],
@@ -8853,7 +8853,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Accueil Client',
     workZone: 'Zone A - Réception',
     status: 'En ligne',
-    contact: { phone: '+237 688990011', email: 's.ngono@pickndrop.cm' },
+    contact: { phone: '+237 688990011', email: 's.ngono@.cm' },
     assignedTasks: [
       { id: 't-106', description: 'Traiter 5 retraits clients', status: 'En cours', dueDate: '2025-07-28' }
     ],
@@ -16397,7 +16397,7 @@ export default function LoginPage() {
             <div className="space-y-4">
               <h1 className="text-5xl font-black text-gray-800 dark:text-slate-50 leading-tight">
                 <span className="bg-gradient-to-r from-orange-600 to-amber-800 dark:from-orange-500 dark:to-amber-500 bg-clip-text text-transparent animate-pulse">
-                  PicknDrop
+                  
                 </span>
                 <span className="block text-4xl font-bold text-orange-600 dark:text-orange-400 mt-2">
                   Link
@@ -16821,7 +16821,7 @@ export default function ShippingPage() {
             // HEADER
             pdf.setFontSize(22);
             pdf.setTextColor(249, 115, 22); 
-            pdf.text("PicknDrop Link", margin, y - 5);
+            pdf.text("- 5);
             
             pdf.setFontSize(11);
             pdf.setTextColor(0,0,0);
@@ -18184,7 +18184,7 @@ interface PaymentOptionProps {
 }
 
 const PAYMENT_OPERATOR_FEE = 100;
-const APP_NAME = "PicknDrop Link";
+const APP_NAME = " Link";
 
 export default function PaymentStep({ allData, onBack, onPaymentFinalized, currentUser }: PaymentStepProps) {
   const [selectedMethod, setSelectedMethod] = useState<'cash' | 'mobile' | 'recipient'>('cash');
@@ -22094,10 +22094,10 @@ export const legalDocs: Record<string, LegalContent> = {
     content: () => (
       <>  
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold">PicknDrop — Terms of Use / Conditions d’Utilisation</h2>
+        <h2 className="text-3xl font-bold"> — Terms of Use / Conditions d’Utilisation</h2>
         <p className="text-md mt-2">Version 2.0 — 02 Sep 2025</p>
-        <p className="text-sm text-gray-600 mt-1"><strong>Service Owner:</strong> Yowyob Inc. Ltd. ("Yowyob", "PicknDrop", "we", "us")</p>
-        <p className="text-sm text-gray-600"><strong>Scope:</strong> All PicknDrop web and mobile properties, pre‑production and production environments, and related APIs/SDKs.</p>
+        <p className="text-sm text-gray-600 mt-1"><strong>Service Owner:</strong> Yowyob Inc. Ltd. ("Yowyob", "", "we", "us")</p>
+        <p className="text-sm text-gray-600"><strong>Scope:</strong> All  web and mobile properties, pre‑production and production environments, and related APIs/SDKs.</p>
       </div>
 
       <hr className="my-8" />
@@ -22107,10 +22107,10 @@ export const legalDocs: Record<string, LegalContent> = {
         <h2 className="text-2xl font-bold mb-4">PART I — ENGLISH (Standalone)</h2>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">1. Acceptance of Terms</h3>
-        <p>By accessing or using PicknDrop (including web, iOS/Android apps, and APIs), you agree to these Terms. If you do not agree, do not use the Services. We may amend these Terms; material changes will be notified in‑app, by banner, or by email. Continued use constitutes acceptance of changes.</p>
+        <p>By accessing or using  (including web, iOS/Android apps, and APIs), you agree to these Terms. If you do not agree, do not use the Services. We may amend these Terms; material changes will be notified in‑app, by banner, or by email. Continued use constitutes acceptance of changes.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">2. The Services (Summary)</h3>
-        <p>PicknDrop enables on‑demand pickup and delivery facilitation, shipment tracking, status notifications, and related features (e.g., address/landmark assistance, proof‑of‑pickup/delivery uploads). Certain features may be offered in beta and may change or be withdrawn at any time. Availability may vary by region and device.</p>
+        <p> enables on‑demand pickup and delivery facilitation, shipment tracking, status notifications, and related features (e.g., address/landmark assistance, proof‑of‑pickup/delivery uploads). Certain features may be offered in beta and may change or be withdrawn at any time. Availability may vary by region and device.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">3. Accounts & Eligibility</h3>
         <p>You must be at least the age of majority in your jurisdiction (or have verifiable guardian consent where permitted). You are responsible for the security of your credentials and for all actions under your account. We may require identity verification for higher‑risk features (e.g., driver/courier onboarding) and may suspend/terminate accounts in case of suspected abuse or legal non‑compliance.</p>
@@ -22197,10 +22197,10 @@ export const legalDocs: Record<string, LegalContent> = {
         <h2 className="text-2xl font-bold mb-4">PART II — FRANÇAIS (Autonome)</h2>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">1. Acceptation des Conditions</h3>
-        <p>En accédant ou en utilisant PicknDrop (web, apps iOS/Android et API), vous acceptez les présentes Conditions. Si vous n’êtes pas d’accord, n’utilisez pas les Services. Nous pouvons modifier ces Conditions ; les changements importants seront notifiés dans l’app, par bannière ou par e‑mail. Votre utilisation continue vaut acceptation des modifications.</p>
+        <p>En accédant ou en utilisant  (web, apps iOS/Android et API), vous acceptez les présentes Conditions. Si vous n’êtes pas d’accord, n’utilisez pas les Services. Nous pouvons modifier ces Conditions ; les changements importants seront notifiés dans l’app, par bannière ou par e‑mail. Votre utilisation continue vaut acceptation des modifications.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">2. Les Services (Résumé)</h3>
-        <p>PicknDrop permet la facilitation d’enlèvements et de livraisons à la demande, le suivi des envois, les notifications d’état et des fonctionnalités associées (ex. assistance adresse/repère, preuves d’enlèvement/livraison). Certaines fonctions peuvent être proposées en bêta et évoluer ou être retirées. La disponibilité varie selon la région et l’appareil.</p>
+        <p> permet la facilitation d’enlèvements et de livraisons à la demande, le suivi des envois, les notifications d’état et des fonctionnalités associées (ex. assistance adresse/repère, preuves d’enlèvement/livraison). Certaines fonctions peuvent être proposées en bêta et évoluer ou être retirées. La disponibilité varie selon la région et l’appareil.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">3. Comptes & Éligibilité</h3>
         <p>Vous devez avoir l’âge légal de votre juridiction (ou l’accord d’un tuteur lorsque autorisé). Vous êtes responsable de la sécurité de vos identifiants et des actions réalisées depuis votre compte. Une vérification d’identité peut être requise pour des fonctions à risque (ex. onboarding chauffeur/coursier). Nous pouvons suspendre/résilier un compte en cas d’abus présumé ou de non‑conformité légale.</p>
@@ -22292,9 +22292,9 @@ export const legalDocs: Record<string, LegalContent> = {
     lastUpdated: "25 Mai 2024",
     content: () => (
       <>
-        <h1 className="text-3xl font-bold mb-2">Yowyob PicknDrop — Privacy & Data Policy / Politique de confidentialité & des données</h1>
+        <h1 className="text-3xl font-bold mb-2">Yowyob  — Privacy & Data Policy / Politique de confidentialité & des données</h1>
         <p className="text-md text-gray-600">Version 3.0 — 02 Sep 2025</p>
-        <p className="text-md text-gray-600 mb-6">Service Owner: Yowyob Inc. Ltd. ("PicknDrop", "we", "us")</p>
+        <p className="text-md text-gray-600 mb-6">Service Owner: Yowyob Inc. Ltd. ("", "we", "us")</p>
         
         <hr className="my-8" />
 
@@ -22303,7 +22303,7 @@ export const legalDocs: Record<string, LegalContent> = {
           <h2 className="text-2xl font-bold mt-8 mb-4">PART I — ENGLISH (Standalone)</h2>
           
           <h3 className="text-xl font-semibold mt-6 mb-3">1) Who we are & scope</h3>
-          <p>This Privacy & Data Policy explains how PicknDrop collects, uses, shares and protects personal data across our websites, mobile apps, APIs/SDKs and related services. It applies to customers, recipients, couriers/drivers, business partners and site/app visitors.</p>
+          <p>This Privacy & Data Policy explains how  collects, uses, shares and protects personal data across our websites, mobile apps, APIs/SDKs and related services. It applies to customers, recipients, couriers/drivers, business partners and site/app visitors.</p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">2) Personal data we collect (by category)</h3>
           <ul className="list-disc list-inside space-y-2 pl-4">
@@ -22467,7 +22467,7 @@ export const legalDocs: Record<string, LegalContent> = {
           <h2 className="text-2xl font-bold mt-8 mb-4">PART II — FRANÇAIS (Autonome)</h2>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">1) Qui sommes‑nous & portée</h3>
-          <p>La présente Politique de confidentialité & des données explique comment PicknDrop collecte, utilise, partage et protège les données personnelles sur nos sites web, applications mobiles, API/SDK et services associés. Elle s’applique aux clients, destinataires, coursiers/chauffeurs, partenaires et visiteurs.</p>
+          <p>La présente Politique de confidentialité & des données explique comment  collecte, utilise, partage et protège les données personnelles sur nos sites web, applications mobiles, API/SDK et services associés. Elle s’applique aux clients, destinataires, coursiers/chauffeurs, partenaires et visiteurs.</p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">2) Données personnelles collectées (par catégorie)</h3>
           <ul className="list-disc list-inside space-y-2 pl-4">
@@ -22636,13 +22636,13 @@ export const legalDocs: Record<string, LegalContent> = {
     content: () => (
       <>
         {/* En-tête du document */}
-        <h2 className="text-2xl font-bold mb-2">Yowyob PicknDrop — Politique sur les Cookies & Technologies Similaires</h2>
+        <h2 className="text-2xl font-bold mb-2">Yowyob  — Politique sur les Cookies & Technologies Similaires</h2>
         <p className="text-sm text-gray-600 mb-1">Version 3.1 — 02 Sep 2025</p>
-        <p className="text-sm text-gray-600 mb-6">Propriétaire du service : Yowyob Inc. Ltd. ("PicknDrop", "nous").</p>
+        <p className="text-sm text-gray-600 mb-6">Propriétaire du service : Yowyob Inc. Ltd. ("", "nous").</p>
         
         {/* Contenu de la politique en français */}
         <h3 className="text-xl font-semibold mt-6 mb-3">1) Introduction</h3>
-        <p>Le présent document explique comment PicknDrop utilise des cookies, balises, SDK, stockage local et technologies similaires sur nos sites web et applications mobiles. Nous les utilisons pour authentifier les utilisateurs, sécuriser les Services, mémoriser les préférences, prévenir les abus, mesurer l’audience et améliorer la fiabilité et l’expérience.</p>
+        <p>Le présent document explique comment  utilise des cookies, balises, SDK, stockage local et technologies similaires sur nos sites web et applications mobiles. Nous les utilisons pour authentifier les utilisateurs, sécuriser les Services, mémoriser les préférences, prévenir les abus, mesurer l’audience et améliorer la fiabilité et l’expérience.</p>
         
         <h3 className="text-xl font-semibold mt-6 mb-3">2) Qu’est-ce qu’un cookie et des technologies similaires ?</h3>
         <p>Un cookie est un petit fichier texte enregistré par votre navigateur ou appareil lors de la visite d’un site ou de l’usage d’une app. Des technologies proches incluent le localStorage/sessionStorage, les pixels/balises, les SDK mobiles et les identifiants d’appareil/de publicité (p. ex. IDFA/GAID).</p>
@@ -22689,49 +22689,49 @@ export const legalDocs: Record<string, LegalContent> = {
                   <tr>
                       <td className="py-2 px-4 border-b">Essentiel</td>
                       <td className="py-2 px-4 border-b">session_id</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b"></td>
                       <td className="py-2 px-4 border-b">Session</td>
                       <td className="py-2 px-4 border-b">Authentifier et maintenir la session</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Essentiel</td>
                       <td className="py-2 px-4 border-b">cookie_consent</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b"></td>
                       <td className="py-2 px-4 border-b">12 mois</td>
                       <td className="py-2 px-4 border-b">Conserver vos préférences de consentement</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Sécurité</td>
                       <td className="py-2 px-4 border-b">csrf_token</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b"></td>
                       <td className="py-2 px-4 border-b">Session</td>
                       <td className="py-2 px-4 border-b">Prévenir la falsification de requêtes</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Fonctionnel</td>
                       <td className="py-2 px-4 border-b">pnd_last_tracking_ref</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b"></td>
                       <td className="py-2 px-4 border-b">30 jours</td>
                       <td className="py-2 px-4 border-b">Mémoriser le dernier numéro de suivi saisi</td>
                   </tr>
                    <tr>
                       <td className="py-2 px-4 border-b">Fonctionnel</td>
                       <td className="py-2 px-4 border-b">lang / locale</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b"></td>
                       <td className="py-2 px-4 border-b">6 mois</td>
                       <td className="py-2 px-4 border-b">Langue et pays préférés</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Analytics</td>
                       <td className="py-2 px-4 border-b">_ga / clés GA4</td>
-                      <td className="py-2 px-4 border-b">Google / PicknDrop</td>
+                      <td className="py-2 px-4 border-b">Google / </td>
                       <td className="py-2 px-4 border-b">13 mois (EEE/RU)</td>
                       <td className="py-2 px-4 border-b">Mesure d’audience</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Performance</td>
                       <td className="py-2 px-4 border-b">cw_vitals</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b"></td>
                       <td className="py-2 px-4 border-b">30 jours</td>
                       <td className="py-2 px-4 border-b">Indicateurs de performance</td>
                   </tr>
@@ -22912,16 +22912,16 @@ export const legalDocs: Record<string, LegalContent> = {
     lastUpdated: "25 Mai 2024",
     content: () => (
       <>
-          <h2 className="text-2xl font-bold mb-2">Yowyob PicknDrop — Fraud Awareness / Sensibilisation à la fraude</h2>
+          <h2 className="text-2xl font-bold mb-2">Yowyob  — Fraud Awareness / Sensibilisation à la fraude</h2>
           <p className="text-sm text-gray-600">Version 1.0 — 02 Sep 2025</p>
-          <p className="text-sm text-gray-600 mb-8">Service Owner: Yowyob Inc. Ltd. (PicknDrop)</p>
+          <p className="text-sm text-gray-600 mb-8">Service Owner: Yowyob Inc. Ltd. ()</p>
 
           {/* PARTIE ANGLAISE */}
           <div id="english-section">
               <h2 className="text-2xl font-bold mt-8 mb-4 border-b pb-2">PART I — ENGLISH (Standalone)</h2>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">1) Purpose & Scope</h3>
-              <p>This page helps you recognize and avoid fraud attempts that misuse PicknDrop’s name, logo, tracking, or communication channels. It applies to our websites, mobile apps, and official social channels.</p>
+              <p>This page helps you recognize and avoid fraud attempts that misuse ’s name, logo, tracking, or communication channels. It applies to our websites, mobile apps, and official social channels.</p>
               
               <h3 className="text-xl font-semibold mt-6 mb-3">2) How fraudsters operate (typical patterns)</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -22943,7 +22943,7 @@ export const legalDocs: Record<string, LegalContent> = {
                       <tbody>
                           <tr>
                               <td className="border p-3">Request for payment via SMS/WhatsApp or by gift cards/airtime</td>
-                              <td className="border p-3">Do not pay; only pay inside the PicknDrop app/website or at official partner points</td>
+                              <td className="border p-3">Do not pay; only pay inside the  app/website or at official partner points</td>
                           </tr>
                           <tr>
                               <td className="border p-3">Link to download an APK/app from SMS</td>
@@ -22951,7 +22951,7 @@ export const legalDocs: Record<string, LegalContent> = {
                           </tr>
                           <tr>
                               <td className="border p-3">Sender email/domain looks odd (misspellings, subdomains)</td>
-                              <td className="border p-3">Verify the domain carefully; when in doubt, contact PicknDrop Support</td>
+                              <td className="border p-3">Verify the domain carefully; when in doubt, contact  Support</td>
                           </tr>
                           <tr>
                               <td className="border p-3">Shortened links (bit.ly, tinyurl) or mismatched addresses</td>
@@ -22969,19 +22969,19 @@ export const legalDocs: Record<string, LegalContent> = {
                   </table>
               </div>
               
-              <h3 className="text-xl font-semibold mt-6 mb-3">4) How PicknDrop contacts you</h3>
+              <h3 className="text-xl font-semibold mt-6 mb-3">4) How  contacts you</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
                   <li>We may send transactional emails/SMS/push strictly related to your shipments (e.g., pickup window, status changes).</li>
                   <li>We do not ask you to disclose passwords or one‑time codes (OTP).</li>
                   <li>We do not send APKs or ask you to install apps from links in SMS. Install only from official app stores.</li>
-                  <li>We only collect money for official PicknDrop delivery services (e.g., shipping or service fees shown in the app/site). We don’t demand payments for unrelated third‑party goods.</li>
+                  <li>We only collect money for official  delivery services (e.g., shipping or service fees shown in the app/site). We don’t demand payments for unrelated third‑party goods.</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">5) Payments & fees — safe practices</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
-                  <li>Pay within the PicknDrop app/website or via listed partners only.</li>
+                  <li>Pay within the  app/website or via listed partners only.</li>
                   <li>For mobile‑money (e.g., MoMo, Orange Money), verify the payee name and amount before confirming.</li>
-                  <li>Never send money to individuals who contact you privately claiming to be PicknDrop.</li>
+                  <li>Never send money to individuals who contact you privately claiming to be .</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">6) Suspect a message? Do this.</h3>
@@ -23013,7 +23013,7 @@ export const legalDocs: Record<string, LegalContent> = {
               <p>Fraudsters often create look‑alike sites and social profiles. Only trust links published on our official domains or app. We are not responsible for third‑party sites or content that misuse our brand.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">10) Legal notice</h3>
-              <p>Unauthorised use of the PicknDrop brand, trademarks, and content is prohibited. We reserve the right to take down fraudulent content and to cooperate with authorities.</p>
+              <p>Unauthorised use of the  brand, trademarks, and content is prohibited. We reserve the right to take down fraudulent content and to cooperate with authorities.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">11) Contact</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -23033,7 +23033,7 @@ export const legalDocs: Record<string, LegalContent> = {
               <h2 className="text-2xl font-bold mt-8 mb-4 border-b pb-2">PART II — FRANÇAIS (Autonome)</h2>
               
               <h3 className="text-xl font-semibold mt-6 mb-3">1) Objet & Portée</h3>
-              <p>Cette page vous aide à reconnaître et éviter les tentatives de fraude qui usurpent le nom, le logo, le suivi ou les canaux de communication de PicknDrop. Elle couvre nos sites web, applications mobiles et comptes officiels.</p>
+              <p>Cette page vous aide à reconnaître et éviter les tentatives de fraude qui usurpent le nom, le logo, le suivi ou les canaux de communication de . Elle couvre nos sites web, applications mobiles et comptes officiels.</p>
               
               <h3 className="text-xl font-semibold mt-6 mb-3">2) Comment opèrent les fraudeurs (schémas typiques)</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -23055,7 +23055,7 @@ export const legalDocs: Record<string, LegalContent> = {
                       <tbody>
                           <tr>
                               <td className="border p-3">Demande de paiement par SMS/WhatsApp ou via cartes cadeaux/crédit télécom</td>
-                              <td className="border p-3">Ne payez pas ; payez dans l’app/site PicknDrop ou chez des partenaires officiels</td>
+                              <td className="border p-3">Ne payez pas ; payez dans l’app/site  ou chez des partenaires officiels</td>
                           </tr>
                           <tr>
                               <td className="border p-3">Lien pour télécharger une APK/app depuis un SMS</td>
@@ -23081,19 +23081,19 @@ export const legalDocs: Record<string, LegalContent> = {
                   </table>
               </div>
 
-              <h3 className="text-xl font-semibold mt-6 mb-3">4) Comment PicknDrop vous contacte</h3>
+              <h3 className="text-xl font-semibold mt-6 mb-3">4) Comment  vous contacte</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
                   <li>Nous envoyons des e‑mails/SMS/push transactionnels strictement liés à vos envois (ex. créneau d’enlèvement, changement d’état).</li>
                   <li>Nous ne demandons jamais vos mots de passe ni codes OTP.</li>
                   <li>Nous n’envoyons pas d’APK et ne vous demandons pas d’installer une app via un lien SMS. Installez uniquement depuis les stores officiels.</li>
-                  <li>Nous ne percevons que des frais liés aux services de livraison PicknDrop (ex. frais affichés dans l’app/le site). Nous ne réclamons pas de paiements pour des marchandises tierces non liées.</li>
+                  <li>Nous ne percevons que des frais liés aux services de livraison  (ex. frais affichés dans l’app/le site). Nous ne réclamons pas de paiements pour des marchandises tierces non liées.</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">5) Paiements & frais — bonnes pratiques</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
-                  <li>Payez dans l’app/site PicknDrop ou via les partenaires listés uniquement.</li>
+                  <li>Payez dans l’app/site  ou via les partenaires listés uniquement.</li>
                   <li>Pour la money mobile (p. ex. MoMo, Orange Money), vérifiez le nom du bénéficiaire et le montant avant de valider.</li>
-                  <li>N’envoyez jamais d’argent à des particuliers qui vous contactent en prétendant être PicknDrop.</li>
+                  <li>N’envoyez jamais d’argent à des particuliers qui vous contactent en prétendant être .</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">6) Message suspect ? Réagissez ainsi</h3>
@@ -23125,7 +23125,7 @@ export const legalDocs: Record<string, LegalContent> = {
               <p>Les fraudeurs créent des sites et comptes sociaux très ressemblants. Ne faites confiance qu’aux liens publiés sur nos domaines officiels ou dans l’app. Nous déclinons toute responsabilité pour les sites/contenus tiers usurpant notre marque.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">10) Mention légale</h3>
-              <p>L’usage non autorisé de la marque, des logos et contenus PicknDrop est interdit. Nous nous réservons le droit de faire retirer les contenus frauduleux et de coopérer avec les autorités.</p>
+              <p>L’usage non autorisé de la marque, des logos et contenus  est interdit. Nous nous réservons le droit de faire retirer les contenus frauduleux et de coopérer avec les autorités.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">11) Contact</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -23392,9 +23392,9 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
 
       // -- Header Brand --
       pdf.setFontSize(22);
-      pdf.setTextColor(255, 102, 0); // PicknDrop Orange
+      pdf.setTextColor(255, 102, 0); //  Orange
       pdf.setFont("helvetica", "bold");
-      pdf.text("PicknDrop", 15, y);
+      pdf.text("", 15, y);
       
       pdf.setFontSize(10);
       pdf.setTextColor(100);
@@ -23464,7 +23464,7 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
       const footerY = pdf.internal.pageSize.getHeight() - 20;
       pdf.setFontSize(8);
       pdf.setTextColor(150);
-      pdf.text("Document généré automatiquement par PicknDrop System.", 15, footerY);
+      pdf.text("Document généré automatiquement par  System.", 15, footerY);
       pdf.text("Conservez ce reçu comme preuve de dépôt.", 15, footerY + 4);
 
       pdf.save(`Bordereau_Depot_${shipment.tracking_number}.pdf`);
@@ -24755,7 +24755,7 @@ export default function SuperAdminDashboard() {
                 <PackageCheck className="w-5 h-5"/>
              </div>
              <div>
-                 <h1 className="font-bold text-xl text-slate-900 dark:text-white leading-tight">PicknDrop</h1>
+                 <h1 className="font-bold text-xl text-slate-900 dark:text-white leading-tight"></h1>
                  <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded uppercase tracking-wider">
                     Admin
                  </span>
@@ -25281,7 +25281,7 @@ export default function Overview() {
                           <div className="bg-black/30 p-4 rounded-lg font-mono text-[11px] text-green-300 border border-green-900/30 shadow-inner h-32 overflow-hidden">
                               {/* Simulation d'une console de statut, basée sur les requêtes réelles faites au montage */}
                               <div>{`> Initializing Admin Dashboard...`}</div>
-                              <div>{`> Fetching KPIs from [https://pickndropback.onrender.com]... [OK]`}</div>
+                              <div>{`> Fetching KPIs from [https://back.onrender.com]... [OK]`}</div>
                               <div>{`> Retrieving active business actors count: ${s.totalBusinessActors}`}</div>
                               <div>{`> Pending validations queue: ${s.pendingValidations}`}</div>
                               <div className="animate-pulse">{`> Listening for incoming system events...`}</div>
@@ -26993,7 +26993,7 @@ const DEFAULT_DATA: ContentData = {
 
 const FREELANCE_DATA: ContentData = {
     title: <>Monétisez votre espace,<br /><span className="text-amber-300 dark:text-amber-200">devenez partenaire.</span></>,
-    description: "Transformez votre boutique ou votre domicile en Point Relais PicknDrop. Gagnez une commission sur chaque colis déposé ou retiré.",
+    description: "Transformez votre boutique ou votre domicile en Point Relais . Gagnez une commission sur chaque colis déposé ou retiré.",
     heroImage: "/images/image2.jpg",
     ctaPrimary: { text: "Créer mon Point Relais", link: "/register" },
     ctaSecondary: { text: "Connexion Espace Pro", link: "/login" },
@@ -27017,7 +27017,7 @@ const FREELANCE_DATA: ContentData = {
 
 const LIVREUR_DATA: ContentData = {
     title: <>Livrez et gagnez,<br /><span className="text-amber-300 dark:text-amber-200">à votre rythme.</span></>,
-    description: "Moto, vélo ou voiture ? Devenez votre propre patron avec PicknDrop Delivery. Acceptez des courses, livrez, encaissez.",
+    description: "Moto, vélo ou voiture ? Devenez votre propre patron avec  Delivery. Acceptez des courses, livrez, encaissez.",
     heroImage: "/images/livrer.jpeg",
     ctaPrimary: { text: "Devenir Livreur", link: "/register" },
     ctaSecondary: { text: "Connexion Livreur", link: "/login" },
@@ -27050,7 +27050,7 @@ const AGENCY_DATA: ContentData = {
         { icon: Layers, title: "Dashboard 360", desc: "Vue globale sur tous vos véhicules, chauffeurs et colis en temps réel." },
         { icon: Users, title: "Gestion Équipe", desc: "Créez des accès pour vos employés (guichetiers, chauffeurs)." },
         { icon: BarChart3, title: "Analytics", desc: "Rapports détaillés sur vos performances et votre chiffre d'affaires." },
-        { icon: Briefcase, title: "API Ouverte", desc: "Intégrez PicknDrop directement à vos systèmes existants." }
+        { icon: Briefcase, title: "API Ouverte", desc: "Intégrez  directement à vos systèmes existants." }
     ],
     stepsTitle: "Intégration fluide",
     steps: [
@@ -27069,7 +27069,7 @@ const MARKET_DATA: ContentData = {
     heroImage: "/images/expedition.avif",
     ctaPrimary: { text: "Voir les Offres", link: "/marketplace" },
     ctaSecondary: { text: "Publier une annonce", link: "/expedition" },
-    featuresTitle: "La Marketplace PicknDrop",
+    featuresTitle: "La Marketplace ",
     features: [
         { icon: Search, title: "Transparence", desc: "Comparez les profils, les avis et les tarifs avant de choisir." },
         { icon: Shield, title: "Sécurité", desc: "Paiements bloqués jusqu'à confirmation de la livraison." },
@@ -27246,7 +27246,7 @@ const LandingContent = () => {
                                 {content.featuresTitle}
                             </h2>
                             <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                                Découvrez comment PicknDrop répond spécifiquement à vos besoins
+                                Découvrez comment  répond spécifiquement à vos besoins
                             </p>
                         </div>
                         <DynamicFeatures data={content} />
@@ -27361,7 +27361,7 @@ import CookieBanner from '@/components/CookieBanner';
 import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
-  title: 'PicknDrop Link',
+  title: ' Link',
   description: 'Application de gestion logistique...',
 }
 
@@ -27411,7 +27411,7 @@ const ModuleCard = ({
 }: {
   title: string, subtitle?: string, description: string, icon: any, href: string, color?: "orange"|"red"|"green"|"blue"|"purple", badge?: string, delay?: number
 }) => {
-  // Mapping des couleurs pour le thème de Noël + PicknDrop
+  // Mapping des couleurs pour le thème de Noël + 
   const theme = {
     orange: { bg: 'bg-orange-50 dark:bg-orange-950/20', text: 'text-orange-700 dark:text-orange-400', border: 'hover:border-orange-500', badge: 'bg-orange-200 text-orange-900' },
     red:    { bg: 'bg-red-50 dark:bg-red-950/20',       text: 'text-red-700 dark:text-red-400',       border: 'hover:border-red-500',    badge: 'bg-red-200 text-red-900' },
@@ -27494,7 +27494,7 @@ export default function PortalPage() {
          <div className="absolute inset-0 z-0">
              <img 
                 src={SANTA_BG_IMAGE} 
-                alt="PicknDrop Christmas Africa"
+                alt=" Christmas Africa"
                 className="absolute inset-0 w-full h-full object-cover object-center"
              />
              {/* Dégradé pour lisibilité : Noir transparent -> Transparent */}
@@ -27521,7 +27521,7 @@ export default function PortalPage() {
                 <h1 className="text-5xl md:text-7xl font-black text-white leading-[1.1] mb-6 drop-shadow-lg">
                   La Logistique Réinventée <br/>
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-200">
-                     avec PicknDrop
+                     avec 
                   </span>
                 </h1>
                 
@@ -27553,7 +27553,7 @@ export default function PortalPage() {
           <div className="container mx-auto">
               
               <div className="text-center mb-16 space-y-4">
-                  <h2 className="text-sm font-black text-orange-500 uppercase tracking-[0.2em]">🎄 L'Écosystème PicknDrop 🎄</h2>
+                  <h2 className="text-sm font-black text-orange-500 uppercase tracking-[0.2em]">🎄 L'Écosystème  🎄</h2>
                   <h3 className="text-3xl md:text-5xl font-black text-slate-800 dark:text-white">Modulaire, Scalable, Unifié.</h3>
                   <div className="flex justify-center gap-2 text-3xl">🎅 🤶 🎁 ⭐</div>
               </div>
@@ -27563,7 +27563,7 @@ export default function PortalPage() {
                   
                   {/* Carte 1 : LINK -> Landing CLIENT */}
                   <ModuleCard 
-                      title="PicknDrop Link"
+                      title=" Link"
                       subtitle="Pour Particuliers"
                       description="Pré-enregistrement et circulation simplifiée. Idéal pour e-commerce informel et commerçants de proximité."
                       icon={MapPin}
@@ -27575,7 +27575,7 @@ export default function PortalPage() {
 
                   {/* Carte 2 : MARKET -> Landing MARKET */}
                   <ModuleCard 
-                      title="PicknDrop Market"
+                      title=" Market"
                       subtitle="Place de Marché"
                       description="Trouvez un livreur ou un service logistique fiable. Le moteur de découverte des colis et services publiés."
                       icon={ShoppingBag}
@@ -27587,7 +27587,7 @@ export default function PortalPage() {
 
                   {/* Carte 3 : AGENCY -> Landing AGENCY */}
                   <ModuleCard 
-                      title="PicknDrop Agency"
+                      title=" Agency"
                       subtitle="Gestion Pro"
                       description="Suite complète pour les agences de transport. Gestion de flotte, bordereaux électroniques et pilotage multi-sites."
                       icon={Layers}
@@ -27611,7 +27611,7 @@ export default function PortalPage() {
                           <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/20 text-orange-300 rounded-lg text-xs font-bold uppercase tracking-wider border border-orange-500/30">
                              <Search className="w-3 h-3"/> Infrastructure
                           </div>
-                          <h3 className="text-3xl md:text-4xl font-black leading-tight">PicknDrop Point & <br/> Search</h3>
+                          <h3 className="text-3xl md:text-4xl font-black leading-tight"> Point & <br/> Search</h3>
                           <p className="text-slate-300 text-lg leading-relaxed">
                              Convertissez votre boutique en micro-hub logistique ou suivez n'importe quel colis via notre tracking universel (QR Code, ID, Localisation).
                           </p>
@@ -27660,7 +27660,7 @@ export default function PortalPage() {
           <div className="container mx-auto px-6">
                <div className="max-w-4xl mx-auto mb-16 text-center">
                    <h2 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white mb-6">
-                       PicknDrop <span className="text-orange-600">Core</span> & <span className="text-emerald-600">Confidence</span>
+                        <span className="text-orange-600">Core</span> & <span className="text-emerald-600">Confidence</span>
                    </h2>
                    <p className="text-lg text-slate-600 dark:text-slate-300">
                        Le noyau partagé qui orchestre tout. Une colonne vertébrale technologique robuste doublée d'une couche de confiance Blockchain pour une traçabilité totale en Afrique.
@@ -27988,7 +27988,7 @@ export default function Navbar() {
               className={`text-3xl font-bold transition-colors duration-300 
                          ${isScrolled || isOpen ? 'text-green-700' : 'text-gray-800 group-hover:text-green-700'}`}
             >
-              PicknDrop Point
+               Point
             </span>
           </Link>
 
@@ -28101,7 +28101,7 @@ export default function FloatingBackButton() {
       <Link
         href="/"
         className="group flex items-center bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white rounded-full shadow-2xl hover:shadow-emerald-500/25 focus:outline-none focus:ring-4 focus:ring-emerald-300/50 transition-all duration-300 ease-out transform hover:scale-105 hover:-translate-x-1 active:scale-95 backdrop-blur-sm border border-white/20"
-        aria-label="Retour à l'accueil PicknDrop"
+        aria-label="Retour à l'accueil "
       >
         {/* Partie icône - toujours visible */}
         <div className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-white/20 to-transparent">
@@ -28114,7 +28114,7 @@ export default function FloatingBackButton() {
         {/* Partie texte - se déploie au hover */}
         <div className="overflow-hidden max-w-0 group-hover:max-w-xs transition-all duration-300 ease-out">
           <span className="inline-block px-4 py-2 text-sm font-semibold tracking-wide whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">
-            Retour à PicknDrop
+            Retour à 
           </span>
         </div>
         
@@ -28393,7 +28393,7 @@ export default function NavbarHome() {
                 <Package className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <span className="text-xl sm:text-2xl font-bold text-gray-300 dark:text-gray-100">
-                PicknDrop
+                
               </span>
             </Link>
 
@@ -28475,7 +28475,7 @@ export default function NavbarHome() {
                   className="flex items-center justify-center gap-3 bg-orange-500 dark:bg-orange-600 hover:bg-orange-600 dark:hover:bg-orange-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors"
                 >
                   <User className="w-5 h-5" />
-                  Mon compte PicknDrop
+                  Mon compte 
                 </Link>
               </div>
             </motion.div>
@@ -28562,7 +28562,7 @@ export default function Footer() {
               <div className="bg-orange-500 p-2 rounded-lg">
                 <Package className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold">PicknDrop</span>
+              <span className="text-xl font-bold"></span>
             </div>
             <p className="text-gray-400">La solution simple et fiable pour tous vos envois de colis au Cameroun.</p>
           </div>
@@ -28596,7 +28596,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-gray-700 mt-10 pt-6 text-center text-sm text-gray-500">
-          <p>&copy; {new Date().getFullYear()} PicknDrop Cameroun. Tous droits réservés.</p>
+          <p>&copy; {new Date().getFullYear()}  Cameroun. Tous droits réservés.</p>
         </div>
       </div>
     </footer>
@@ -29215,7 +29215,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\services\apiClient.ts
 
 // FICHIER: src/services/apiClient.ts
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pickndropback.onrender.com';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://back.onrender.com';
 
 async function apiClient<T>(
   endpoint: string,
@@ -30029,7 +30029,7 @@ const getMarketplaceProfiles = async (): Promise<MarketplaceProfile[]> => {
                      relayName: rp.relayPointName,
                      location: rp.address || rp.relay_point_address,
                      phone: "+237 ...", // Souvent masqué dans public/relay-points
-                     email: "contact@pickndrop.cm"
+                     email: "contact@.cm"
                  });
              }
         });
@@ -30125,7 +30125,7 @@ const creditWallet = async (userId: string, amount: number, description: string)
 
 /**
  * Débiter un wallet (Paiement de commission / Retrait)
- * Correspond au cas : Paiement de commission à PicknDrop ou retrait de fonds
+ * Correspond au cas : Paiement de commission à  ou retrait de fonds
  */
 const debitWallet = async (userId: string, amount: number, description: string): Promise<WalletTransactionResponse> => {
     const endpoint = `${WALLET_API_BASE_URL}/api/decrement/`;
@@ -30158,10 +30158,10 @@ const debitWallet = async (userId: string, amount: number, description: string):
 
 /**
  * Simulation de récupération d'historique.
- * Comme l'API externe n'a pas d'endpoint 'GET History' documenté, on gère ça localement ou via backend PicknDrop.
+ * Comme l'API externe n'a pas d'endpoint 'GET History' documenté, on gère ça localement ou via backend .
  */
 const getTransactions = async (userId: string) => {
-    // Simulation ou appel à ton backend PicknDrop s'il stocke les logs de transaction
+    // Simulation ou appel à ton backend  s'il stocke les logs de transaction
     return []; 
 };
 

@@ -29,7 +29,7 @@ import { useAuth } from '@/context/AuthContext';
 import { relayPointService } from '@/services/relayPointService';
 import { packageService } from '@/services/packageService';
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "PicknDrop Link";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "TiiBnTick Link";
 
 // --- INTERFACES ---
 

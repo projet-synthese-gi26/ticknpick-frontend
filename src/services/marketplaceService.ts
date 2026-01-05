@@ -85,7 +85,7 @@ const getMarketplaceProfiles = async (): Promise<MarketplaceProfile[]> => {
                      relayName: rp.relayPointName,
                      location: rp.address || rp.relay_point_address,
                      phone: "+237 ...", // Souvent masqué dans public/relay-points
-                     email: "contact@pickndrop.cm"
+                     email: "contact@TiiBnTick.cm"
                  });
              }
         });

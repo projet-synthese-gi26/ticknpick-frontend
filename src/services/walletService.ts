@@ -65,7 +65,7 @@ const creditWallet = async (userId: string, amount: number, description: string)
 
 /**
  * Débiter un wallet (Paiement de commission / Retrait)
- * Correspond au cas : Paiement de commission à PicknDrop ou retrait de fonds
+ * Correspond au cas : Paiement de commission à TiiBnTick ou retrait de fonds
  */
 const debitWallet = async (userId: string, amount: number, description: string): Promise<WalletTransactionResponse> => {
     const endpoint = `${WALLET_API_BASE_URL}/api/decrement/`;
@@ -98,10 +98,10 @@ const debitWallet = async (userId: string, amount: number, description: string):
 
 /**
  * Simulation de récupération d'historique.
- * Comme l'API externe n'a pas d'endpoint 'GET History' documenté, on gère ça localement ou via backend PicknDrop.
+ * Comme l'API externe n'a pas d'endpoint 'GET History' documenté, on gère ça localement ou via backend TiiBnTick.
  */
 const getTransactions = async (userId: string) => {
-    // Simulation ou appel à ton backend PicknDrop s'il stocke les logs de transaction
+    // Simulation ou appel à ton backend TiiBnTick s'il stocke les logs de transaction
     return []; 
 };
 

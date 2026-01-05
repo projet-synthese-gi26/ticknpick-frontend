@@ -88,7 +88,7 @@ export default function LoginPage() {
             <div className="space-y-4">
               <h1 className="text-5xl font-black text-gray-800 dark:text-slate-50 leading-tight">
                 <span className="bg-gradient-to-r from-orange-600 to-amber-800 dark:from-orange-500 dark:to-amber-500 bg-clip-text text-transparent animate-pulse">
-                  PicknDrop
+                  TiiBnTick
                 </span>
                 <span className="block text-4xl font-bold text-orange-600 dark:text-orange-400 mt-2">
                   Link

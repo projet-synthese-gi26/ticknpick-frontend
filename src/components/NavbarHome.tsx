@@ -65,7 +65,7 @@ export default function NavbarHome() {
                 <Package className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <span className="text-xl sm:text-2xl font-bold text-gray-300 dark:text-gray-100">
-                PicknDrop
+                TiiBnTick
               </span>
             </Link>
 
@@ -147,7 +147,7 @@ export default function NavbarHome() {
                   className="flex items-center justify-center gap-3 bg-orange-500 dark:bg-orange-600 hover:bg-orange-600 dark:hover:bg-orange-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors"
                 >
                   <User className="w-5 h-5" />
-                  Mon compte PicknDrop
+                  Mon compte TiiBnTick
                 </Link>
               </div>
             </motion.div>

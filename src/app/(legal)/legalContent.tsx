@@ -20,10 +20,10 @@ export const legalDocs: Record<string, LegalContent> = {
     content: () => (
       <>  
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold">PicknDrop — Terms of Use / Conditions d’Utilisation</h2>
+        <h2 className="text-3xl font-bold">TiiBnTick — Terms of Use / Conditions d’Utilisation</h2>
         <p className="text-md mt-2">Version 2.0 — 02 Sep 2025</p>
-        <p className="text-sm text-gray-600 mt-1"><strong>Service Owner:</strong> Yowyob Inc. Ltd. ("Yowyob", "PicknDrop", "we", "us")</p>
-        <p className="text-sm text-gray-600"><strong>Scope:</strong> All PicknDrop web and mobile properties, pre‑production and production environments, and related APIs/SDKs.</p>
+        <p className="text-sm text-gray-600 mt-1"><strong>Service Owner:</strong> Yowyob Inc. Ltd. ("Yowyob", "TiiBnTick", "we", "us")</p>
+        <p className="text-sm text-gray-600"><strong>Scope:</strong> All TiiBnTick web and mobile properties, pre‑production and production environments, and related APIs/SDKs.</p>
       </div>
 
       <hr className="my-8" />
@@ -33,10 +33,10 @@ export const legalDocs: Record<string, LegalContent> = {
         <h2 className="text-2xl font-bold mb-4">PART I — ENGLISH (Standalone)</h2>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">1. Acceptance of Terms</h3>
-        <p>By accessing or using PicknDrop (including web, iOS/Android apps, and APIs), you agree to these Terms. If you do not agree, do not use the Services. We may amend these Terms; material changes will be notified in‑app, by banner, or by email. Continued use constitutes acceptance of changes.</p>
+        <p>By accessing or using TiiBnTick (including web, iOS/Android apps, and APIs), you agree to these Terms. If you do not agree, do not use the Services. We may amend these Terms; material changes will be notified in‑app, by banner, or by email. Continued use constitutes acceptance of changes.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">2. The Services (Summary)</h3>
-        <p>PicknDrop enables on‑demand pickup and delivery facilitation, shipment tracking, status notifications, and related features (e.g., address/landmark assistance, proof‑of‑pickup/delivery uploads). Certain features may be offered in beta and may change or be withdrawn at any time. Availability may vary by region and device.</p>
+        <p>TiiBnTick enables on‑demand pickup and delivery facilitation, shipment tracking, status notifications, and related features (e.g., address/landmark assistance, proof‑of‑pickup/delivery uploads). Certain features may be offered in beta and may change or be withdrawn at any time. Availability may vary by region and device.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">3. Accounts & Eligibility</h3>
         <p>You must be at least the age of majority in your jurisdiction (or have verifiable guardian consent where permitted). You are responsible for the security of your credentials and for all actions under your account. We may require identity verification for higher‑risk features (e.g., driver/courier onboarding) and may suspend/terminate accounts in case of suspected abuse or legal non‑compliance.</p>
@@ -123,10 +123,10 @@ export const legalDocs: Record<string, LegalContent> = {
         <h2 className="text-2xl font-bold mb-4">PART II — FRANÇAIS (Autonome)</h2>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">1. Acceptation des Conditions</h3>
-        <p>En accédant ou en utilisant PicknDrop (web, apps iOS/Android et API), vous acceptez les présentes Conditions. Si vous n’êtes pas d’accord, n’utilisez pas les Services. Nous pouvons modifier ces Conditions ; les changements importants seront notifiés dans l’app, par bannière ou par e‑mail. Votre utilisation continue vaut acceptation des modifications.</p>
+        <p>En accédant ou en utilisant TiiBnTick (web, apps iOS/Android et API), vous acceptez les présentes Conditions. Si vous n’êtes pas d’accord, n’utilisez pas les Services. Nous pouvons modifier ces Conditions ; les changements importants seront notifiés dans l’app, par bannière ou par e‑mail. Votre utilisation continue vaut acceptation des modifications.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">2. Les Services (Résumé)</h3>
-        <p>PicknDrop permet la facilitation d’enlèvements et de livraisons à la demande, le suivi des envois, les notifications d’état et des fonctionnalités associées (ex. assistance adresse/repère, preuves d’enlèvement/livraison). Certaines fonctions peuvent être proposées en bêta et évoluer ou être retirées. La disponibilité varie selon la région et l’appareil.</p>
+        <p>TiiBnTick permet la facilitation d’enlèvements et de livraisons à la demande, le suivi des envois, les notifications d’état et des fonctionnalités associées (ex. assistance adresse/repère, preuves d’enlèvement/livraison). Certaines fonctions peuvent être proposées en bêta et évoluer ou être retirées. La disponibilité varie selon la région et l’appareil.</p>
 
         <h3 className="text-xl font-semibold mt-6 mb-3">3. Comptes & Éligibilité</h3>
         <p>Vous devez avoir l’âge légal de votre juridiction (ou l’accord d’un tuteur lorsque autorisé). Vous êtes responsable de la sécurité de vos identifiants et des actions réalisées depuis votre compte. Une vérification d’identité peut être requise pour des fonctions à risque (ex. onboarding chauffeur/coursier). Nous pouvons suspendre/résilier un compte en cas d’abus présumé ou de non‑conformité légale.</p>
@@ -218,9 +218,9 @@ export const legalDocs: Record<string, LegalContent> = {
     lastUpdated: "25 Mai 2024",
     content: () => (
       <>
-        <h1 className="text-3xl font-bold mb-2">Yowyob PicknDrop — Privacy & Data Policy / Politique de confidentialité & des données</h1>
+        <h1 className="text-3xl font-bold mb-2">Yowyob TiiBnTick — Privacy & Data Policy / Politique de confidentialité & des données</h1>
         <p className="text-md text-gray-600">Version 3.0 — 02 Sep 2025</p>
-        <p className="text-md text-gray-600 mb-6">Service Owner: Yowyob Inc. Ltd. ("PicknDrop", "we", "us")</p>
+        <p className="text-md text-gray-600 mb-6">Service Owner: Yowyob Inc. Ltd. ("TiiBnTick", "we", "us")</p>
         
         <hr className="my-8" />
 
@@ -229,7 +229,7 @@ export const legalDocs: Record<string, LegalContent> = {
           <h2 className="text-2xl font-bold mt-8 mb-4">PART I — ENGLISH (Standalone)</h2>
           
           <h3 className="text-xl font-semibold mt-6 mb-3">1) Who we are & scope</h3>
-          <p>This Privacy & Data Policy explains how PicknDrop collects, uses, shares and protects personal data across our websites, mobile apps, APIs/SDKs and related services. It applies to customers, recipients, couriers/drivers, business partners and site/app visitors.</p>
+          <p>This Privacy & Data Policy explains how TiiBnTick collects, uses, shares and protects personal data across our websites, mobile apps, APIs/SDKs and related services. It applies to customers, recipients, couriers/drivers, business partners and site/app visitors.</p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">2) Personal data we collect (by category)</h3>
           <ul className="list-disc list-inside space-y-2 pl-4">
@@ -393,7 +393,7 @@ export const legalDocs: Record<string, LegalContent> = {
           <h2 className="text-2xl font-bold mt-8 mb-4">PART II — FRANÇAIS (Autonome)</h2>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">1) Qui sommes‑nous & portée</h3>
-          <p>La présente Politique de confidentialité & des données explique comment PicknDrop collecte, utilise, partage et protège les données personnelles sur nos sites web, applications mobiles, API/SDK et services associés. Elle s’applique aux clients, destinataires, coursiers/chauffeurs, partenaires et visiteurs.</p>
+          <p>La présente Politique de confidentialité & des données explique comment TiiBnTick collecte, utilise, partage et protège les données personnelles sur nos sites web, applications mobiles, API/SDK et services associés. Elle s’applique aux clients, destinataires, coursiers/chauffeurs, partenaires et visiteurs.</p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">2) Données personnelles collectées (par catégorie)</h3>
           <ul className="list-disc list-inside space-y-2 pl-4">
@@ -562,13 +562,13 @@ export const legalDocs: Record<string, LegalContent> = {
     content: () => (
       <>
         {/* En-tête du document */}
-        <h2 className="text-2xl font-bold mb-2">Yowyob PicknDrop — Politique sur les Cookies & Technologies Similaires</h2>
+        <h2 className="text-2xl font-bold mb-2">Yowyob TiiBnTick — Politique sur les Cookies & Technologies Similaires</h2>
         <p className="text-sm text-gray-600 mb-1">Version 3.1 — 02 Sep 2025</p>
-        <p className="text-sm text-gray-600 mb-6">Propriétaire du service : Yowyob Inc. Ltd. ("PicknDrop", "nous").</p>
+        <p className="text-sm text-gray-600 mb-6">Propriétaire du service : Yowyob Inc. Ltd. ("TiiBnTick", "nous").</p>
         
         {/* Contenu de la politique en français */}
         <h3 className="text-xl font-semibold mt-6 mb-3">1) Introduction</h3>
-        <p>Le présent document explique comment PicknDrop utilise des cookies, balises, SDK, stockage local et technologies similaires sur nos sites web et applications mobiles. Nous les utilisons pour authentifier les utilisateurs, sécuriser les Services, mémoriser les préférences, prévenir les abus, mesurer l’audience et améliorer la fiabilité et l’expérience.</p>
+        <p>Le présent document explique comment TiiBnTick utilise des cookies, balises, SDK, stockage local et technologies similaires sur nos sites web et applications mobiles. Nous les utilisons pour authentifier les utilisateurs, sécuriser les Services, mémoriser les préférences, prévenir les abus, mesurer l’audience et améliorer la fiabilité et l’expérience.</p>
         
         <h3 className="text-xl font-semibold mt-6 mb-3">2) Qu’est-ce qu’un cookie et des technologies similaires ?</h3>
         <p>Un cookie est un petit fichier texte enregistré par votre navigateur ou appareil lors de la visite d’un site ou de l’usage d’une app. Des technologies proches incluent le localStorage/sessionStorage, les pixels/balises, les SDK mobiles et les identifiants d’appareil/de publicité (p. ex. IDFA/GAID).</p>
@@ -615,49 +615,49 @@ export const legalDocs: Record<string, LegalContent> = {
                   <tr>
                       <td className="py-2 px-4 border-b">Essentiel</td>
                       <td className="py-2 px-4 border-b">session_id</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b">TiiBnTick</td>
                       <td className="py-2 px-4 border-b">Session</td>
                       <td className="py-2 px-4 border-b">Authentifier et maintenir la session</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Essentiel</td>
                       <td className="py-2 px-4 border-b">cookie_consent</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b">TiiBnTick</td>
                       <td className="py-2 px-4 border-b">12 mois</td>
                       <td className="py-2 px-4 border-b">Conserver vos préférences de consentement</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Sécurité</td>
                       <td className="py-2 px-4 border-b">csrf_token</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b">TiiBnTick</td>
                       <td className="py-2 px-4 border-b">Session</td>
                       <td className="py-2 px-4 border-b">Prévenir la falsification de requêtes</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Fonctionnel</td>
                       <td className="py-2 px-4 border-b">pnd_last_tracking_ref</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b">TiiBnTick</td>
                       <td className="py-2 px-4 border-b">30 jours</td>
                       <td className="py-2 px-4 border-b">Mémoriser le dernier numéro de suivi saisi</td>
                   </tr>
                    <tr>
                       <td className="py-2 px-4 border-b">Fonctionnel</td>
                       <td className="py-2 px-4 border-b">lang / locale</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b">TiiBnTick</td>
                       <td className="py-2 px-4 border-b">6 mois</td>
                       <td className="py-2 px-4 border-b">Langue et pays préférés</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Analytics</td>
                       <td className="py-2 px-4 border-b">_ga / clés GA4</td>
-                      <td className="py-2 px-4 border-b">Google / PicknDrop</td>
+                      <td className="py-2 px-4 border-b">Google / TiiBnTick</td>
                       <td className="py-2 px-4 border-b">13 mois (EEE/RU)</td>
                       <td className="py-2 px-4 border-b">Mesure d’audience</td>
                   </tr>
                   <tr>
                       <td className="py-2 px-4 border-b">Performance</td>
                       <td className="py-2 px-4 border-b">cw_vitals</td>
-                      <td className="py-2 px-4 border-b">PicknDrop</td>
+                      <td className="py-2 px-4 border-b">TiiBnTick</td>
                       <td className="py-2 px-4 border-b">30 jours</td>
                       <td className="py-2 px-4 border-b">Indicateurs de performance</td>
                   </tr>
@@ -838,16 +838,16 @@ export const legalDocs: Record<string, LegalContent> = {
     lastUpdated: "25 Mai 2024",
     content: () => (
       <>
-          <h2 className="text-2xl font-bold mb-2">Yowyob PicknDrop — Fraud Awareness / Sensibilisation à la fraude</h2>
+          <h2 className="text-2xl font-bold mb-2">Yowyob TiiBnTick — Fraud Awareness / Sensibilisation à la fraude</h2>
           <p className="text-sm text-gray-600">Version 1.0 — 02 Sep 2025</p>
-          <p className="text-sm text-gray-600 mb-8">Service Owner: Yowyob Inc. Ltd. (PicknDrop)</p>
+          <p className="text-sm text-gray-600 mb-8">Service Owner: Yowyob Inc. Ltd. (TiiBnTick)</p>
 
           {/* PARTIE ANGLAISE */}
           <div id="english-section">
               <h2 className="text-2xl font-bold mt-8 mb-4 border-b pb-2">PART I — ENGLISH (Standalone)</h2>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">1) Purpose & Scope</h3>
-              <p>This page helps you recognize and avoid fraud attempts that misuse PicknDrop’s name, logo, tracking, or communication channels. It applies to our websites, mobile apps, and official social channels.</p>
+              <p>This page helps you recognize and avoid fraud attempts that misuse TiiBnTick’s name, logo, tracking, or communication channels. It applies to our websites, mobile apps, and official social channels.</p>
               
               <h3 className="text-xl font-semibold mt-6 mb-3">2) How fraudsters operate (typical patterns)</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -869,7 +869,7 @@ export const legalDocs: Record<string, LegalContent> = {
                       <tbody>
                           <tr>
                               <td className="border p-3">Request for payment via SMS/WhatsApp or by gift cards/airtime</td>
-                              <td className="border p-3">Do not pay; only pay inside the PicknDrop app/website or at official partner points</td>
+                              <td className="border p-3">Do not pay; only pay inside the TiiBnTick app/website or at official partner points</td>
                           </tr>
                           <tr>
                               <td className="border p-3">Link to download an APK/app from SMS</td>
@@ -877,7 +877,7 @@ export const legalDocs: Record<string, LegalContent> = {
                           </tr>
                           <tr>
                               <td className="border p-3">Sender email/domain looks odd (misspellings, subdomains)</td>
-                              <td className="border p-3">Verify the domain carefully; when in doubt, contact PicknDrop Support</td>
+                              <td className="border p-3">Verify the domain carefully; when in doubt, contact TiiBnTick Support</td>
                           </tr>
                           <tr>
                               <td className="border p-3">Shortened links (bit.ly, tinyurl) or mismatched addresses</td>
@@ -895,19 +895,19 @@ export const legalDocs: Record<string, LegalContent> = {
                   </table>
               </div>
               
-              <h3 className="text-xl font-semibold mt-6 mb-3">4) How PicknDrop contacts you</h3>
+              <h3 className="text-xl font-semibold mt-6 mb-3">4) How TiiBnTick contacts you</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
                   <li>We may send transactional emails/SMS/push strictly related to your shipments (e.g., pickup window, status changes).</li>
                   <li>We do not ask you to disclose passwords or one‑time codes (OTP).</li>
                   <li>We do not send APKs or ask you to install apps from links in SMS. Install only from official app stores.</li>
-                  <li>We only collect money for official PicknDrop delivery services (e.g., shipping or service fees shown in the app/site). We don’t demand payments for unrelated third‑party goods.</li>
+                  <li>We only collect money for official TiiBnTick delivery services (e.g., shipping or service fees shown in the app/site). We don’t demand payments for unrelated third‑party goods.</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">5) Payments & fees — safe practices</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
-                  <li>Pay within the PicknDrop app/website or via listed partners only.</li>
+                  <li>Pay within the TiiBnTick app/website or via listed partners only.</li>
                   <li>For mobile‑money (e.g., MoMo, Orange Money), verify the payee name and amount before confirming.</li>
-                  <li>Never send money to individuals who contact you privately claiming to be PicknDrop.</li>
+                  <li>Never send money to individuals who contact you privately claiming to be TiiBnTick.</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">6) Suspect a message? Do this.</h3>
@@ -939,7 +939,7 @@ export const legalDocs: Record<string, LegalContent> = {
               <p>Fraudsters often create look‑alike sites and social profiles. Only trust links published on our official domains or app. We are not responsible for third‑party sites or content that misuse our brand.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">10) Legal notice</h3>
-              <p>Unauthorised use of the PicknDrop brand, trademarks, and content is prohibited. We reserve the right to take down fraudulent content and to cooperate with authorities.</p>
+              <p>Unauthorised use of the TiiBnTick brand, trademarks, and content is prohibited. We reserve the right to take down fraudulent content and to cooperate with authorities.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">11) Contact</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -959,7 +959,7 @@ export const legalDocs: Record<string, LegalContent> = {
               <h2 className="text-2xl font-bold mt-8 mb-4 border-b pb-2">PART II — FRANÇAIS (Autonome)</h2>
               
               <h3 className="text-xl font-semibold mt-6 mb-3">1) Objet & Portée</h3>
-              <p>Cette page vous aide à reconnaître et éviter les tentatives de fraude qui usurpent le nom, le logo, le suivi ou les canaux de communication de PicknDrop. Elle couvre nos sites web, applications mobiles et comptes officiels.</p>
+              <p>Cette page vous aide à reconnaître et éviter les tentatives de fraude qui usurpent le nom, le logo, le suivi ou les canaux de communication de TiiBnTick. Elle couvre nos sites web, applications mobiles et comptes officiels.</p>
               
               <h3 className="text-xl font-semibold mt-6 mb-3">2) Comment opèrent les fraudeurs (schémas typiques)</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
@@ -981,7 +981,7 @@ export const legalDocs: Record<string, LegalContent> = {
                       <tbody>
                           <tr>
                               <td className="border p-3">Demande de paiement par SMS/WhatsApp ou via cartes cadeaux/crédit télécom</td>
-                              <td className="border p-3">Ne payez pas ; payez dans l’app/site PicknDrop ou chez des partenaires officiels</td>
+                              <td className="border p-3">Ne payez pas ; payez dans l’app/site TiiBnTick ou chez des partenaires officiels</td>
                           </tr>
                           <tr>
                               <td className="border p-3">Lien pour télécharger une APK/app depuis un SMS</td>
@@ -1007,19 +1007,19 @@ export const legalDocs: Record<string, LegalContent> = {
                   </table>
               </div>
 
-              <h3 className="text-xl font-semibold mt-6 mb-3">4) Comment PicknDrop vous contacte</h3>
+              <h3 className="text-xl font-semibold mt-6 mb-3">4) Comment TiiBnTick vous contacte</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
                   <li>Nous envoyons des e‑mails/SMS/push transactionnels strictement liés à vos envois (ex. créneau d’enlèvement, changement d’état).</li>
                   <li>Nous ne demandons jamais vos mots de passe ni codes OTP.</li>
                   <li>Nous n’envoyons pas d’APK et ne vous demandons pas d’installer une app via un lien SMS. Installez uniquement depuis les stores officiels.</li>
-                  <li>Nous ne percevons que des frais liés aux services de livraison PicknDrop (ex. frais affichés dans l’app/le site). Nous ne réclamons pas de paiements pour des marchandises tierces non liées.</li>
+                  <li>Nous ne percevons que des frais liés aux services de livraison TiiBnTick (ex. frais affichés dans l’app/le site). Nous ne réclamons pas de paiements pour des marchandises tierces non liées.</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">5) Paiements & frais — bonnes pratiques</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">
-                  <li>Payez dans l’app/site PicknDrop ou via les partenaires listés uniquement.</li>
+                  <li>Payez dans l’app/site TiiBnTick ou via les partenaires listés uniquement.</li>
                   <li>Pour la money mobile (p. ex. MoMo, Orange Money), vérifiez le nom du bénéficiaire et le montant avant de valider.</li>
-                  <li>N’envoyez jamais d’argent à des particuliers qui vous contactent en prétendant être PicknDrop.</li>
+                  <li>N’envoyez jamais d’argent à des particuliers qui vous contactent en prétendant être TiiBnTick.</li>
               </ul>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">6) Message suspect ? Réagissez ainsi</h3>
@@ -1051,7 +1051,7 @@ export const legalDocs: Record<string, LegalContent> = {
               <p>Les fraudeurs créent des sites et comptes sociaux très ressemblants. Ne faites confiance qu’aux liens publiés sur nos domaines officiels ou dans l’app. Nous déclinons toute responsabilité pour les sites/contenus tiers usurpant notre marque.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">10) Mention légale</h3>
-              <p>L’usage non autorisé de la marque, des logos et contenus PicknDrop est interdit. Nous nous réservons le droit de faire retirer les contenus frauduleux et de coopérer avec les autorités.</p>
+              <p>L’usage non autorisé de la marque, des logos et contenus TiiBnTick est interdit. Nous nous réservons le droit de faire retirer les contenus frauduleux et de coopérer avec les autorités.</p>
 
               <h3 className="text-xl font-semibold mt-6 mb-3">11) Contact</h3>
               <ul className="list-disc list-inside space-y-2 pl-4">

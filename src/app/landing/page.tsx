@@ -60,7 +60,7 @@ const DEFAULT_DATA: ContentData = {
 
 const FREELANCE_DATA: ContentData = {
     title: <>Monétisez votre espace,<br /><span className="text-amber-300 dark:text-amber-200">devenez partenaire.</span></>,
-    description: "Transformez votre boutique ou votre domicile en Point Relais PicknDrop. Gagnez une commission sur chaque colis déposé ou retiré.",
+    description: "Transformez votre boutique ou votre domicile en Point Relais TiiBnTick. Gagnez une commission sur chaque colis déposé ou retiré.",
     heroImage: "/images/image2.jpg",
     ctaPrimary: { text: "Créer mon Point Relais", link: "/register" },
     ctaSecondary: { text: "Connexion Espace Pro", link: "/login" },
@@ -84,7 +84,7 @@ const FREELANCE_DATA: ContentData = {
 
 const LIVREUR_DATA: ContentData = {
     title: <>Livrez et gagnez,<br /><span className="text-amber-300 dark:text-amber-200">à votre rythme.</span></>,
-    description: "Moto, vélo ou voiture ? Devenez votre propre patron avec PicknDrop Delivery. Acceptez des courses, livrez, encaissez.",
+    description: "Moto, vélo ou voiture ? Devenez votre propre patron avec TiiBnTick Delivery. Acceptez des courses, livrez, encaissez.",
     heroImage: "/images/livrer.jpeg",
     ctaPrimary: { text: "Devenir Livreur", link: "/register" },
     ctaSecondary: { text: "Connexion Livreur", link: "/login" },
@@ -117,7 +117,7 @@ const AGENCY_DATA: ContentData = {
         { icon: Layers, title: "Dashboard 360", desc: "Vue globale sur tous vos véhicules, chauffeurs et colis en temps réel." },
         { icon: Users, title: "Gestion Équipe", desc: "Créez des accès pour vos employés (guichetiers, chauffeurs)." },
         { icon: BarChart3, title: "Analytics", desc: "Rapports détaillés sur vos performances et votre chiffre d'affaires." },
-        { icon: Briefcase, title: "API Ouverte", desc: "Intégrez PicknDrop directement à vos systèmes existants." }
+        { icon: Briefcase, title: "API Ouverte", desc: "Intégrez TiiBnTick directement à vos systèmes existants." }
     ],
     stepsTitle: "Intégration fluide",
     steps: [
@@ -136,7 +136,7 @@ const MARKET_DATA: ContentData = {
     heroImage: "/images/expedition.avif",
     ctaPrimary: { text: "Voir les Offres", link: "/marketplace" },
     ctaSecondary: { text: "Publier une annonce", link: "/expedition" },
-    featuresTitle: "La Marketplace PicknDrop",
+    featuresTitle: "La Marketplace TiiBnTick",
     features: [
         { icon: Search, title: "Transparence", desc: "Comparez les profils, les avis et les tarifs avant de choisir." },
         { icon: Shield, title: "Sécurité", desc: "Paiements bloqués jusqu'à confirmation de la livraison." },
@@ -313,7 +313,7 @@ const LandingContent = () => {
                                 {content.featuresTitle}
                             </h2>
                             <p className="mt-4 text-lg text-gray-600 dark:text-gray-300 transition-colors duration-300">
-                                Découvrez comment PicknDrop répond spécifiquement à vos besoins
+                                Découvrez comment TiiBnTick répond spécifiquement à vos besoins
                             </p>
                         </div>
                         <DynamicFeatures data={content} />

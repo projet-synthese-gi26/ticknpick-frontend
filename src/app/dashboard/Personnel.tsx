@@ -105,7 +105,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Manutentionnaire',
     workZone: 'Zone B - Stockage',
     status: 'En ligne',
-    contact: { phone: '+237 699112233', email: 'c.essono@pickndrop.cm' },
+    contact: { phone: '+237 699112233', email: 'c.essono@TiiBnTick.cm' },
     assignedTasks: [
       { id: 't-101', description: 'Ranger 50 nouveaux colis', status: 'En cours', dueDate: '2025-07-28' },
       { id: 't-102', description: 'Scanner inventaire Allée B-3', status: 'À faire', dueDate: '2025-07-28' },
@@ -120,7 +120,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Responsable Stock',
     workZone: 'Zone A - Réception',
     status: 'En pause',
-    contact: { phone: '+237 677445566', email: 'a.mballa@pickndrop.cm' },
+    contact: { phone: '+237 677445566', email: 'a.mballa@TiiBnTick.cm' },
     assignedTasks: [
       { id: 't-103', description: 'Valider le lot Jumia H-56', status: 'Terminé', dueDate: '2025-07-28' },
       { id: 't-104', description: 'Assigner tâches aux manutentionnaires', status: 'En cours', dueDate: '2025-07-28' },
@@ -135,7 +135,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Préparateur Commandes',
     workZone: 'Zone C - Expédition',
     status: 'Hors ligne',
-    contact: { phone: '+237 655778899', email: 'm.fouda@pickndrop.cm' },
+    contact: { phone: '+237 655778899', email: 'm.fouda@TiiBnTick.cm' },
     assignedTasks: [
       { id: 't-105', description: 'Préparer expédition pour Douala', status: 'À faire', dueDate: '2025-07-29' },
     ],
@@ -149,7 +149,7 @@ const initialStaffMembers: StaffMember[] = [
     role: 'Accueil Client',
     workZone: 'Zone A - Réception',
     status: 'En ligne',
-    contact: { phone: '+237 688990011', email: 's.ngono@pickndrop.cm' },
+    contact: { phone: '+237 688990011', email: 's.ngono@TiiBnTick.cm' },
     assignedTasks: [
       { id: 't-106', description: 'Traiter 5 retraits clients', status: 'En cours', dueDate: '2025-07-28' }
     ],

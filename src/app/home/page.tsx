@@ -148,7 +148,7 @@ export default function HomePage() {
     switch (user.role) {
       case 'CLIENT':
         config = {
-          title: "PicknDrop Link",
+          title: "TiiBnTick Link",
           welcomeMessage: "votre espace personnel pour gérer vos envois.",
           mainIcon: <Package className='text-white h-12 w-12' />,
           services: [
@@ -161,7 +161,7 @@ export default function HomePage() {
       
       case 'LIVREUR':
         config = {
-          title: "PicknDrop Deliver",
+          title: "TiiBnTick Deliver",
           welcomeMessage: "dans votre espace de gestion des livraisons.",
           mainIcon: <Truck className='text-white h-12 w-12' />,
           services: [
@@ -174,7 +174,7 @@ export default function HomePage() {
 
       case 'AGENCY':
         config = {
-          title: "PicknDrop Agency", // Titre spécifique Agence
+          title: "TiiBnTick Agency", // Titre spécifique Agence
           welcomeMessage: "dans votre centre de gestion logistique.",
           mainIcon: <Building2 className='text-white h-12 w-12' />,
           services: [
@@ -189,7 +189,7 @@ export default function HomePage() {
       case 'FREELANCE':
       default:
         config = {
-          title: "PicknDrop Point", // Titre spécifique Freelance
+          title: "TiiBnTick Point", // Titre spécifique Freelance
           welcomeMessage: "dans le système de gestion de votre point relais.",
           mainIcon: <MapPinHouse className='text-white h-12 w-12' />,
           services: [

@@ -243,9 +243,9 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
 
       // -- Header Brand --
       pdf.setFontSize(22);
-      pdf.setTextColor(255, 102, 0); // PicknDrop Orange
+      pdf.setTextColor(255, 102, 0); // TiiBnTick Orange
       pdf.setFont("helvetica", "bold");
-      pdf.text("PicknDrop", 15, y);
+      pdf.text("TiiBnTick", 15, y);
       
       pdf.setFontSize(10);
       pdf.setTextColor(100);
@@ -315,7 +315,7 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
       const footerY = pdf.internal.pageSize.getHeight() - 20;
       pdf.setFontSize(8);
       pdf.setTextColor(150);
-      pdf.text("Document généré automatiquement par PicknDrop System.", 15, footerY);
+      pdf.text("Document généré automatiquement par TiiBnTick System.", 15, footerY);
       pdf.text("Conservez ce reçu comme preuve de dépôt.", 15, footerY + 4);
 
       pdf.save(`Bordereau_Depot_${shipment.tracking_number}.pdf`);

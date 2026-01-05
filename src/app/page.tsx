@@ -62,7 +62,7 @@ const FEATURES_DATA: FeatureItem[] = [
   {
     id: "link",
     role: "CLIENT",
-    title: "PicknDrop Link",
+    title: "TiiBnTick Link",
     subtitle: "Pré-enregistrement & Transit",
     description: "La solution pour les particuliers et le commerce de proximité. Gérez le pré-enregistrement, le dépôt et le retrait via des micro-hubs, même dans les zones sans adresse formelle.",
     image: "/images/link.png",
@@ -73,7 +73,7 @@ const FEATURES_DATA: FeatureItem[] = [
   {
     id: "go",
     role: "GO", 
-    title: "PicknDrop Go",
+    title: "TiiBnTick Go",
     subtitle: "Annonces & Disponibilités",
     description: "Marketplace d'opportunités en temps réel. Publiez des annonces de colis à collecter et matchez avec les disponibilités des freelances et benskinneurs grâce à la géolocalisation.",
     image: "/images/go.png", 
@@ -84,7 +84,7 @@ const FEATURES_DATA: FeatureItem[] = [
   {
     id: "agency",
     role: "AGENCY",
-    title: "PicknDrop Agency",
+    title: "TiiBnTick Agency",
     subtitle: "ERP Logistique Complet",
     description: "Un outil de gestion professionnel pour les agences de transport. Centralisez votre flotte, pilotez vos flux multi-sites, gérez la facturation et les bordereaux électroniques.",
     image: "/images/image4.png",
@@ -95,7 +95,7 @@ const FEATURES_DATA: FeatureItem[] = [
   {
     id: "point",
     role: "FREELANCE",
-    title: "PicknDrop Point",
+    title: "TiiBnTick Point",
     subtitle: "Gestion Points Relais",
     description: "Convertissez instantanément boutiques, stations ou cybercafés en acteurs logistiques légitimes. Gérez les entrées/sorties, validez les colis et suivez vos commissions.",
     image: "/images/point.png",
@@ -106,7 +106,7 @@ const FEATURES_DATA: FeatureItem[] = [
   {
     id: "freelancer",
     role: "LIVREUR",
-    title: "PicknDrop Freelancer",
+    title: "TiiBnTick Freelancer",
     subtitle: "Pour Livreurs Indépendants",
     description: "L'application dédiée pour professionnaliser les benskinneurs et transporteurs individuels. Gagnez en crédibilité avec un profil pro, un historique de course et des paiements sécurisés.",
     image: "/images/free.png",
@@ -117,7 +117,7 @@ const FEATURES_DATA: FeatureItem[] = [
   {
     id: "market",
     role: "MARKET",
-    title: "PicknDrop Market",
+    title: "TiiBnTick Market",
     subtitle: "Vitrine & Recherche",
     description: "Le moteur de découverte public. Le point d'entrée pour trouver une agence, un point relais, un livreur ou comparer les offres de services logistiques disponibles.",
     image: "/images/market.png",
@@ -130,7 +130,7 @@ const FEATURES_DATA: FeatureItem[] = [
 // === DONNÉES TRANSVERSALES ===
 const TECH_FEATURES = [
   {
-    title: "PicknDrop Search",
+    title: "TiiBnTick Search",
     subtitle: "Recherche & Tracking Universels",
     icon: ScanSearch,
     color: "bg-blue-500",
@@ -144,7 +144,7 @@ const TECH_FEATURES = [
     ]
   },
   {
-    title: "PicknDrop Core",
+    title: "TiiBnTick Core",
     subtitle: "Le Noyau Partagé & API",
     icon: Cpu,
     color: "bg-purple-500",
@@ -158,7 +158,7 @@ const TECH_FEATURES = [
     ]
   },
   {
-    title: "PicknDrop Confidence",
+    title: "TiiBnTick Confidence",
     subtitle: "Trust Layer Blockchain",
     icon: Blocks,
     color: "bg-emerald-500",
@@ -187,7 +187,7 @@ const TransversalSection = () => {
                 </span>
                 <h2 className="text-3xl md:text-5xl font-black">La Puissance Transversale ⚡</h2>
                 <p className="text-slate-400 max-w-2xl mx-auto text-lg">
-                    Au-delà des modules, une architecture robuste assure la cohésion, la sécurité et la traçabilité de tout le système PicknDrop.
+                    Au-delà des modules, une architecture robuste assure la cohésion, la sécurité et la traçabilité de tout le système TiiBnTick.
                 </p>
             </div>
 
@@ -337,7 +337,7 @@ export default function PortalPage() {
               <Package className="w-5 h-5 sm:w-6 sm:h-6"/>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-md">
-              Pick<span className="text-orange-500">n</span>Drop
+              TiiB<span className="text-orange-500">n</span>Tick
             </h1>
           </div>
           
@@ -414,7 +414,7 @@ export default function PortalPage() {
       <div id="modules" className="bg-slate-50 dark:bg-[#0b0c15] pb-12 sm:pb-16 lg:pb-24">
         
         <div className="container mx-auto text-center pt-6 sm:pt-10 pb-8 sm:pb-12 lg:pb-16 px-4">
-          <h2 className="text-xs sm:text-sm font-black text-orange-600 dark:text-orange-500 uppercase tracking-[0.2em] mb-2 sm:mb-3">La Suite PicknDrop</h2>
+          <h2 className="text-xs sm:text-sm font-black text-orange-600 dark:text-orange-500 uppercase tracking-[0.2em] mb-2 sm:mb-3">La Suite TiiBnTick</h2>
           <h3 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white">Découvrez nos solutions</h3>
         </div>
 
