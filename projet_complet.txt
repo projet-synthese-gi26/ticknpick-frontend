@@ -634,7 +634,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\home\page.tsx
 // FICHIER : src/app/home/page.tsx
 'use client';
 
-import { PackagePlus, PackageOpen, User, MapPinHouse, Truck, Search, Archive, Package, Building2 } from 'lucide-react';
+import { PackagePlus, PackageOpen, User, MapPinHouse, Truck, Search, Archive, Package, Building2, TruckElectric } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo, ReactNode } from 'react';
@@ -956,8 +956,8 @@ export default function HomePage() {
           welcomeMessage: "dans votre espace de gestion des livraisons.",
           mainIcon: <Truck className='text-white h-12 w-12' />,
           services: [
-            { title: "Récupérer un colis", description: "Consultez les colis à récupérer aux points relais.", href: "/collect-package", icon: <Archive className="h-8 w-8 text-white" />, color: colors.serviceGradient },
-            { title: "Déposer un colis", description: "Validez la livraison d'un colis à destination.", href: "/drop-package", icon: <PackageOpen className="h-8 w-8 text-white" />, color: colors.serviceGradient },
+            { title: "Trouver une annonce", description: "Consultez les colis à récupérer aux points relais.", href: "/collect-package", icon: <Search className="h-8 w-8 text-white" />, color: colors.serviceGradient },
+            { title: "Gérer mes annonces", description: "Validez la prise et/ou livraison d'un colis.", href: "/my-deliveries", icon: <TruckElectric className="h-8 w-8 text-white" />, color: colors.serviceGradient },
             { title: "Mon compte", description: "Suivez vos courses et vos performances.", href: "/dashboard", icon: <User className="h-8 w-8 text-white" />, color: colors.serviceGradient },
           ]
         };
@@ -10167,7 +10167,8 @@ import {
   ArrowRightLeft, DollarSign, Bell, Search, Sun, Moon,
   CreditCard,
   HandCoins,
-  MapPin
+  MapPin,
+  Send
 } from 'lucide-react';
 
 // --- Import des composants pour chaque onglet ---
@@ -10190,6 +10191,7 @@ import AgencyOverview from './agence/AgencyOverview'; // Nouvelle vue
 import AgencyRelayPoints from './agence/AgencyRelayPoints'; // Nouvelle vue
 import AgencyVehicles from './agence/AgencyVehicles'; // Nouvelle vue
 import AgencyInventory from './agence/AgencyInventory';
+import FindDelivery from './FindDelivery';
 
 export type UIAccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'ADMIN' | 'AGENCE_OWNER';
 
@@ -10720,7 +10722,7 @@ const DashboardSwitcher: React.FC = () => {
       case 'livreur':
         return [
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
-          { id: 'deliveries', label: 'Mes Livraisons', icon: Truck, badge: 7 },
+          { id: 'deliveries', label: 'Mes Livraisons', icon: Send, badge: 7 },
           { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
           { id: 'service-card', label: 'Carte de Service', icon: User },
           { id: 'profile', label: 'Mon Profil', icon: User },
@@ -10732,6 +10734,7 @@ const DashboardSwitcher: React.FC = () => {
           { id: 'my-relays', label: 'Mes Points Relais', icon: MapPin }, // NOUVEAU
           { id: 'my-vehicles', label: 'Mes Véhicules', icon: Truck },   // NOUVEAU
           { id: 'inventory', label: 'Inventaire Agence', icon: Package },
+          { id: 'deliveries', label: 'Mes Livraisons', icon: Send, badge: 7 },
           { id: 'staff', label: 'Personnel', icon: Users },
           { id: 'profile', label: 'Mon Profil', icon: User },
           { id: 'service-card', label: 'Carte de Service', icon: Briefcase },
@@ -13525,428 +13528,237 @@ export default function ClientPackagesPage({ profile }: { profile: UserProfile }
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\Deliveries.tsx
 ================================================================================
 
-// FICHIER : src/app/dashboard/Deliveries.tsx
 'use client';
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { 
-  Truck, MapPin, Package, Check, Phone, Navigation,
-  RefreshCw, Plus, XCircle, Search, Clock, Box, PlayCircle,
-  CheckCircle,
-  Loader2,
-  ArrowRight,
-  Info
+  Truck, Search, RefreshCw, Archive, Zap, History 
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { delivererService, DelivererPackage } from '@/services/delivererService';
-import toast from 'react-hot-toast';
-import { UserProfile } from './page';
+import FeedbackAlert, { AlertType } from '@/components/ui/FeedbackAlert';
 
-// Imports Dynamiques Map (Leaflet)
-const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false });
-const Popup = dynamic(() => import('react-leaflet').then(m => m.Popup), { ssr: false });
-import 'leaflet/dist/leaflet.css';
+// Sous-Composants
+import FindDelivery from './FindDelivery';
+import PackageSidebar from './PackageSidebar';
+import { motion } from 'framer-motion';
 
-// Utilitaire Icons Leaflet (Correctif bug affichage icones par défaut)
-const FixLeaflet = () => {
-    useEffect(() => {
-        (async () => {
-             const L = (await import('leaflet')).default;
-             // @ts-ignore
-             delete L.Icon.Default.prototype._getIconUrl;
-             L.Icon.Default.mergeOptions({
-                 iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
-                 iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-                 shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-             });
-        })();
-    }, []);
-    return null;
-}
-
-export default function DeliveryPage({ profile }: { profile: UserProfile }) {
-    // --- ÉTATS ---
-    const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
-    const [location, setLocation] = useState<[number, number] | null>(null);
-    const [loading, setLoading] = useState(false);
-
-    // Données Courses
-    const [myCourses, setMyCourses] = useState<DelivererPackage[]>([]);
-    const [availablePackages, setAvailablePackages] = useState<DelivererPackage[]>([]);
-    
-    // Stats
-    const [stats, setStats] = useState({
-        pendingPickup: 0,
-        inProgress: 0, 
-        totalDone: 0     
+// Vue: Tableau des courses
+const MyDeliveriesList = ({ list, onDetails }: { list: DelivererPackage[], onDetails: (p: DelivererPackage) => void }) => {
+    // Trier : Assigne, Transit, Terminé
+    const sorted = [...list].sort((a,b) => {
+        const order = { 'ASSIGNED_TO_DELIVERER': 1, 'IN_TRANSIT': 2, 'DELIVERED': 3 };
+        return (order[a.currentStatus as keyof typeof order] || 9) - (order[b.currentStatus as keyof typeof order] || 9);
     });
 
-    // Modales
-    const [showNewCourseModal, setShowNewCourseModal] = useState(false);
-    const [activePackage, setActivePackage] = useState<DelivererPackage | null>(null); 
-    const [recipientCode, setRecipientCode] = useState('');
-
-    // --- 1. INITIALISATION ---
-    useEffect(() => {
-        if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition((position) => {
-                setLocation([position.coords.latitude, position.coords.longitude]);
-            }, () => {
-                // Default fallback (ex: Yaoundé)
-                setLocation([3.8480, 11.5021]); 
-            });
-        }
-        fetchMyCourses();
-    }, []);
-
-    // --- 2. DATA FETCHING ---
-
-    const fetchMyCourses = async () => {
-        setLoading(true);
-        try {
-            // Utilise l'endpoint /my-deliveries (Colis ASSIGNÉS)
-            const data = await delivererService.getMyDeliveries();
-            console.log("🚚 Mes Courses:", data);
-            
-            // Stats rapides basées sur la liste récupérée
-            const waiting = data.filter(p => p.currentStatus === 'ASSIGNED_TO_DELIVERER').length;
-            const transiting = data.filter(p => p.currentStatus === 'IN_TRANSIT').length;
-            const done = data.filter(p => p.currentStatus === 'DELIVERED').length;
-
-            // Filtre : on n'affiche que les actifs dans la liste principale
-            const activeList = data.filter(p => ['ASSIGNED_TO_DELIVERER', 'IN_TRANSIT'].includes(p.currentStatus));
-
-            setMyCourses(activeList);
-            setStats(s => ({ 
-                ...s, 
-                pendingPickup: waiting, 
-                inProgress: transiting,
-                totalDone: s.totalDone > done ? s.totalDone : done // Simple logic update
-            }));
-        } catch (e) {
-            console.error(e);
-            toast.error("Erreur actualisation courses");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const openNewCourseModal = async () => {
-        setShowNewCourseModal(true);
-        setLoading(true);
-        try {
-            // Fetch only FOR_PICKUP
-            const data = await delivererService.getAvailablePackages();
-            console.log("📦 Disponibles:", data);
-            
-            // Éviter d'afficher les colis qu'on a déjà pris (par sécurité UI)
-            const myIds = new Set(myCourses.map(c => c.id));
-            const distinctAvailable = data.filter(p => !myIds.has(p.id));
-            
-            setAvailablePackages(distinctAvailable);
-        } catch (e) {
-            toast.error("Impossible de charger les nouvelles courses");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // --- 3. ACTIONS BOUTONS ---
-
-    const handleAcceptCourse = async (pkg: DelivererPackage) => {
-        const t = toast.loading("Assignation...");
-        try {
-            await delivererService.assignPackage(pkg.id);
-            toast.success("Course assignée !", { id: t });
-            setShowNewCourseModal(false);
-            
-            // Mise à jour optimiste locale
-            const assignedPkg = { ...pkg, currentStatus: 'ASSIGNED_TO_DELIVERER' };
-            setMyCourses(prev => [...prev, assignedPkg]);
-            
-            // Retirer de la liste disponible
-            setAvailablePackages(prev => prev.filter(p => p.id !== pkg.id));
-            setStats(s => ({ ...s, pendingPickup: s.pendingPickup + 1 }));
-
-        } catch (e: any) {
-            toast.error("Erreur assignation: " + (e.message || ""), { id: t });
-        }
-    };
-
-    const handlePickup = async (pkg: DelivererPackage) => {
-        // En vrai, il faudrait l'ID du RelayPoint si besoin
-        // Le backend semble demander relayPointId en Query param.
-        // Si vous avez l'ID dans les données (non affiché ici), passez-le.
-        // Sinon, le backend devra être assez intelligent ou on demande un scan QR Code du relais.
-        
-        if (!confirm(`Confirmer la récupération de ${pkg.trackingNumber} au point relais ?`)) return;
-
-        const t = toast.loading("Traitement...");
-        try {
-            // Note: Envoie l'ID du colis pour l'instant
-            await delivererService.pickupPackage(pkg.id); 
-            
-            toast.success("Colis Récupéré - En route !", { id: t });
-            
-            // MAJ Locale
-            setMyCourses(prev => prev.map(p => p.id === pkg.id ? { ...p, currentStatus: 'IN_TRANSIT' } : p));
-            setStats(s => ({ ...s, pendingPickup: s.pendingPickup - 1, inProgress: s.inProgress + 1 }));
-
-        } catch (e: any) {
-            toast.error("Échec récupération: " + e.message, { id: t });
-        }
-    };
-
-    const handleDeliver = async () => {
-        if (!activePackage) return;
-        const t = toast.loading("Validation livraison...");
-        
-        try {
-            // Le code ou téléphone peut être obligatoire selon la config backend
-            const payload = { recipientPhone: recipientCode || activePackage.recipientPhone };
-            
-            await delivererService.deliverPackage(activePackage.id, payload);
-            
-            toast.success("Livraison Confirmée !", { id: t });
-            
-            // Retirer de la liste
-            setMyCourses(prev => prev.filter(p => p.id !== activePackage.id));
-            setStats(s => ({ ...s, inProgress: s.inProgress - 1, totalDone: s.totalDone + 1 }));
-            
-            setActivePackage(null);
-            setRecipientCode('');
-
-        } catch (e: any) {
-            toast.error("Erreur Livraison: " + e.message, { id: t });
-        }
-    };
-
-    // --- UI HELPERS ---
-
-    const StatWidget = ({ label, value, icon: Icon, color }: any) => (
-        <div className={`p-4 rounded-2xl border flex items-center justify-between shadow-sm bg-white dark:bg-slate-800 ${color}`}>
-            <div>
-                <p className="text-xs font-bold uppercase opacity-70 mb-1">{label}</p>
-                <h3 className="text-2xl font-black">{value}</h3>
-            </div>
-            <div className="p-3 bg-gray-50/50 rounded-xl">
-                <Icon className="w-6 h-6"/>
-            </div>
+    if(sorted.length === 0) return (
+        <div className="py-20 text-center flex flex-col items-center justify-center text-slate-400 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700">
+            <Archive className="w-16 h-16 mb-4 opacity-50"/>
+            <p>Vous n'avez aucune course active.</p>
+            <p className="text-sm mt-1">Utilisez "Trouver une Course" pour commencer.</p>
         </div>
     );
 
     return (
-        <div className="space-y-6 pb-24 relative min-h-screen">
-             <FixLeaflet/>
+        <div className="grid gap-4">
+             {sorted.map(pkg => (
+                 <div key={pkg.id} onClick={() => onDetails(pkg)} className="group bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-600 transition-all cursor-pointer relative overflow-hidden">
+                      {/* Statut Line */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1.5 
+                          ${pkg.currentStatus === 'ASSIGNED_TO_DELIVERER' ? 'bg-orange-500' : 
+                            pkg.currentStatus === 'IN_TRANSIT' ? 'bg-blue-500' : 'bg-green-500'}`} 
+                      />
+
+                      <div className="pl-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div>
+                              <div className="flex gap-2 items-center mb-1">
+                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-bold uppercase text-slate-500 tracking-wider">
+                                      {pkg.currentStatus.replace(/_/g, ' ')}
+                                  </span>
+                                  <span className="font-mono font-black text-sm text-slate-800 dark:text-white">{pkg.trackingNumber}</span>
+                              </div>
+                              <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                                  <span className="font-semibold">{pkg.pickupAddress}</span> 
+                                  <span className="text-xs">➔</span> 
+                                  <span className="font-semibold">{pkg.deliveryAddress}</span>
+                              </div>
+                          </div>
+
+                          <div className="text-right">
+                              <span className="block font-black text-lg text-violet-600 dark:text-violet-400">{pkg.deliveryFee.toLocaleString()} F</span>
+                              {pkg.currentStatus !== 'DELIVERED' && (
+                                  <span className="text-xs text-violet-500 font-bold bg-violet-50 dark:bg-violet-900/30 px-2 py-1 rounded">ACTION REQUISE</span>
+                              )}
+                          </div>
+                      </div>
+                 </div>
+             ))}
+        </div>
+    );
+};
+
+
+export default function DeliveriesPage() {
+    const [view, setView] = useState<'LIST' | 'FIND'>('LIST');
+    const [packages, setPackages] = useState<DelivererPackage[]>([]);
+    
+    // UI Logic
+    const [selectedPkg, setSelectedPkg] = useState<DelivererPackage|null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [feedback, setFeedback] = useState<{show:boolean, type:AlertType, msg:string}>({ show:false, type:'info', msg:'' });
+    const [loadingData, setLoadingData] = useState(false);
+
+    // Initial Load
+    useEffect(() => { reloadData(); }, []);
+
+    const reloadData = async () => {
+        setLoadingData(true);
+        const res = await delivererService.getMyDeliveries();
+        setPackages(res);
+        setLoadingData(false);
+    };
+
+    // ACTION : ASSIGN (Depuis la Carte)
+    const handleAssign = async (pkg: DelivererPackage) => {
+        setActionLoading(true);
+        try {
+            await delivererService.assignPackage(pkg.id);
+            setFeedback({ show: true, type: 'success', msg: "Course acceptée avec succès !" });
+            setView('LIST'); // Retour liste
+            setSelectedPkg(null);
+            reloadData();
+        } catch (e) {
+            setFeedback({ show: true, type: 'error', msg: "Erreur lors de l'acceptation" });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // ACTION : PICKUP (Liste)
+    const handlePickup = async () => {
+        if(!selectedPkg) return;
+        setActionLoading(true);
+        try {
+            await delivererService.pickupPackage(selectedPkg.id);
+            setFeedback({ show: true, type: 'success', msg: "Colis marqué comme récupéré." });
+            setSelectedPkg(null);
+            reloadData();
+        } catch (e) {
+            setFeedback({ show: true, type: 'error', msg: "Erreur serveur Pickup" });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // ACTION : DELIVER (Liste)
+    // Ici version simplifiée sans code pour la démo, ou ajouter modal code si besoin
+    const handleDeliver = async () => {
+        if(!selectedPkg) return;
+        // On demande un code manuel rapide pour la sécurité (simulation)
+        const code = prompt("Code de confirmation du client (Optionnel simulation) :");
+        
+        setActionLoading(true);
+        try {
+            await delivererService.deliverPackage(selectedPkg.id, code || "AUTO");
+            setFeedback({ show: true, type: 'success', msg: "Bravo ! Livraison terminée." });
+            setSelectedPkg(null);
+            reloadData();
+        } catch (e) {
+            setFeedback({ show: true, type: 'error', msg: "Erreur validation livraison" });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    return (
+        <div className="relative h-full font-sans bg-transparent min-h-screen">
              
-             {/* 1. STATS */}
-             <div className="grid grid-cols-3 gap-3 md:gap-6">
-                 <StatWidget 
-                     label="A Récupérer" value={stats.pendingPickup} icon={Box} 
-                     color="border-orange-200 text-orange-800 dark:border-orange-800 dark:text-orange-200" 
-                 />
-                 <StatWidget 
-                     label="En Route" value={stats.inProgress} icon={Truck} 
-                     color="border-blue-200 text-blue-800 dark:border-blue-800 dark:text-blue-200" 
-                 />
-                 <StatWidget 
-                     label="Total Livré" value={stats.totalDone} icon={CheckCircle} 
-                     color="border-green-200 text-green-800 dark:border-green-800 dark:text-green-200" 
-                 />
-             </div>
+             {/* ALERT SYSTEM */}
+             <FeedbackAlert 
+                 type={feedback.type} 
+                 message={feedback.msg} 
+                 isVisible={feedback.show} 
+                 onClose={() => setFeedback(p => ({...p, show:false}))} 
+             />
 
-             {/* 2. ACTIONS */}
-             <button 
-                onClick={openNewCourseModal}
-                className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white text-lg font-black rounded-2xl shadow-xl shadow-orange-500/20 active:scale-95 transition flex items-center justify-center gap-3"
-             >
-                 <Plus className="w-6 h-6"/> CHERCHER UN COLIS
-             </button>
-
-             {/* 3. LISTE DES COURSES ACTIVES */}
-             <div className="flex justify-between items-center mt-6 mb-2">
-                 <h3 className="font-bold text-lg text-slate-800 dark:text-white">Ma Feuille de Route</h3>
-                 <button onClick={fetchMyCourses} disabled={loading}><RefreshCw className={`w-5 h-5 text-gray-500 ${loading ? 'animate-spin':''}`}/></button>
-             </div>
-
-             {myCourses.length === 0 ? (
-                 <div className="text-center py-16 text-gray-400 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-3xl">
-                     <Truck className="w-12 h-12 mx-auto mb-2 opacity-50"/>
-                     <p>Aucune livraison active.</p>
-                     <p className="text-sm mt-1">Cliquez sur "Chercher" pour commencer.</p>
+             {/* --- CONTENU --- */}
+             {view === 'FIND' ? (
+                 <div className="fixed inset-0 z-50 bg-white">
+                      {/* VUE CARTE RECHERCHE (Full Screen) */}
+                      <FindDelivery 
+                          onClose={() => setView('LIST')} 
+                                                // IL FAUT QUE CETTE PROP EXISTE
+                          onSelectPackage={(pkg) => {
+                              // On déclenche l'assignation ici (dans le parent)
+                              handleAssign(pkg);
+                              // Pour l'UX, vous pouvez soit fermer direct, soit laisser handleAssign gérer
+                          }} 
+                      />
                  </div>
              ) : (
-                 <div className="space-y-4">
-                     {myCourses.map(pkg => (
-                         <motion.div layout key={pkg.id} initial={{opacity:0}} animate={{opacity:1}} className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden">
-                             {/* Bandeau latéral état */}
-                             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${pkg.currentStatus === 'ASSIGNED_TO_DELIVERER' ? 'bg-orange-500' : 'bg-blue-600'}`} />
-                             
-                             <div className="pl-3 flex flex-col gap-3">
-                                 {/* En-tête Carte */}
-                                 <div className="flex justify-between items-start">
-                                     <div>
-                                         <div className="flex items-center gap-2 mb-1">
-                                             <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-bold uppercase text-slate-500">
-                                                 {pkg.currentStatus.replace(/_/g, ' ')}
-                                             </span>
-                                         </div>
-                                         <h4 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{pkg.trackingNumber}</h4>
-                                     </div>
-                                     <div className="text-right">
-                                         <span className="block font-bold text-green-600 dark:text-green-400 text-lg">{(pkg.deliveryFee || 0).toLocaleString()} F</span>
-                                     </div>
-                                 </div>
+                 <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+                      
+                      {/* Header Dashboard */}
+                      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                           <div>
+                               <h1 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                   <Truck className="w-8 h-8 text-violet-600"/> Gestion des Courses
+                               </h1>
+                               <p className="text-slate-500 font-medium">Gérez vos livraisons actives ou trouvez-en de nouvelles.</p>
+                           </div>
 
-                                 {/* Trajet */}
-                                 <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 dark:bg-slate-900/50 p-3 rounded-xl border border-gray-100 dark:border-slate-700">
-                                     <div className="space-y-1">
-                                         <p className="text-[10px] text-gray-400 font-bold uppercase flex items-center gap-1"><Box className="w-3 h-3"/> Pickup</p>
-                                         <p className="font-semibold text-gray-700 dark:text-gray-300 line-clamp-2">{pkg.pickupAddress}</p>
-                                     </div>
-                                     <div className="space-y-1 text-right">
-                                         <p className="text-[10px] text-gray-400 font-bold uppercase flex items-center justify-end gap-1">Drop <MapPin className="w-3 h-3"/></p>
-                                         <p className="font-semibold text-gray-700 dark:text-gray-300 line-clamp-2">{pkg.deliveryAddress}</p>
-                                     </div>
-                                 </div>
+                           <div className="flex gap-3 w-full md:w-auto">
+                                <button onClick={reloadData} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 transition">
+                                    <RefreshCw className={`w-5 h-5 ${loadingData?'animate-spin':''}`}/>
+                                </button>
+                                <button 
+                                   onClick={() => setView('FIND')}
+                                   className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl shadow-lg shadow-violet-500/20 transition-transform active:scale-95"
+                                >
+                                    <Zap className="w-5 h-5 fill-white"/> Trouver une course
+                                </button>
+                           </div>
+                      </div>
 
-                                 {/* BOUTON ACTION */}
-                                 {pkg.currentStatus === 'ASSIGNED_TO_DELIVERER' ? (
-                                     <button 
-                                        onClick={() => handlePickup(pkg)}
-                                        className="w-full mt-1 py-3 bg-slate-900 hover:bg-black text-white dark:bg-white dark:text-slate-900 font-bold rounded-xl shadow transition active:scale-95 flex justify-center items-center gap-2"
-                                     >
-                                         <PlayCircle className="w-4 h-4"/> CONFIRMER RÉCUPÉRATION
-                                     </button>
-                                 ) : (
-                                     <div className="flex gap-2 mt-1">
-                                         <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pkg.deliveryAddress)}`} target="_blank" className="p-3 bg-gray-100 dark:bg-slate-700 rounded-xl text-slate-600 dark:text-white">
-                                             <Navigation className="w-5 h-5"/>
-                                         </a>
-                                         <button 
-                                             onClick={() => setActivePackage(pkg)}
-                                             className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-500/30 active:scale-95 transition flex justify-center items-center gap-2"
-                                         >
-                                             <CheckCircle className="w-4 h-4"/> VALIDER LIVRAISON
-                                         </button>
-                                     </div>
-                                 )}
-                             </div>
-                         </motion.div>
-                     ))}
+                      {/* STATS RAPIDES */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
+                               <p className="text-xs font-bold text-blue-600 uppercase">En Attente</p>
+                               <p className="text-2xl font-black text-slate-800 dark:text-white">{packages.filter(p=>p.currentStatus==='ASSIGNED_TO_DELIVERER').length}</p>
+                           </div>
+                           <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-2xl border border-orange-100 dark:border-orange-800">
+                               <p className="text-xs font-bold text-orange-600 uppercase">En Transit</p>
+                               <p className="text-2xl font-black text-slate-800 dark:text-white">{packages.filter(p=>p.currentStatus==='IN_TRANSIT').length}</p>
+                           </div>
+                           <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-2xl border border-green-100 dark:border-green-800">
+                               <p className="text-xs font-bold text-green-600 uppercase">Terminées</p>
+                               <p className="text-2xl font-black text-slate-800 dark:text-white">{packages.filter(p=>p.currentStatus==='DELIVERED').length}</p>
+                           </div>
+                           <div className="bg-gray-50 dark:bg-slate-800 p-4 rounded-2xl border border-gray-100 dark:border-slate-700 flex items-center justify-center text-slate-400 font-bold gap-2 cursor-pointer hover:bg-gray-100">
+                               <History className="w-5 h-5"/> Historique
+                           </div>
+                      </div>
+
+                      {/* TABLEAU / LISTE */}
+                      <div>
+                          <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 mb-4 ml-1">Liste des tâches ({packages.length})</h3>
+                          <MyDeliveriesList list={packages} onDetails={(p) => setSelectedPkg(p)}/>
+                      </div>
                  </div>
              )}
 
-
-             {/* ===================== MODALE : NOUVELLES COURSES ===================== */}
-             <AnimatePresence>
-                 {showNewCourseModal && (
-                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-                         <motion.div 
-                            initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} 
-                            className="bg-white dark:bg-slate-900 w-full sm:max-w-xl h-[85vh] sm:h-[80vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden"
-                         >
-                             {/* Header */}
-                             <div className="p-5 border-b border-gray-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10 flex justify-between items-center">
-                                 <div>
-                                     <h3 className="font-black text-xl text-orange-700 dark:text-orange-500 flex items-center gap-2">
-                                         <Search className="w-5 h-5"/> Colis Disponibles
-                                     </h3>
-                                     <p className="text-xs text-gray-500 font-medium ml-7">{availablePackages.length} offres à proximité</p>
-                                 </div>
-                                 <button onClick={()=>setShowNewCourseModal(false)} className="bg-white dark:bg-slate-800 p-2 rounded-full text-gray-500 shadow-sm hover:text-red-500 transition">
-                                     <XCircle className="w-6 h-6"/>
-                                 </button>
-                             </div>
-
-                             {/* Liste */}
-                             <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50 dark:bg-black/20 custom-scrollbar space-y-3">
-                                 {availablePackages.length === 0 ? (
-                                     <div className="text-center py-20 text-gray-400">
-                                         <Search className="w-12 h-12 mx-auto mb-3 opacity-30"/>
-                                         <p>Aucune course disponible.</p>
-                                         <button onClick={openNewCourseModal} className="text-blue-500 text-sm mt-2 font-bold hover:underline">Rafraîchir</button>
-                                     </div>
-                                 ) : (
-                                     availablePackages.map(pkg => (
-                                         <div key={pkg.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
-                                             <div className="flex justify-between items-start mb-2">
-                                                 <span className="font-mono text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-slate-500 font-bold">{pkg.trackingNumber}</span>
-                                                 <span className="font-black text-green-600 dark:text-green-400">{(pkg.deliveryFee || 0).toLocaleString()} F</span>
-                                             </div>
-                                             
-                                             <div className="space-y-1 mb-4">
-                                                 <div className="flex gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                                     <Box className="w-4 h-4 text-orange-500 mt-0.5 shrink-0"/>
-                                                     <p className="truncate font-medium">{pkg.pickupAddress}</p>
-                                                 </div>
-                                                 <div className="pl-1.5"><div className="w-0.5 h-3 bg-gray-200 ml-1.5"/></div>
-                                                 <div className="flex gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                                     <MapPin className="w-4 h-4 text-green-500 mt-0.5 shrink-0"/>
-                                                     <p className="truncate font-medium">{pkg.deliveryAddress}</p>
-                                                 </div>
-                                             </div>
-
-                                             <button 
-                                                 onClick={() => handleAcceptCourse(pkg)}
-                                                 className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-sm font-bold shadow hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                                             >
-                                                 <Plus className="w-4 h-4"/> Accepter la course
-                                             </button>
-                                         </div>
-                                     ))
-                                 )}
-                             </div>
-                         </motion.div>
-                     </div>
-                 )}
-             </AnimatePresence>
-
-             {/* ===================== MODALE : CONFIRMATION LIVRAISON ===================== */}
-             <AnimatePresence>
-                 {activePackage && (
-                     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
-                         <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9, opacity:0}} className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-                             {/* Fond déco */}
-                             <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-green-50 to-transparent dark:from-green-900/20 -z-0 pointer-events-none"/>
-                             
-                             <div className="relative z-10 text-center">
-                                 <div className="w-20 h-20 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-green-500/40 animate-pulse">
-                                     <CheckCircle className="w-10 h-10"/>
-                                 </div>
-                                 <h3 className="font-black text-2xl mb-1 text-slate-900 dark:text-white">Validation</h3>
-                                 <p className="text-sm text-gray-500 font-mono mb-6">{activePackage.trackingNumber}</p>
-                                 
-                                 <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 text-left mb-6">
-                                     <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Code Confirmation (Client)</label>
-                                     <input 
-                                         type="text" 
-                                         value={recipientCode} 
-                                         onChange={e=>setRecipientCode(e.target.value)}
-                                         className="w-full bg-white dark:bg-slate-900 p-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 font-mono text-center text-xl tracking-[0.2em] font-bold focus:border-green-500 outline-none"
-                                         placeholder="XXXX"
-                                         autoFocus
-                                     />
-                                     <div className="flex items-center gap-1 mt-2 text-[10px] text-gray-400">
-                                         <Info className="w-3 h-3"/> Le client a reçu ce code par SMS
-                                     </div>
-                                 </div>
-                                 
-                                 <button 
-                                     onClick={handleDeliver}
-                                     className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2"
-                                 >
-                                     <Check className="w-5 h-5"/> Confirmer Livraison
-                                 </button>
-                                 <button onClick={()=>setActivePackage(null)} className="mt-4 text-gray-400 text-sm font-semibold hover:text-slate-700 dark:hover:text-white transition">Annuler</button>
-                             </div>
-                         </motion.div>
-                     </div>
-                 )}
-             </AnimatePresence>
-
+             {/* SIDEBAR DETAILS (Shared between Find & List views) */}
+             <PackageSidebar 
+                 isOpen={!!selectedPkg} 
+                 pkg={selectedPkg!} 
+                 onClose={() => setSelectedPkg(null)}
+                 // Actions : on map le bon handler selon le contexte ou on peut laisser le sidebar gérer si la logique est interne (comme j'ai fait avant). 
+                 // Ici je les passe en props pour la flexibilité (ex: mode FIND = assigner, mode LIST = pickup/deliver)
+                 showAction={selectedPkg?.currentStatus !== 'DELIVERED'}
+                 actionLoading={actionLoading}
+                 // Logic Route switch
+                 onAssign={() => handleAssign(selectedPkg!)}
+                 onPickup={handlePickup}
+                 onDeliver={handleDeliver}
+             />
         </div>
     );
 }
@@ -14936,10 +14748,6 @@ export default function CreditPage({ profile, onUpdate }: CreditPageProps) {
 FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\LivreurOverview.tsx
 ================================================================================
 
-// ================================================================================
-// FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\LivreurOverview.tsx
-// ================================================================================
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -14947,153 +14755,165 @@ import type { UserProfile } from './page';
 import { motion } from 'framer-motion';
 import {
   Wallet, Truck, CheckCircle, Clock, MapPin, 
-  Power, Loader2, AlertCircle
+  Power, Loader2, AlertCircle, TrendingUp
 } from 'lucide-react';
 import { delivererService } from '@/services/delivererService';
-import toast from 'react-hot-toast';
+import FeedbackAlert from '@/components/ui/FeedbackAlert';
 
 interface Stats {
   completed: number;
   earnings: number;
-  inQueue: number; // Colis assignés (à aller chercher ou en cours)
+  inQueue: number;
+  rating: number;
 }
 
-const StatCard = ({ icon: Icon, title, value, subtitle, color }: any) => (
-  <motion.div whileHover={{ y: -3 }} className={`bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border-l-4 ${color} border border-gray-100 dark:border-gray-700`}>
-    <div className="flex justify-between items-start">
-       <div>
-           <p className="text-gray-500 text-xs uppercase font-bold mb-1">{title}</p>
-           <h3 className="text-2xl font-black text-slate-800 dark:text-white">{value}</h3>
-           <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
-       </div>
-       <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl text-gray-600 dark:text-gray-300">
-           <Icon className="w-6 h-6"/>
-       </div>
-    </div>
-  </motion.div>
+const KpiCard = ({ title, value, subtitle, icon: Icon, delay }: any) => (
+    <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay }}
+        className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-violet-300 dark:hover:border-violet-700 transition-colors"
+    >
+        <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+        <div className="flex justify-between items-start relative z-10">
+           <div>
+               <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</p>
+               <h3 className="text-3xl font-black text-slate-800 dark:text-white">{value}</h3>
+               {subtitle && <p className="text-xs font-medium text-violet-500 mt-1 flex items-center gap-1"><TrendingUp className="w-3 h-3"/> {subtitle}</p>}
+           </div>
+           <div className="p-3 bg-violet-50 dark:bg-violet-900/30 rounded-xl text-violet-600 dark:text-violet-300 shadow-sm">
+               <Icon className="w-6 h-6"/>
+           </div>
+        </div>
+    </motion.div>
 );
 
 export default function LivreurOverview({ profile, setActiveTab }: { profile: UserProfile; setActiveTab: (tabId: string) => void; }) {
   const [loading, setLoading] = useState(true);
-  const [isOnline, setIsOnline] = useState(true); // Par défaut online en attendant API status
-  const [stats, setStats] = useState<Stats>({ completed: 0, earnings: 0, inQueue: 0 });
+  const [isOnline, setIsOnline] = useState(true);
+  const [stats, setStats] = useState<Stats>({ completed: 0, earnings: 0, inQueue: 0, rating: 4.8 });
+  const [alert, setAlert] = useState<{show: boolean, type: any, msg: string}>({show: false, type: 'info', msg: ''});
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       try {
-        // 1. Récupérer toutes les courses (Actives + Historique si API le permet)
-        // Note: Ici getMyDeliveries nous renvoie souvent seulement les actives (assigned + transit)
-        const myDeliveries = await delivererService.getMyDeliveries();
+        const deliveries = await delivererService.getMyDeliveries();
         
-        // 2. Filtrer
-        const active = myDeliveries.filter(d => 
-             d.status === 'ASSIGNED_TO_DELIVERER' || 
-             d.status === 'IN_TRANSIT'
-        ).length;
-        
-        // Comme l'endpoint myDeliveries retourne souvent les actives,
-        // on simulera les "Complétées" pour l'affichage si l'API d'historique manque
-        // Ou on filtre sur celles ayant le statut DELIVERED si l'API renvoie tout.
-        const done = myDeliveries.filter(d => d.status === 'DELIVERED').length;
-        
-        // Calcul Gains (Basique: Somme des fees des colis livrés)
-        const earned = myDeliveries
-            .filter(d => d.status === 'DELIVERED')
-            .reduce((sum, item) => sum + (item.deliveryFee || 0), 0);
+        // Calculs
+        const active = deliveries.filter(d => ['ASSIGNED_TO_DELIVERER', 'IN_TRANSIT'].includes(d.currentStatus)).length;
+        const done = deliveries.filter(d => d.currentStatus === 'DELIVERED').length;
+        // Simulation earnings (deliveryFee)
+        const totalEarned = deliveries
+            .filter(d => d.currentStatus === 'DELIVERED')
+            .reduce((sum, d) => sum + d.deliveryFee, 0);
 
-        setStats({
+        setStats(prev => ({
+             ...prev,
              completed: done,
-             earnings: earned,
+             earnings: totalEarned,
              inQueue: active
-        });
+        }));
 
-      } catch (e) {
-        console.error("Err overview livreur:", e);
+      } catch (e: any) {
+        setAlert({show: true, type: 'error', msg: "Impossible de charger les statistiques"});
       } finally {
         setLoading(false);
       }
     };
-    if (profile.id) init();
-  }, [profile.id]);
+    init();
+  }, [profile]);
 
   const toggleStatus = () => {
       setIsOnline(!isOnline);
-      toast.success(isOnline ? "Vous êtes hors ligne 🔴" : "Vous êtes en ligne 🟢");
-      // TODO: Appel API PUT /status quand disponible
+      setAlert({show: true, type: isOnline ? 'warning' : 'success', msg: !isOnline ? "Vous êtes EN LIGNE. Prêt à recevoir des courses." : "Mode HORS LIGNE activé."});
   };
 
-  if(loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-orange-500"/></div>;
+  if(loading) return <div className="h-64 flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-violet-500"/></div>;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        
-        {/* Banner Statut */}
-        <div className="bg-slate-900 text-white p-8 rounded-3xl relative overflow-hidden shadow-2xl">
+    <div className="space-y-8 animate-in fade-in pb-12">
+        <FeedbackAlert 
+            isVisible={alert.show} onClose={() => setAlert({...alert, show:false})} 
+            type={alert.type} message={alert.msg} 
+        />
+
+        {/* Header Hero - VIOLET */}
+        <div className="relative bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-xl overflow-hidden">
+             {/* Déco */}
+             <div className="absolute right-0 top-0 w-64 h-64 bg-violet-500/20 blur-3xl rounded-full translate-x-1/3 -translate-y-1/2"></div>
+             
              <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
-                 <div>
-                     <h2 className="text-3xl font-black mb-1 flex items-center gap-3">
-                         Bonjour, {profile.manager_name || "Partenaire"} 
-                     </h2>
-                     <p className="text-slate-400 text-sm font-medium flex items-center gap-2">
-                        <MapPin className="w-4 h-4"/> 
-                        {isOnline ? (stats.inQueue > 0 ? 'En cours de mission' : 'En attente de courses') : 'Hors Service'}
-                     </p>
+                 <div className="flex items-center gap-4">
+                     <div className="p-1 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl shadow-lg">
+                        <div className="w-14 h-14 bg-slate-900 rounded-xl flex items-center justify-center">
+                            {profile.photoUrl ? (
+                                <img src={profile.photoUrl} className="w-full h-full object-cover rounded-xl"/>
+                            ) : (
+                                <Truck className="w-8 h-8 text-violet-400"/>
+                            )}
+                        </div>
+                     </div>
+                     <div>
+                         <h2 className="text-2xl font-black">{profile.manager_name}</h2>
+                         <p className="text-slate-400 text-sm flex items-center gap-2">
+                            <MapPin className="w-3 h-3 text-violet-400"/> {isOnline ? (stats.inQueue > 0 ? "En Livraison" : "En attente de courses") : "Hors Service"}
+                         </p>
+                     </div>
                  </div>
 
                  <button 
                      onClick={toggleStatus}
-                     className={`px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95 ${
-                         isOnline
-                         ? 'bg-green-500 hover:bg-green-600 text-white'
-                         : 'bg-red-500 hover:bg-red-600 text-white' 
+                     className={`px-6 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-lg active:scale-95 ${
+                         isOnline 
+                         ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-violet-900/50 ring-2 ring-violet-500 ring-offset-2 ring-offset-slate-900' 
+                         : 'bg-slate-700 hover:bg-slate-600 text-slate-300' 
                      }`}
                  >
                      <Power className="w-5 h-5"/>
                      {isOnline ? 'EN LIGNE' : 'HORS LIGNE'}
                  </button>
              </div>
-             <Truck className="absolute -right-6 -bottom-6 w-48 h-48 text-white/5 rotate-[-10deg] pointer-events-none"/>
         </div>
 
-        {/* Message d'info */}
-        {!isOnline && (
-            <div className="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-200 flex items-center gap-3">
-                <AlertCircle className="w-5 h-5"/>
-                <p className="text-sm font-semibold">Connectez-vous pour recevoir les nouvelles notifications de course.</p>
-            </div>
-        )}
-
-        {/* KPIs Grid */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard icon={Wallet} title="Gains (Jour)" value={stats.earnings.toLocaleString() + " F"} subtitle="Commissions validées" color="border-orange-500" />
-            <StatCard icon={Truck} title="En Cours" value={stats.inQueue} subtitle="Colis assignés/transit" color="border-blue-500" />
-            <StatCard icon={CheckCircle} title="Terminés" value={stats.completed} subtitle="Historique total" color="border-green-500" />
-            <StatCard icon={Clock} title="Heures" value="-- h" subtitle="Connexion ajd" color="border-purple-500" />
+            <KpiCard icon={Wallet} title="Portefeuille" value={stats.earnings.toLocaleString() + " F"} subtitle="+12% cette semaine" delay={0.1}/>
+            <KpiCard icon={Truck} title="En Cours" value={stats.inQueue} delay={0.2}/>
+            <KpiCard icon={CheckCircle} title="Livrées" value={stats.completed} subtitle="Total historique" delay={0.3}/>
+            <KpiCard icon={Clock} title="Note Moyenne" value={stats.rating + "/5"} delay={0.4}/>
         </div>
 
-        {/* Action Rapide */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div whileHover={{scale:1.01}} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
-                <div>
-                    <h3 className="font-bold text-lg mb-2 text-slate-800 dark:text-white">Carte des Livraisons</h3>
-                    <p className="text-sm text-gray-500">Visualisez les colis disponibles et vos itinéraires optimaux.</p>
-                </div>
-                <button onClick={() => setActiveTab('deliveries')} className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-blue-500/20">
-                    Ouvrir la Navigation
-                </button>
-            </motion.div>
-            
-            <motion.div whileHover={{scale:1.01}} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col justify-between">
-                <div>
-                    <h3 className="font-bold text-lg mb-2 text-slate-800 dark:text-white">Portefeuille & Crédit</h3>
-                    <p className="text-sm text-gray-500">Gérez vos revenus et rechargez votre crédit de caution.</p>
-                </div>
-                <button onClick={() => setActiveTab('credit')} className="mt-4 w-full border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-white font-bold py-3 rounded-xl transition">
-                    Voir mon solde
-                </button>
-            </motion.div>
+        {/* Actions Rapides */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-br from-violet-500 to-indigo-600 rounded-3xl p-8 text-white shadow-xl shadow-violet-500/20 relative overflow-hidden flex flex-col justify-between group cursor-pointer hover:shadow-2xl transition-all"
+                 onClick={() => setActiveTab('deliveries')}>
+                 <div className="relative z-10">
+                     <h3 className="text-2xl font-black mb-2">Carte des Courses</h3>
+                     <p className="text-violet-100 mb-6 max-w-sm">Trouvez les colis disponibles autour de vous et commencez une tournée optimisée.</p>
+                     <span className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-xl text-sm font-bold group-hover:bg-white group-hover:text-violet-600 transition-colors">
+                        Accéder <Truck className="w-4 h-4"/>
+                     </span>
+                 </div>
+                 <MapPin className="absolute -right-6 -bottom-6 w-48 h-48 text-black/10 group-hover:scale-110 transition-transform duration-500"/>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-200 dark:border-slate-700 shadow-sm hover:border-violet-300 transition-all flex flex-col justify-between">
+                 <div>
+                     <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2"><Wallet className="w-5 h-5 text-violet-500"/> Finance & Crédit</h3>
+                     <p className="text-slate-500 text-sm">Votre solde doit être positif pour accepter des courses Cash on Delivery.</p>
+                 </div>
+                 <div className="mt-6 flex gap-3">
+                     <button onClick={() => setActiveTab('credit')} className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+                         Historique
+                     </button>
+                     <button onClick={() => setActiveTab('credit')} className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl shadow-lg transition">
+                         Recharger
+                     </button>
+                 </div>
+            </div>
         </div>
+
     </div>
   );
 }
@@ -16364,6 +16184,613 @@ export default function ProfileRelayManager() {
                 </div>
             )}
          </div>
+    );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\FindDelivery.tsx
+================================================================================
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+import { 
+  Package, RefreshCw, Loader2, MapPin, X, Navigation, AlertCircle, 
+  ArrowLeft
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Imports Services
+import { delivererService, DelivererPackage } from '@/services/delivererService';
+import { relayPointService, RelayPoint } from '@/services/relayPointService';
+import router, { useRouter } from 'next/navigation';
+
+// Styles
+import 'leaflet/dist/leaflet.css';
+import PackageSidebar from './PackageSidebar';
+
+// Chargement Leaflet dynamique
+const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false });
+const Popup = dynamic(() => import('react-leaflet').then(m => m.Popup), { ssr: false });
+const useMap = dynamic(() => import('react-leaflet').then(m => m.useMap), { ssr: false });
+
+// Helper Distance (Haversine)
+const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+        Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+interface PackageWithLocation extends DelivererPackage {
+    lat: number;
+    lng: number;
+    relayName: string;
+}
+
+interface FindDeliveryProps {
+    onSelectPackage: (pkg: DelivererPackage) => void;
+    onClose: () => void;
+}
+// ----------------------------------------------------------------------------
+// MAP CONTROLLER (Itinéraire et Markers) - VERSION CORRIGÉE
+// ----------------------------------------------------------------------------
+const MapController = ({ 
+    userPos, selectedPackage, packages, onSelect 
+}: { 
+    userPos: [number, number] | null, 
+    selectedPackage: PackageWithLocation | null, 
+    packages: PackageWithLocation[], 
+    onSelect: (p: PackageWithLocation) => void
+}) => {
+    const map = (useMap as any)();
+    const [L, setL] = useState<any>(null);
+    const [routeLayer, setRouteLayer] = useState<any>(null);
+
+    // Initialisation Leaflet une seule fois
+    useEffect(() => {
+        import('leaflet').then(mod => {
+            setL(mod.default);
+            // Hack pour corriger les chemins d'icônes par défaut
+            // @ts-ignore
+            delete mod.default.Icon.Default.prototype._getIconUrl;
+            mod.default.Icon.Default.mergeOptions({
+                iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+                iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+                shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+            });
+        });
+    }, []);
+
+    // GESTION DU TRACÉ D'ITINÉRAIRE - VERSION CORRIGÉE
+    useEffect(() => {
+        // Vérifications complètes incluant map.addLayer
+        if (!L || !map || !userPos || !selectedPackage) return;
+        
+        // ⚠️ CORRECTION PRINCIPALE : Vérifier que map est bien initialisé
+        if (typeof map.addLayer !== 'function') {
+            console.warn('Map pas encore prête, attente...');
+            return;
+        }
+
+        // 1. Supprimer l'ancienne ligne
+        if (routeLayer) {
+            try {
+                map.removeLayer(routeLayer);
+            } catch (e) {
+                console.warn('Erreur suppression ancienne route:', e);
+            }
+        }
+
+        // 2. Tracer la nouvelle ligne
+        try {
+            const latlngs = [
+                userPos, // Départ (Livreur)
+                [selectedPackage.lat, selectedPackage.lng] // Arrivée (Colis)
+            ];
+
+            const polyline = L.polyline(latlngs, {
+                color: '#8b5cf6',
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '10, 10',
+                lineJoin: 'round'
+            });
+
+            // ⚠️ UTILISATION SÉCURISÉE de addLayer
+            if (map && typeof map.addLayer === 'function') {
+                polyline.addTo(map);
+                setRouteLayer(polyline);
+
+                // 3. Zoom pour voir le trajet entier
+                map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+            }
+        } catch (error) {
+            console.error('❌ Erreur création itinéraire:', error);
+        }
+
+        // Cleanup
+        return () => {
+            if (routeLayer && map && typeof map.removeLayer === 'function') {
+                try {
+                    map.removeLayer(routeLayer);
+                } catch (e) {
+                    console.warn('Cleanup route:', e);
+                }
+            }
+        };
+    }, [L, map, userPos, selectedPackage]); // ⚠️ Retirer routeLayer des dépendances
+
+
+    // RENDU DES MARQUEURS
+    if (!L) return null;
+
+    // Icône Livreur
+    const userIcon = L.divIcon({
+        html: '<div class="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md animate-pulse"></div>',
+        className: 'bg-transparent',
+        iconSize: [16, 16]
+    });
+
+    return (
+        <>
+            {userPos && (
+                <Marker position={userPos} icon={userIcon}>
+                    <Popup>Ma Position</Popup>
+                </Marker>
+            )}
+            
+            {packages.map(p => {
+                const dist = userPos ? getDistanceKm(userPos[0], userPos[1], p.lat, p.lng) : 10;
+                const isNear = dist <= 5;
+                const isSelected = selectedPackage?.id === p.id;
+
+                const iconHtml = `
+                    <div class="relative w-10 h-10 flex items-center justify-center group cursor-pointer">
+                        ${isNear ? '<div class="absolute w-full h-full bg-red-500/40 rounded-full animate-ping"></div>' : ''}
+                        <div class="relative z-10 w-8 h-8 ${isSelected ? 'bg-orange-500 scale-110 border-orange-200' : 'bg-violet-600 border-white'} hover:bg-violet-700 text-white rounded-xl shadow-lg border-2 flex items-center justify-center transition-all duration-300">
+                            📦
+                        </div>
+                        ${isSelected ? '<div class="absolute -bottom-2 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-orange-500"></div>' : ''}
+                    </div>
+                `;
+
+                const pkgIcon = L.divIcon({
+                    html: iconHtml,
+                    className: 'bg-transparent',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20]
+                });
+
+                return (
+                    <Marker 
+                        key={p.id} 
+                        position={[p.lat, p.lng]} 
+                        icon={pkgIcon}
+                        eventHandlers={{
+                            click: () => onSelect(p)
+                        }}
+                    />
+                );
+            })}
+        </>
+    );
+};
+
+// -- COMPOSANT PRINCIPAL DE LA PAGE --
+export default function FindDelivery({ onSelectPackage, onClose }: FindDeliveryProps) {
+    const [loading, setLoading] = useState(true);
+    const [packages, setPackages] = useState<PackageWithLocation[]>([]);
+    const [userPos, setUserPos] = useState<[number, number] | null>(null);
+    const [statusMsg, setStatusMsg] = useState("Recherche de colis...");
+    const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
+    const [activePkg, setActivePkg] = useState<PackageWithLocation | null>(null);
+
+    useEffect(() => {
+        // Geolocalisation navigateur
+        if(navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => setUserPos([pos.coords.latitude, pos.coords.longitude]),
+                (err) => {
+                    console.warn("GPS non disponible, fallback Yaoundé");
+                    setUserPos([3.8480, 11.5021]); 
+                }
+            );
+        } else {
+            setUserPos([3.8480, 11.5021]);
+        }
+        
+        // Charger les données
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        setError(null);
+        setStatusMsg("Chargement des disponibilités...");
+        
+        try {
+            // 1. Récupérer les colis
+            const availablePkgs = await delivererService.getAvailablePackages();
+            console.log("📦 Colis disponibles:", availablePkgs);
+
+            if(availablePkgs.length === 0) {
+                setPackages([]);
+                setStatusMsg("Aucun colis disponible pour le moment.");
+                setLoading(false);
+                return;
+            }
+            
+            // 2. Extraire IDs relais uniques
+            const relayIds = new Set<string>();
+            availablePkgs.forEach(p => {
+                const rid = p.currentRelayPointId || p.departureRelayPointId;
+                if(rid) relayIds.add(rid);
+            });
+
+            console.log(`📍 ${relayIds.size} relais uniques à localiser.`);
+            
+            // 3. Récupérer détails relais (Nom + GPS) avec tolérance à l'erreur
+            const relaysMap = new Map<string, RelayPoint>();
+            let failedCount = 0;
+
+            await Promise.allSettled(
+                Array.from(relayIds).map(async (rid) => {
+                    try {
+                        const rp = await relayPointService.getRelayPointById(rid);
+                        if(rp && rp.latitude && rp.longitude) {
+                            relaysMap.set(rid, rp);
+                        } else {
+                            console.warn(`⚠️ Relais ${rid} : coordonnées manquantes`);
+                            failedCount++;
+                        }
+                    } catch (e) {
+                        console.warn(`⚠️ Relais ${rid} inaccessible (404/Err)`);
+                        failedCount++;
+                    }
+                })
+            );
+
+            // 4. Mapper Colis -> Location
+            const finalMap: PackageWithLocation[] = [];
+            
+            availablePkgs.forEach(p => {
+                const rid = p.currentRelayPointId || p.departureRelayPointId;
+                // Si on a les coordonnées du relais, on l'ajoute
+                if(rid && relaysMap.has(rid)) {
+                    const rData = relaysMap.get(rid)!;
+                    finalMap.push({
+                        ...p,
+                        lat: rData.latitude,
+                        lng: rData.longitude,
+                        relayName: rData.relayPointName
+                    });
+                }
+            });
+
+            setPackages(finalMap);
+            
+            // Gestion affichage si partiel
+            if(finalMap.length === 0 && availablePkgs.length > 0) {
+                setError("Colis trouvés mais leurs points relais ne sont pas géolocalisés.");
+            } else if(failedCount > 0) {
+                setStatusMsg(`${finalMap.length} affichés (${failedCount} relais masqués car données inaccessibles)`);
+            }
+
+        } catch (e: any) {
+            console.error("❌ Erreur Fatale FindDelivery:", e);
+            setError(e.message || "Erreur de chargement des données");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 w-full absolute inset-0 z-50">
+             
+             {/* HEADER */}
+             <div className="px-6 py-4 bg-violet-900 text-white flex justify-between items-center shadow-lg z-20 shrink-0">
+                 <div>
+                     <h2 className="font-bold text-lg flex items-center gap-2">
+                         <MapPin className="w-5 h-5"/> Carte des Offres
+                     </h2>
+                     <p className="text-xs text-violet-200">
+                         {loading ? statusMsg : error ? "Erreur de chargement" : `${packages.length} courses trouvées`}
+                     </p>
+                 </div>
+                 <div className="flex gap-2">
+                    {/* Nouveau bouton Retour Dashboard */}
+                     <button 
+                         onClick={onClose}
+                         className="flex items-center gap-2 text-violet-200 hover:text-white transition font-semibold text-xs md:text-sm whitespace-nowrap bg-white/10 px-3 py-1.5 rounded-lg border border-white/20"
+                     >
+                         <ArrowLeft className="w-4 h-4"/> 
+                         <span className="hidden sm:inline">Mes Livraisons</span>
+                     </button>
+                     <button 
+                         onClick={fetchData} 
+                         disabled={loading}
+                         className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition disabled:opacity-50"
+                     >
+                         <RefreshCw className={`w-5 h-5 ${loading?'animate-spin':''}`}/>
+                     </button>
+                     <button 
+                         onClick={() => router.push('/home')}
+                         className="p-2 bg-red-500 rounded-full hover:bg-red-600 transition shadow"
+                     >
+                         <X className="w-5 h-5"/>
+                     </button>
+                 </div>
+             </div>
+
+             {/* MAP CONTAINER */}
+             <div className="flex-1 relative bg-slate-200 dark:bg-slate-800 z-10 overflow-hidden">
+                 {/* Overlay de chargement */}
+                 {loading && (
+                     <div className="absolute inset-0 z-[1000] bg-white/60 dark:bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-violet-700 dark:text-violet-300 font-bold">
+                         <Loader2 className="w-12 h-12 mb-3 animate-spin"/>
+                         <span>{statusMsg}</span>
+                     </div>
+                 )}
+
+                 {/* Message d'erreur */}
+                 {error && !loading && (
+                     <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] max-w-md">
+                         <div className="bg-red-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3">
+                             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5"/>
+                             <div className="flex-1">
+                                 <p className="font-semibold text-sm">Erreur</p>
+                                 <p className="text-xs mt-1">{error}</p>
+                             </div>
+                             <button 
+                                 onClick={() => setError(null)}
+                                 className="text-white/80 hover:text-white"
+                             >
+                                 <X className="w-4 h-4"/>
+                             </button>
+                         </div>
+                     </div>
+                 )}
+
+                 {/* Message si aucun colis */}
+                 {!loading && !error && packages.length === 0 && (
+                     <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center text-slate-600 dark:text-slate-400">
+                         <Package className="w-16 h-16 mb-4 opacity-50"/>
+                         <p className="font-semibold text-lg">Aucun colis disponible</p>
+                         <p className="text-sm mt-2">Revenez plus tard ou actualisez</p>
+                         <button 
+                             onClick={fetchData}
+                             className="mt-4 px-6 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition"
+                         >
+                             Actualiser
+                         </button>
+                     </div>
+                 )}
+
+                 {/* Map Leaflet */}
+                 {typeof window !== 'undefined' && (
+                     <MapContainer 
+                        center={userPos || [3.8480, 11.5021]} 
+                        zoom={13} 
+                        style={{width:'100%', height:'100%', zIndex: 0}}
+                        zoomControl={false}
+                     >
+                        <TileLayer 
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            attribution='&copy; OSM'
+                        />
+                        {/* Contrôleur Interne */}
+                        <MapController 
+                            userPos={userPos} 
+                            packages={packages} 
+                            selectedPackage={activePkg}
+                            onSelect={setActivePkg}
+                        />
+                     </MapContainer>
+                 )}
+
+                 {/* SIDEBAR : Détails du Colis Sélectionné */}
+                 <PackageSidebar 
+                     isOpen={!!activePkg}
+                     pkg={activePkg!}
+                     onClose={() => setActivePkg(null)}
+                                          onAssign={() => {
+                         // --- LA CORRECTION PRINCIPALE EST ICI ---
+                         // Vérifie si la prop existe avant de l'appeler
+                         if (activePkg && typeof onSelectPackage === 'function') {
+                             onSelectPackage(activePkg);
+                         } else {
+                             console.error("onSelectPackage prop manquante ou invalide");
+                         }
+                     }}
+                     showAction={true}
+                     actionLabel="ACCEPTER CETTE COURSE"
+                 />
+                 
+             </div>
+        </div>
+    );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\dashboard\PackageSidebar.tsx
+================================================================================
+
+'use client';
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import { X, MapPin, Box, User, Phone, DollarSign, Calendar, Info, Navigation, ArrowRight, Check } from 'lucide-react';
+import { DelivererPackage } from '@/services/delivererService';
+
+interface PackageSidebarProps {
+    pkg: DelivererPackage;
+    isOpen: boolean;
+    onClose: () => void;
+    // Actions callbacks
+    onAssign?: () => void;
+    onPickup?: () => void;
+    onDeliver?: () => void;
+    
+    // Config boutons
+    actionLoading?: boolean;
+    actionLabel?: string;
+    showAction?: boolean;
+}
+
+export default function PackageSidebar({ 
+    pkg, isOpen, onClose, 
+    onAssign, onPickup, onDeliver,
+    actionLoading, actionLabel, showAction 
+}: PackageSidebarProps) {
+    
+    if(!isOpen || !pkg) return null;
+
+    // Détermination de l'action par défaut
+    const isAvailable = pkg.currentStatus === 'FOR_PICKUP';
+    const isAssigned = pkg.currentStatus === 'ASSIGNED_TO_DELIVERER';
+    const isTransit = pkg.currentStatus === 'IN_TRANSIT';
+
+    return (
+        <div className="fixed inset-0 z-[150] overflow-hidden pointer-events-none">
+            {/* Backdrop click to close */}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity" onClick={onClose}/>
+            
+            <motion.div 
+                initial={{ x: '100%' }}
+                animate={{ x: '0%' }}
+                exit={{ x: '100%' }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="absolute inset-y-0 right-0 max-w-md w-full bg-white dark:bg-slate-900 shadow-2xl pointer-events-auto flex flex-col border-l border-violet-100 dark:border-slate-700"
+            >
+                {/* Header */}
+                <div className="h-32 bg-gradient-to-br from-violet-600 to-indigo-800 p-6 flex justify-between items-start text-white relative overflow-hidden">
+                    {/* Abstract Circle */}
+                    <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-xl"/>
+                    
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-white/20 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-white/30">
+                                {pkg.currentStatus.replace(/_/g, ' ')}
+                            </span>
+                        </div>
+                        <h2 className="text-2xl font-black font-mono tracking-tight">{pkg.trackingNumber}</h2>
+                        <p className="text-violet-200 text-xs opacity-80 mt-1">{new Date(pkg.createdAt || Date.now()).toLocaleDateString()}</p>
+                    </div>
+                    
+                    <button onClick={onClose} className="p-2 bg-black/20 hover:bg-black/30 rounded-full transition backdrop-blur-md">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    
+                    {/* Financial Block */}
+                    <div className="p-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/50 rounded-2xl flex justify-between items-center">
+                        <div>
+                            <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase">Commission Livreur</p>
+                            <h3 className="text-2xl font-black text-green-800 dark:text-green-300">{pkg.deliveryFee.toLocaleString()} F</h3>
+                        </div>
+                        <div className="p-3 bg-green-200 dark:bg-green-800/40 rounded-full text-green-800 dark:text-green-200">
+                            <DollarSign className="w-6 h-6"/>
+                        </div>
+                    </div>
+
+                    {/* Route Info */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-bold text-gray-500 uppercase flex items-center gap-2 border-b pb-2">
+                           <Navigation className="w-4 h-4"/> Itinéraire
+                        </h3>
+                        
+                        {/* Pickup */}
+                        <div className="flex gap-4">
+                            <div className="flex flex-col items-center">
+                                <div className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900 text-violet-600 flex items-center justify-center font-bold text-xs border border-violet-200">A</div>
+                                <div className="w-0.5 h-full bg-gray-200 dark:bg-gray-700 my-1"/>
+                            </div>
+                            <div className="pb-4">
+                                <p className="text-xs text-gray-400 font-bold uppercase">Point de Ramassage</p>
+                                <p className="font-bold text-gray-800 dark:text-gray-100">{pkg.pickupAddress}</p>
+                                {/* Relais Specific */}
+                                <p className="text-xs text-violet-600 mt-1 italic flex items-center gap-1"><MapPin className="w-3 h-3"/> Localisé au Relais</p>
+                            </div>
+                        </div>
+
+                        {/* Delivery */}
+                        <div className="flex gap-4">
+                            <div className="flex flex-col items-center">
+                                <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-600 flex items-center justify-center font-bold text-xs border border-orange-200">B</div>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-400 font-bold uppercase">Destination Client</p>
+                                <p className="font-bold text-gray-800 dark:text-gray-100">{pkg.deliveryAddress}</p>
+                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                    <span className="flex items-center gap-1"><User className="w-3 h-3"/> {pkg.recipientName}</span>
+                                    <span className="flex items-center gap-1"><Phone className="w-3 h-3"/> {pkg.recipientPhone || "N/A"}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Details Info */}
+                    <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl space-y-3 text-sm">
+                        <div className="flex justify-between border-b dark:border-gray-700 pb-2">
+                             <span className="text-gray-500">Poids / Dimensions</span>
+                             <span className="font-bold">{pkg.weight} kg • {pkg.dimensions || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between border-b dark:border-gray-700 pb-2">
+                             <span className="text-gray-500">Type de Colis</span>
+                             <span className="font-bold">{pkg.packageType || 'Standard'}</span>
+                        </div>
+                        <div>
+                             <span className="block text-gray-500 mb-1">Instructions</span>
+                             <p className="font-medium text-gray-800 dark:text-gray-200 italic">"{pkg.description || 'Pas de note particulière.'}"</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-6 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800">
+                     {showAction && (
+                         <button
+                            onClick={isAvailable ? onAssign : (isAssigned ? onPickup : onDeliver)}
+                            disabled={actionLoading}
+                            className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 ${
+                                isAvailable ? 'bg-violet-600 hover:bg-violet-700' :
+                                isAssigned ? 'bg-orange-600 hover:bg-orange-700' :
+                                'bg-green-600 hover:bg-green-700'
+                            }`}
+                         >
+                            {actionLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/> : (
+                                <>
+                                   {isAvailable && <span className="flex items-center gap-2">ACCEPTER LA COURSE <ArrowRight className="w-5 h-5"/></span>}
+                                   {isAssigned && <span className="flex items-center gap-2">VALIDER LE RETRAIT <Box className="w-5 h-5"/></span>}
+                                   {isTransit && <span className="flex items-center gap-2">CONFIRMER LIVRAISON <Check className="w-5 h-5"/></span>}
+                                </>
+                            )}
+                         </button>
+                     )}
+                     
+                     {!showAction && pkg.currentStatus === 'DELIVERED' && (
+                         <div className="text-center p-3 bg-green-100 text-green-700 font-bold rounded-xl border border-green-200">
+                             LIVRAISON TERMINÉE
+                         </div>
+                     )}
+                </div>
+
+            </motion.div>
+        </div>
     );
 }
 
@@ -18759,7 +19186,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
               
               recipientName: allData.recipientName,
               recipientPhone: allData.recipientPhone,
-              recipientAddress: allData.recipientAddress || allData.recipientCity,
+              recipientAddress: allData.recipientAddress || allData.recipientPhone,
 
               // --- Contenu ---
               description: allData.designation + (allData.description ? ` (${allData.description})` : ''),
@@ -18774,7 +19201,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
               
               // --- Logistique & Financier ---
               deliveryOption: 'RELAY_POINT_DELIVERY', // Par défaut
-              deliveryFee: totalCost,
+              deliveryFee: totalPrice,
               specialInstructions: `Logistique: ${allData.logistics}. Payé par: ${method}.`
           };
 
@@ -20937,7 +21364,9 @@ import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { 
   Search, Package, Truck, MapPin, CheckCircle, Clock, 
   AlertTriangle, ArrowLeft, Loader2, QrCode, X, AlertCircle,
-  CalendarDays, Weight, FileText, User, Coins
+  CalendarDays, Weight, FileText, User, Coins,
+  Star,
+  Globe
 } from 'lucide-react';
 
 // Service API
@@ -21201,12 +21630,84 @@ export default function TrackPackageContent() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300 flex flex-col font-sans">
-      <main className="flex-grow pt-24 px-4 sm:px-6 relative z-10 pb-20">
-        
-        {/* Decoration BG */}
-        <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-orange-100/50 to-transparent dark:from-orange-950/20 pointer-events-none -z-10" />
+        <NavbarHome />
+        {/* Décorations d'arrière-plan animées */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {/* Cercles flottants */}
+            <motion.div
+            animate={{ 
+                x: [0, 100, 0],
+                y: [0, -50, 0],
+                scale: [1, 1.2, 1],
+                rotate: [0, 180, 360]
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="absolute top-32 left-10 w-64 h-64 bg-orange-200/20 dark:bg-orange-500/10 rounded-full blur-3xl"
+            />
+            <motion.div
+            animate={{ 
+                x: [0, -80, 0],
+                y: [0, 100, 0],
+                scale: [1, 1.3, 1],
+                rotate: [360, 180, 0]
+            }}
+            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+            className="absolute bottom-20 right-10 w-96 h-96 bg-blue-200/20 dark:bg-blue-500/10 rounded-full blur-3xl"
+            />
+            
+            {/* Icônes décoratives flottantes */}
+            <motion.div
+            animate={{ 
+                y: [0, -20, 0],
+                rotate: [0, 10, 0]
+            }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-32 right-1/4 text-orange-300/30 dark:text-orange-500/20"
+            >
+            <Package className="w-16 h-16" />
+            </motion.div>
+            
+            <motion.div
+            animate={{ 
+                y: [0, 15, 0],
+                x: [0, 10, 0],
+                rotate: [0, -15, 0]
+            }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            className="absolute bottom-40 left-1/4 text-blue-300/30 dark:text-blue-500/20"
+            >
+            <Truck className="w-20 h-20" />
+            </motion.div>
 
+            <motion.div
+            animate={{ 
+                y: [0, -25, 0],
+                rotate: [0, 360, 0]
+            }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            className="absolute top-1/2 right-20 text-purple-300/20 dark:text-purple-500/10"
+            >
+            <Globe className="w-24 h-24" />
+            </motion.div>
+
+            <motion.div
+            animate={{ 
+                scale: [1, 1.2, 1],
+                opacity: [0.3, 0.6, 0.3]
+            }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-1/3 left-1/3 text-yellow-300/30 dark:text-yellow-500/20"
+            >
+            <Star className="w-12 h-12" />
+            </motion.div>
+
+            {/* Lignes de grille subtiles */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#8882_1px,transparent_1px),linear-gradient(to_bottom,#8882_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)] dark:bg-[linear-gradient(to_right,#fff1_1px,transparent_1px),linear-gradient(to_bottom,#fff1_1px,transparent_1px)]" />
+        </div>
+
+      <main className="relative z-10 pt-24 px-4 sm:px-6 pb-20">
         <div className="max-w-4xl mx-auto space-y-8">
+          
           
           {/* ZONE RECHERCHE */}
           <div className="text-center space-y-6">
@@ -21562,802 +22063,96 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\collect-package\page.tsx
 ================================================================================
 
 'use client';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import jsPDF from 'jspdf';
-import QRCode from 'qrcode';
-import { Search, Play, Loader2, ArrowLeft, User, Phone, MapPin, Package, Weight, CheckCircle, QrCode, Bike, Truck } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
 
-// Types
-interface RelayPoint {
-  id: number;
-  name: string;
-  address: string;
-  quartier: string;
-  lat: number;
-  lng: number;
-  hours: string;
-  type: 'bureau' | 'commerce' | 'agence';
-  agency_id?: string;
-}
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
-interface Shipment {
-  id: number;
-  tracking_number: string;
-  status: string;
-  sender_name: string;
-  sender_phone: string;
-  recipient_name: string;
-  recipient_phone: string;
-  departure_point_id: RelayPoint;
-  arrival_point_id: RelayPoint;
-  description: string;
-  weight: number;
-  is_fragile: boolean;
-  is_perishable: boolean;
-  is_insured: boolean;
-  declared_value: number;
-  shipping_cost: number;
-  is_paid_at_departure: boolean;
-  amount_paid: number;
-  change_amount: number;
-}
+// Imports des composants et services existants
+import FindDelivery from '@/app/dashboard/FindDelivery';
+import { useAuth } from '@/context/AuthContext';
+import { delivererService, DelivererPackage } from '@/services/delivererService';
+import NavbarHome from '@/components/NavbarHome'; // Optionnel, pour avoir le menu si on ferme
 
-// Configuration Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export default function CollectPackagePage() {
+    const router = useRouter();
+    const { isAuthenticated, isLoading, user } = useAuth();
+    const [isAssigning, setIsAssigning] = useState(false);
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Variables d\'environnement Supabase manquantes');
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const CollectPackageApp = () => {
-  const mapContainer = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const driverMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [relayPoints, setRelayPoints] = useState<RelayPoint[]>([]);
-  const [searchInput, setSearchInput] = useState('');
-  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
-  const [tripStatus, setTripStatus] = useState<'listing' | 'selected' | 'to_pickup' | 'pickup_ready' | 'to_dropoff' | 'dropoff_ready' | 'finished'>('listing');
-  const [driverLocation, setDriverLocation] = useState({ lat: 3.8667, lng: 11.5213 });
-  const [pickupCode, setPickupCode] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [driverPath, setDriverPath] = useState<Array<{lat: number, lng: number}>>([]);
-  const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
-  const [isMoving, setIsMoving] = useState(false);
-
-  // Constantes pour les durées d'animation
-  const ANIMATION_DURATIONS = {
-    TO_PICKUP: 8000,  // 8 secondes vers le point de départ
-    TO_DROPOFF: 10000, // 10 secondes vers le point d'arrivée
-  };
-
-  // Filtrer les colis pour la recherche
-  const filteredShipments = useMemo(() => 
-    shipments.filter(s => 
-      s.tracking_number?.toLowerCase().includes(searchInput.toLowerCase()) ||
-      s.recipient_name?.toLowerCase().includes(searchInput.toLowerCase()) ||
-      s.sender_name?.toLowerCase().includes(searchInput.toLowerCase())
-    ), [shipments, searchInput]);
-
-  // Grouper par point relais
-  const groupedByRelayPoint = useMemo(() => 
-    shipments.reduce((acc, shipment) => {
-      const key = shipment.departure_point_id?.id;
-      if (key) {
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(shipment);
-      }
-      return acc;
-    }, {} as Record<number, Shipment[]>), [shipments]);
-
-  // Récupération des données initiales
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        // Récupérer les colis avec les points de relais associés
-        const { data: shipmentsData, error: shipmentsError } = await supabase
-          .from('shipments')
-          .select(`
-            *,
-            departure_point_id:relay_points!departure_point_id(*),
-            arrival_point_id:relay_points!arrival_point_id(*)
-          `)
-          .eq('status', 'EN_ATTENTE_DE_DEPOT');
-          
-        if (shipmentsError) {
-          console.error('Erreur shipments:', shipmentsError);
-          throw new Error('Erreur lors du chargement des colis');
-        }
-
-        // Récupérer tous les points de relais
-        const { data: relayPointsData, error: relayPointsError } = await supabase
-          .from('relay_points')
-          .select('*');
-
-        if (relayPointsError) {
-          console.error('Erreur relay points:', relayPointsError);
-          throw new Error('Erreur lors du chargement des points de relais');
-        }
-
-        console.log('Données chargées:', { shipments: shipmentsData, relayPoints: relayPointsData });
-        
-        setShipments(shipmentsData || []);
-        setRelayPoints(relayPointsData || []);
-
-      } catch (err: any) {
-        console.error('Erreur lors du chargement:', err);
-        setError(err.message || "Erreur de chargement des données. Veuillez réessayer.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  // Initialiser la carte
-  useEffect(() => {
-    if (mapRef.current || !mapContainer.current) return;
-    
-    try {
-      mapRef.current = new maplibregl.Map({
-        container: mapContainer.current,
-        style: 'https://api.maptiler.com/maps/streets-v2/style.json?key=Lr72DkH8TYyjpP7RNZS9',
-        center: [11.5213, 3.8667],
-        zoom: 12
-      });
-
-      mapRef.current.on('load', () => {
-        console.log('Carte initialisée avec succès');
-      });
-    } catch (error) {
-      console.error('Erreur lors de l\'initialisation de la carte:', error);
-    }
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
-
-  // Fonction pour obtenir un itinéraire
-  const fetchRoute = async (origin: {lat: number, lng: number}, destination: {lat: number, lng: number}) => {
-    try {
-      const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
-      );
-      const data = await response.json();
-      if (data.routes && data.routes.length > 0) {
-        return data.routes[0].geometry.coordinates;
-      }
-    } catch (error) {
-      console.warn('Erreur lors du calcul de l\'itinéraire:', error);
-    }
-    return [[origin.lng, origin.lat], [destination.lng, destination.lat]];
-  };
-
-  // Mettre à jour la carte
-  useEffect(() => {
-    function updateMap() {
-      const map = mapRef.current;
-      if (!map) return;
-
-      // Nettoyer les couches existantes
-      ['route', 'driver-path'].forEach(layerId => {
-        try {
-          if (map.getLayer(layerId)) {
-            map.removeLayer(layerId);
-          }
-          if (map.getSource(layerId)) {
-            map.removeSource(layerId);
-          }
-        } catch (e) {
-          console.warn('Erreur lors de la suppression de la couche:', e);
-        }
-      });
-
-      // Ajouter les marqueurs des points relais
-      relayPoints.forEach(point => {
-        if (!point.lat || !point.lng) return;
-        
-        const count = groupedByRelayPoint[point.id]?.length || 0;
-        const el = document.createElement('div');
-        el.className = 'relative flex flex-col items-center';
-        el.innerHTML = `
-          <div class="w-6 h-6 bg-orange-500 rounded-full border-2 border-white shadow-lg"></div>
-          ${count > 0 ? `<div class="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">${count}</div>` : ''}
-          <span class="text-xs mt-1 bg-white px-2 py-0.5 rounded shadow-sm max-w-20 truncate">${point.name}</span>
-        `;
-        
-        try {
-          new maplibregl.Marker(el)
-            .setLngLat([point.lng, point.lat])
-            .addTo(map);
-        } catch (error) {
-          console.warn('Erreur lors de l\'ajout du marqueur:', error);
-        }
-      });
-
-      // Fonction interne pour dessiner la route
-      const drawRoute = async () => {
-        if (!selectedShipment) return;
-
-        let start: {lat: number, lng: number}, end: {lat: number, lng: number};
-        
-        if (tripStatus === 'to_pickup' && selectedShipment.departure_point_id) {
-          start = driverLocation;
-          end = selectedShipment.departure_point_id;
-        } else if (tripStatus === 'to_dropoff' && selectedShipment.arrival_point_id) {
-          start = driverLocation;
-          end = selectedShipment.arrival_point_id;
-        } else if (selectedShipment.departure_point_id && selectedShipment.arrival_point_id) {
-          start = selectedShipment.departure_point_id;
-          end = selectedShipment.arrival_point_id;
-        } else {
-          return;
-        }
-
-        if (!start || !end) return;
-
-        try {
-          const coordinates = await fetchRoute(start, end);
-          
-          map.addSource('route', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: { type: 'LineString', coordinates }
+    // 1. Protection de la route (Livreur uniquement)
+    useEffect(() => {
+        if (!isLoading) {
+            if (!isAuthenticated) {
+                router.push('/login');
+            } else if (user?.accountType !== 'BUSINESS_ACTOR' && user?.businessActorType !== 'DELIVERER') {
+                // Si ce n'est pas un livreur, on redirige vers le home classique
+                toast.error("Accès réservé aux livreurs.");
+                router.push('/home');
             }
-          });
-
-          map.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.8 }
-          });
-
-          const bounds = new maplibregl.LngLatBounds();
-          coordinates.forEach((coord: any) => bounds.extend(coord));
-          map.fitBounds(bounds, { padding: 50 });
-        } catch (error) {
-          console.warn('Erreur lors du tracé de l\'itinéraire:', error);
         }
-      };
+    }, [isAuthenticated, isLoading, user, router]);
 
-      // Dessiner l'itinéraire si un colis est sélectionné
-      if (selectedShipment && (tripStatus === 'selected' || tripStatus === 'to_pickup' || tripStatus === 'to_dropoff')) {
-        drawRoute();
-      }
+    // 2. Gestion de l'action "ACCEPTER" venant de FindDelivery
+    const handleSelectPackage = async (pkg: DelivererPackage) => {
+        if (isAssigning) return;
+        setIsAssigning(true);
+        const tId = toast.loading('Acceptation de la course...');
+        
+        console.log(`🟣 [PAGE] Tentative d'assignation colis ${pkg.trackingNumber}`);
 
-      // Dessiner le chemin parcouru
-      if (driverPath.length > 1) {
         try {
-          map.addSource('driver-path', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: { type: 'LineString', coordinates: driverPath.map(p => [p.lng, p.lat]) }
-            }
-          });
-
-          map.addLayer({
-            id: 'driver-path',
-            type: 'line',
-            source: 'driver-path',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#10b981', 'line-width': 3, 'line-opacity': 0.9 }
-          });
-        } catch (error) {
-          console.warn('Erreur lors de l\'ajout du chemin:', error);
-        }
-      }
-    }
-
-    const map = mapRef.current;
-    if (!map) return;
-
-    if (!map.isStyleLoaded()) {
-      map.on('load', updateMap);
-    } else {
-      updateMap();
-    }
-  }, [relayPoints, groupedByRelayPoint, selectedShipment, tripStatus, driverLocation, driverPath]);
-
-  // Mettre à jour la position du livreur avec l'icône appropriée
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    try {
-      if (driverMarkerRef.current) {
-        driverMarkerRef.current.setLngLat([driverLocation.lng, driverLocation.lat]);
-      } else {
-        const el = document.createElement('div');
-        el.className = 'flex flex-col items-center';
-        
-        // Choisir l'icône selon l'état
-        const IconComponent = tripStatus === 'to_pickup' || tripStatus === 'pickup_ready' ? 'bike' : 'truck';
-        const iconClass = isMoving ? 'animate-bounce' : '';
-        
-        if (IconComponent === 'bike') {
-          el.innerHTML = `
-            <div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center ${iconClass}">
-              <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M5 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM19 18c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM12 14c-1.1 0-2-.9-2-2V7c0-1.1.9-2 2-2s2 .9 2 2v5c0 1.1-.9 2-2 2z"/>
-                <path d="M8 12l-3.5-3.5c-.3-.3-.3-.8 0-1.1l1.4-1.4c.3-.3.8-.3 1.1 0L10 9"/>
-                <path d="M16 12l3.5-3.5c.3-.3.3-.8 0-1.1l-1.4-1.4c-.3-.3-.8-.3-1.1 0L14 9"/>
-              </svg>
-            </div>
-            <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Livreur</span>
-          `;
-        } else {
-          el.innerHTML = `
-            <div class="w-8 h-8 bg-green-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center ${iconClass}">
-              <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9L21 12H17V9.5h2.5zm-.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-              </svg>
-            </div>
-            <span class="text-xs bg-white px-2 py-0.5 rounded shadow-sm mt-1">Camion</span>
-          `;
-        }
-        
-        driverMarkerRef.current = new maplibregl.Marker(el)
-          .setLngLat([driverLocation.lng, driverLocation.lat])
-          .addTo(mapRef.current);
-      }
-    } catch (error) {
-      console.warn('Erreur lors de la mise à jour du marqueur livreur:', error);
-    }
-  }, [driverLocation, tripStatus, isMoving]);
-
-  // Animation du déplacement du livreur améliorée
-  const animateDriverMovement = async (targetLocation: {lat: number, lng: number}, duration: number) => {
-    if (!driverLocation || !targetLocation) return;
-
-    const route = await fetchRoute(driverLocation, targetLocation);
-    if (!route || route.length < 2) return;
-
-    setIsMoving(true);
-    const steps = route.length;
-    const stepDuration = duration / steps;
-    let currentStep = 0;
-
-    // Nettoyer l'ancien intervalle
-    if (animationInterval) {
-      clearInterval(animationInterval);
-    }
-
-    return new Promise<void>((resolve) => {
-      const interval = setInterval(() => {
-        if (currentStep >= route.length) {
-          clearInterval(interval);
-          setAnimationInterval(null);
-          setIsMoving(false);
-          resolve();
-          return;
-        }
-
-        const [lng, lat] = route[currentStep];
-        const newLocation = { lat, lng };
-        setDriverLocation(newLocation);
-        setDriverPath(prev => [...prev, newLocation]);
-        currentStep++;
-      }, stepDuration);
-
-      setAnimationInterval(interval);
-    });
-  };
-
-  // Gérer la sélection d'un colis
-  const handleSelectShipment = (shipment: Shipment) => {
-    setSelectedShipment(shipment);
-    setTripStatus('selected');
-    setError(null);
-  };
-
-  // Commencer la course
-  const handleStartTrip = async () => {
-    if (!selectedShipment) return;
-    
-    setTripStatus('to_pickup');
-    setDriverPath([driverLocation]);
-    
-    // Animation vers le point de départ
-    await animateDriverMovement(selectedShipment.departure_point_id, ANIMATION_DURATIONS.TO_PICKUP);
-    
-    // Une fois arrivé au point de départ
-    setTripStatus('pickup_ready');
-  };
-
-  // Récupérer le colis
-  const handleCollectPackage = async () => {
-    if (!selectedShipment) return;
-
-    // Valider le code
-    if (pickupCode.toUpperCase() !== selectedShipment.tracking_number.toUpperCase()) {
-      setError('Code incorrect. Le code doit correspondre au numéro de suivi du colis.');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      console.log(`Colis récupéré: ${selectedShipment.tracking_number}`);
-
-      // Passer à l'état "en route vers la destination"
-      setTripStatus('to_dropoff');
-      setPickupCode('');
-      
-      // Animation vers le point d'arrivée
-      await animateDriverMovement(selectedShipment.arrival_point_id, ANIMATION_DURATIONS.TO_DROPOFF);
-
-      // Une fois arrivé à destination
-      setTripStatus('finished');
-
-    } catch (err: any) {
-      console.error("Erreur dans handleCollectPackage:", err);
-      setError("Une erreur inattendue est survenue.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Générer le PDF
-  const generatePDF = async (shipment: Shipment) => {
-    try {
-      const pdf = new jsPDF();
-      const qrDataURL = await QRCode.toDataURL(shipment.tracking_number, { width: 50 });
-      
-      pdf.setFontSize(18);
-      pdf.text('Bordereau de Livraison', 20, 20);
-      pdf.addImage(qrDataURL, 'PNG', 150, 10, 50, 50);
-      
-      pdf.setFontSize(12);
-      pdf.text(`N° de suivi: ${shipment.tracking_number}`, 20, 40);
-      pdf.text(`Expéditeur: ${shipment.sender_name}`, 20, 50);
-      pdf.text(`Tel: ${shipment.sender_phone}`, 20, 60);
-      pdf.text(`Destinataire: ${shipment.recipient_name}`, 20, 70);
-      pdf.text(`Tel: ${shipment.recipient_phone}`, 20, 80);
-      pdf.text(`Départ: ${shipment.departure_point_id.name}`, 20, 90);
-      pdf.text(`Arrivée: ${shipment.arrival_point_id.name}`, 20, 100);
-      pdf.text(`Description: ${shipment.description || 'N/A'}`, 20, 110);
-      pdf.text(`Poids: ${shipment.weight || 0} kg`, 20, 120);
-      
-      // Espaces de signature
-      pdf.setFontSize(10);
-      pdf.text('Signature Livreur:', 20, 200);
-      pdf.rect(20, 205, 80, 30);
-      pdf.text('Signature Destinataire:', 120, 200);
-      pdf.rect(120, 205, 80, 30);
-      
-      pdf.save(`Bordereau_${shipment.tracking_number}.pdf`);
-    } catch (error) {
-      console.error('Erreur lors de la génération du PDF:', error);
-      throw new Error('Erreur lors de la génération du bordereau');
-    }
-  };
-
-  // Terminer la course
-  const handleFinishTrip = async () => {
-    if (!selectedShipment) return;
-    setIsLoading(true);
-    try {
-      await generatePDF(selectedShipment);
-      
-      setTimeout(() => {
-        setSelectedShipment(null);
-        setTripStatus('listing');
-        setDriverPath([]);
-        setError(null);
-        
-        // Recharger les données pour mettre à jour la liste
-        window.location.reload();
-      }, 3000);
-    } catch (err: any) {
-      console.error('Erreur lors de la finalisation:', err);
-      setError(err.message || 'Erreur lors de la finalisation');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleBackToList = () => {
-    if (animationInterval) clearInterval(animationInterval);
-    setSelectedShipment(null);
-    setTripStatus('listing');
-    setPickupCode('');
-    setError(null);
-    setDriverPath([]);
-    setIsMoving(false);
-  };
-
-  // Composant InfoRow
-  const InfoRow = ({ icon: Icon, label, value, detail }: {
-    icon: React.ComponentType<any>;
-    label: string;
-    value: string;
-    detail?: string;
-  }) => (
-    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-      <Icon className="w-5 h-5 text-orange-500 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-        <p className="text-sm font-semibold text-gray-900 break-words">{value}</p>
-        {detail && <p className="text-xs text-gray-600 break-words">{detail}</p>}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="h-screen w-screen flex bg-gray-50">
-      {/* Sidebar */}
-      <div className="w-96 bg-white shadow-xl border-r border-gray-200 flex flex-col">
-        {tripStatus === 'listing' ? (
-          <>
-            <div className="p-4 border-b bg-white">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Colis à collecter ({filteredShipments.length})</h2>
-              <div className="relative">
-                <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Rechercher un colis..."
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                  {error}
-                </div>
-              )}
-              {isLoading ? (
-                <div className="flex justify-center items-center py-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-                </div>
-              ) : filteredShipments.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                  <p>Aucun colis à collecter</p>
-                  {error && <p className="text-sm mt-2">Vérifiez votre connexion à la base de données</p>}
-                </div>
-              ) : (
-                filteredShipments.map(shipment => (
-                  <motion.div
-                    key={shipment.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    onClick={() => handleSelectShipment(shipment)}
-                    className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-orange-300 hover:bg-orange-50 transition-all duration-200"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-gray-900">{shipment.tracking_number}</span>
-                      <Package className="w-4 h-4 text-orange-500" />
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1">Pour: {shipment.recipient_name}</p>
-                    <p className="text-sm text-orange-600 flex items-center">
-                      <MapPin className="w-4 h-4 mr-1" />
-                      {shipment.departure_point_id?.name || 'Point non défini'}
-                    </p>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          </>
-        ) : selectedShipment && (
-          <div className="p-4 flex flex-col h-full">
-            <button
-              onClick={handleBackToList}
-              className="flex items-center text-orange-600 font-medium mb-4 hover:text-orange-700 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 mr-1" /> Retour à la liste
-            </button>
+            await delivererService.assignPackage(pkg.id);
+            toast.success("Course acceptée avec succès !", { id: tId });
             
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{selectedShipment.tracking_number}</h2>
-            
-            <div className="flex-1 overflow-y-auto space-y-3">
-              <InfoRow icon={User} label="Expéditeur" value={selectedShipment.sender_name} detail={selectedShipment.sender_phone} />
-              <InfoRow icon={User} label="Destinataire" value={selectedShipment.recipient_name} detail={selectedShipment.recipient_phone} />
-              <InfoRow icon={MapPin} label="Point de départ" value={selectedShipment.departure_point_id?.name || 'Non défini'} />
-              <InfoRow icon={MapPin} label="Point d'arrivée" value={selectedShipment.arrival_point_id?.name || 'Non défini'} />
-              <InfoRow icon={Package} label="Description" value={selectedShipment.description || 'Aucune description'} />
-              <InfoRow icon={Weight} label="Poids" value={`${selectedShipment.weight || 0} kg`} />
+            // Redirection vers la page "Mes Livraisons" pour commencer le travail
+            setTimeout(() => {
+                router.push('/my-deliveries'); 
+            }, 1000);
+        } catch (error: any) {
+            console.error("❌ Erreur Page:", error);
+            toast.error(error.message || "Impossible d'accepter la course", { id: tId });
+            setIsAssigning(false);
+        }
+    };
+
+    // 3. Gestion de la fermeture (Retour Dashboard ou Home)
+    const handleClose = () => {
+        // Si l'utilisateur clique sur la croix, on le renvoie à ses livraisons ou au dashboard
+        router.push('/dashboard'); 
+    };
+
+    if (isLoading) {
+        return (
+            <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white">
+                <Loader2 className="w-10 h-10 animate-spin text-violet-500" />
             </div>
+        );
+    }
+
+    if (!isAuthenticated) return null; // Évite le flash avant redirect
+
+    return (
+        <main className="h-screen w-screen relative bg-slate-50 dark:bg-slate-900 overflow-hidden">
+            <Toaster position="top-center" />
             
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
+            {/* FindDelivery gère déjà son propre layout plein écran (z-50) */}
+            <FindDelivery 
+                onSelectPackage={handleSelectPackage} 
+                onClose={handleClose} 
+            />
+            
+            {/* Overlay de chargement pendant l'assignation */}
+            {isAssigning && (
+                <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                    <Loader2 className="w-16 h-16 animate-spin text-violet-500 mb-4" />
+                    <h2 className="text-xl font-bold">Assignation en cours...</h2>
+                    <p className="text-violet-200">Ajout à votre feuille de route</p>
+                </div>
             )}
-            
-            <div className="pt-4 border-t">
-              <AnimatePresence mode="wait">
-                {tripStatus === 'selected' && (
-                  <motion.button
-                    key="start"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    onClick={handleStartTrip}
-                    disabled={isMoving}
-                    className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
-                  >
-                    <Play className="w-5 h-5 mr-2" />
-                    {isMoving ? 'Démarrage...' : 'Commencer la course'}
-                  </motion.button>
-                )}
-                
-                {tripStatus === 'to_pickup' && (
-                  <motion.div
-                    key="to-pickup"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center p-4 bg-blue-50 rounded-lg"
-                  >
-                    <Bike className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
-                    <p className="text-sm font-medium text-blue-700">En route vers le point de collecte...</p>
-                    <div className="mt-2 bg-blue-200 rounded-full h-2">
-                      <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
-                    </div>
-                  </motion.div>
-                )}
-                
-                {tripStatus === 'pickup_ready' && (
-                  <motion.div
-                    key="pickup"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4"
-                  >
-                    <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <CheckCircle className="w-6 h-6 text-green-500 mx-auto mb-2" />
-                      <p className="text-sm font-medium text-green-700">Arrivé au point de collecte !</p>
-                    </div>
-                    <div className="relative">
-                      <QrCode className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder="Code du colis ou scanner QR"
-                        value={pickupCode}
-                        onChange={e => setPickupCode(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                      />
-                    </div>
-                    <button
-                      onClick={handleCollectPackage}
-                      disabled={isLoading || !pickupCode}
-                      className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      ) : (
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                      )}
-                      Récupérer le colis
-                    </button>
-                  </motion.div>
-                )}
-                
-                {tripStatus === 'to_dropoff' && (
-                  <motion.div
-                    key="to-dropoff"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center p-4 bg-blue-50 rounded-lg"
-                  >
-                    <Truck className="w-8 h-8 text-blue-500 mx-auto mb-2 animate-pulse" />
-                    <p className="text-sm font-medium text-blue-700">Colis récupéré ! En route vers la destination...</p>
-                    <div className="mt-2 bg-blue-200 rounded-full h-2">
-                      <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{width: '40%'}}></div>
-                    </div>
-                  </motion.div>
-                )}
-                
-                {tripStatus === 'finished' && (
-                  <motion.div
-                    key="finished"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4"
-                  >
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-2" />
-                      <h3 className="font-bold text-green-800">Livraison terminée !</h3>
-                      <p className="text-sm text-green-700">Le bordereau a été généré</p>
-                    </div>
-                    <button
-                      onClick={handleFinishTrip}
-                      disabled={isLoading}
-                      className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      ) : (
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                      )}
-                      Confirmer la livraison
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Carte */}
-      <div className="flex-1 relative">
-        <div ref={mapContainer} className="h-full w-full" />
-        
-        {/* Indicateur de statut en overlay */}
-        {selectedShipment && (
-          <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-sm">
-            <div className="flex items-center gap-3">
-              {tripStatus === 'to_pickup' && (
-                <>
-                  <Bike className="w-6 h-6 text-blue-500 animate-bounce" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Collecte en cours</p>
-                    <p className="text-sm text-gray-600">Direction: {selectedShipment.departure_point_id?.name}</p>
-                  </div>
-                </>
-              )}
-              {tripStatus === 'pickup_ready' && (
-                <>
-                  <CheckCircle className="w-6 h-6 text-green-500" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Prêt pour collecte</p>
-                    <p className="text-sm text-gray-600">Saisissez le code du colis</p>
-                  </div>
-                </>
-              )}
-              {tripStatus === 'to_dropoff' && (
-                <>
-                  <Truck className="w-6 h-6 text-green-500 animate-bounce" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Livraison en cours</p>
-                    <p className="text-sm text-gray-600">Direction: {selectedShipment.arrival_point_id?.name}</p>
-                  </div>
-                </>
-              )}
-              {tripStatus === 'finished' && (
-                <>
-                  <CheckCircle className="w-6 h-6 text-green-500" />
-                  <div>
-                    <p className="font-semibold text-gray-900">Livraison terminée</p>
-                    <p className="text-sm text-gray-600">Colis livré avec succès</p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default CollectPackageApp;
+        </main>
+    );
+}
 
 
 ================================================================================
@@ -24528,30 +24323,30 @@ const PlanCard = ({ plan, index }: { plan: Plan; index: number }) => {
         hidden: { opacity: 0, y: 50 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } }
       }}
-      className={`relative flex flex-col h-full bg-white rounded-2xl shadow-lg ring-2 ${plan.highlightClass} p-8`}
+      className={`relative flex flex-col h-full bg-white dark:bg-slate-900 rounded-2xl dark:ring-slate-700 shadow-lg ring-2 ${plan.highlightClass} p-8`}
     >
       {plan.isPopular && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white px-4 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow-md">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 dark:bg-orange-800 text-white px-4 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow-md">
           <Sparkles className="w-4 h-4" />
           POPULAIRE
         </div>
       )}
 
       <div className="flex-grow">
-        <h3 className="text-xl font-bold text-slate-800">{plan.name}</h3>
-        <p className="text-slate-500 mt-2 text-sm">{plan.description}</p>
+        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{plan.name}</h3>
+        <p className="text-slate-500 dark:text-slate-300 mt-2 text-sm">{plan.description}</p>
 
         <div className="mt-6">
-          <span className="text-4xl font-extrabold text-slate-900">{plan.price}</span>
-          {plan.currency && <span className="text-xl font-semibold text-slate-700 ml-1">{plan.currency}</span>}
-          <span className="text-sm text-slate-500 ml-1">{plan.frequency}</span>
+          <span className="text-4xl font-extrabold text-slate-900 dark:text-slate-300">{plan.price}</span>
+          {plan.currency && <span className="text-xl font-semibold text-slate-700 dark:text-slate-300 ml-1">{plan.currency}</span>}
+          <span className="text-sm text-slate-500 dark:text-slate-300 ml-1">{plan.frequency}</span>
         </div>
 
         <ul className="mt-8 space-y-4 text-sm">
           {plan.features.map((feature, i) => (
             <li key={i} className="flex items-start">
-              <Check className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5 mr-3" />
-              <span className="text-slate-600">{feature}</span>
+              <Check className="w-5 h-5 text-orange-500 dark:text-orange-800 flex-shrink-0 mt-0.5 mr-3" />
+              <span className="text-slate-600 dark:text-slate-400">{feature}</span>
             </li>
           ))}
         </ul>
@@ -24563,8 +24358,8 @@ const PlanCard = ({ plan, index }: { plan: Plan; index: number }) => {
         whileTap={{ scale: 0.98 }}
         className={`mt-10 block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all duration-300
           ${plan.isPopular 
-            ? 'bg-orange-500 text-white shadow-lg hover:bg-orange-600' 
-            : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}
+            ? 'bg-orange-500 dark:bg-orange-800 text-white shadow-lg hover:bg-orange-600' 
+            : 'bg-orange-100 dark:bg-zinc-800 dark:hover:bg-zinc-900 dark:text-orange-800 text-orange-700 hover:bg-orange-200'}
         `}
       >
         {plan.ctaText}
@@ -24577,7 +24372,7 @@ const PlanCard = ({ plan, index }: { plan: Plan; index: number }) => {
 export default function PricingPage() {
 
   return (
-    <div className="min-h-screen bg-orange-50 font-sans text-slate-800">
+    <div className="min-h-screen bg-orange-50 dark:bg-gray-900 font-sans text-slate-800">
       <Navbar />
 
       <main className="pt-24 pb-16">
@@ -24590,10 +24385,10 @@ export default function PricingPage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
               Un plan pour chaque ambition
             </h1>
-            <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-600">
+            <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-600 dark:text-slate-300">
               Choisissez l'offre qui correspond à la taille de votre activité et à vos objectifs de croissance.
             </p>
           </motion.div>
@@ -27417,10 +27212,10 @@ const AGENCY_DATA: ContentData = {
 const POINT_DATA: ContentData = {
     themeColor: "red",
     heroImage: "/images/point.jpeg",
-    heroTitle: <>Convertissez votre espace<br /><span className="text-red-600">en Hub Rentable.</span></>,
+    heroTitle: <>Convertissez votre espace<br /><span className="text-red-600">en Point Relais Rentable.</span></>,
     heroSubtitle: "Solution clé-en-main pour boutiques, stations et cybercafés. Devenez un micro-hub logistique et augmentez vos revenus.",
     benefits: [
-        { value: "+$$", label: "Commissions" },
+        { value: "+10 000 FCFA", label: "Commissions" },
         { value: "Trafic", label: "Visibilité" },
         { value: "Auto", label: "Gestion" }
     ],
@@ -27440,7 +27235,7 @@ const POINT_DATA: ContentData = {
         { icon: HandCoins, title: "4. Paiement", desc: "Reversement périodique des commissions sur votre mobile money/compte." }
     ],
     ctaPrimary: { text: "Devenir Point Relais", link: "/register?type=point" },
-    ctaSecondary: { text: "Conditions & Gains", link: "/about-points" }
+    ctaSecondary: { text: "Conditions & Gains", link: "/pricing" }
 };
 
 // 5. PicknDrop Freelancer -> LIVREURS INDÉPENDANTS
@@ -27504,8 +27299,8 @@ const MARKET_DATA: ContentData = {
 };
 
 const CONTENT_MAP: Record<string, ContentData> = {
-    'LINK': LINK_DATA, 'GO': GO_DATA, 'AGENCY': AGENCY_DATA, 
-    'POINT': POINT_DATA, 'FREELANCER': FREELANCE_DATA, 'MARKET': MARKET_DATA
+    'LINK': LINK_DATA, 'GO': GO_DATA, 'AGENCY': AGENCY_DATA,
+    'FREELANCE': POINT_DATA, 'LIVREUR': FREELANCE_DATA, 'MARKET': MARKET_DATA
 };
 
 // --- HELPERS STYLES ---
@@ -28828,6 +28623,70 @@ export default function MapPage() {
         `}</style>
     </div>
   );
+}
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\my-deliveries\page.tsx
+================================================================================
+
+'use client';
+
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2, ArrowLeft } from 'lucide-react';
+import { Toaster } from 'react-hot-toast';
+
+// Imports
+import DeliveriesDashboard from '@/app/dashboard/Deliveries'; // Le composant dashboard existant
+import { useAuth } from '@/context/AuthContext';
+
+export default function MyDeliveriesPage() {
+    const router = useRouter();
+    const { isAuthenticated, isLoading, user } = useAuth();
+
+    // Protection Route
+    useEffect(() => {
+        if (!isLoading && !isAuthenticated) {
+            router.push('/login');
+        }
+    }, [isAuthenticated, isLoading, router]);
+
+    if (isLoading) {
+        return (
+            <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-black">
+                <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) return null;
+
+    return (
+        <div className="min-h-screen bg-slate-50 dark:bg-black pb-20">
+            <Toaster position="top-right" />
+            
+            {/* Header Flottant spécifique à la page standalone */}
+            <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 shadow-sm flex items-center gap-4">
+                <button 
+                    onClick={() => router.push('/dashboard')}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition text-slate-600 dark:text-slate-300"
+                >
+                    <ArrowLeft className="w-5 h-5" />
+                </button>
+                <h1 className="font-bold text-lg text-slate-900 dark:text-white">
+                    Mon Espace Livreur
+                </h1>
+            </div>
+
+            {/* Injection du module Deliveries existant */}
+            {/* Note : Le composant DeliveriesPage gère lui-même son affichage et le switch List/Find. 
+               Il s'affichera parfaitement ici comme contenu principal. */}
+            <main>
+                <DeliveriesDashboard />
+            </main>
+        </div>
+    );
 }
 
 
@@ -31959,6 +31818,98 @@ export default function CookieBanner() {
 
 
 ================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\components\ui\FeedbackAlert.tsx
+================================================================================
+
+'use client';
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+    AlertCircle, 
+    CheckCircle2, 
+    X, 
+    Info, 
+    XCircle,
+    Copy 
+} from 'lucide-react';
+
+export type AlertType = 'success' | 'error' | 'warning' | 'info';
+
+interface FeedbackAlertProps {
+    type: AlertType;
+    message: string;
+    details?: string; // Pour les logs techniques d'erreur
+    isVisible: boolean;
+    onClose: () => void;
+    autoClose?: boolean;
+}
+
+const styles = {
+    success: { bg: 'bg-emerald-50 dark:bg-emerald-900/30', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-800 dark:text-emerald-200', icon: CheckCircle2, iconColor: 'text-emerald-500' },
+    error: { bg: 'bg-red-50 dark:bg-red-900/30', border: 'border-red-200 dark:border-red-800', text: 'text-red-800 dark:text-red-200', icon: XCircle, iconColor: 'text-red-500' },
+    warning: { bg: 'bg-amber-50 dark:bg-amber-900/30', border: 'border-amber-200 dark:border-amber-800', text: 'text-amber-800 dark:text-amber-200', icon: AlertCircle, iconColor: 'text-amber-500' },
+    info: { bg: 'bg-blue-50 dark:bg-blue-900/30', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-800 dark:text-blue-200', icon: Info, iconColor: 'text-blue-500' },
+};
+
+export default function FeedbackAlert({ type, message, details, isVisible, onClose, autoClose = true }: FeedbackAlertProps) {
+    const config = styles[type];
+    const Icon = config.icon;
+
+    useEffect(() => {
+        if (isVisible && autoClose) {
+            const timer = setTimeout(onClose, type === 'error' ? 8000 : 5000); // Erreurs restent plus longtemps
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, autoClose, onClose, type]);
+
+    const copyError = () => {
+        if (details) navigator.clipboard.writeText(details);
+    };
+
+    return (
+        <AnimatePresence>
+            {isVisible && (
+                <motion.div
+                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    className={`fixed top-24 right-4 z-[100] w-full max-w-md p-4 rounded-xl border ${config.bg} ${config.border} shadow-lg backdrop-blur-md`}
+                >
+                    <div className="flex gap-3">
+                        <div className={`mt-0.5 ${config.iconColor}`}>
+                            <Icon className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1">
+                            <h4 className={`text-sm font-bold ${config.text} mb-0.5`}>
+                                {type === 'error' ? 'Attention' : type === 'success' ? 'Succès' : 'Information'}
+                            </h4>
+                            <p className={`text-xs opacity-90 ${config.text} font-medium`}>{message}</p>
+                            
+                            {/* Zone technique pour développeurs/debug */}
+                            {details && type === 'error' && (
+                                <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/5">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[10px] uppercase font-bold opacity-50">Détails Techniques</span>
+                                        <button onClick={copyError} className="p-1 hover:bg-black/5 rounded"><Copy className="w-3 h-3 opacity-50"/></button>
+                                    </div>
+                                    <code className="block text-[10px] p-2 bg-black/5 dark:bg-black/20 rounded font-mono break-all whitespace-pre-wrap max-h-20 overflow-auto">
+                                        {details}
+                                    </code>
+                                </div>
+                            )}
+                        </div>
+                        <button onClick={onClose} className={`p-1 -mt-1 h-fit hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition ${config.text}`}>
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+}
+
+
+================================================================================
 FICHIER: D:\4GI\PO\pick-n-drop\src\components\Footer.tsx
 ================================================================================
 
@@ -32472,8 +32423,9 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\components\NavbarHome.tsx
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation'; // Ajout pour lire l'URL
 import { 
   Package, 
   Send, 
@@ -32485,11 +32437,8 @@ import {
   Home,
   Menu,
   X,
-  Globe,
-  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
 
 interface NavigationItem {
   href: string;
@@ -32498,14 +32447,116 @@ interface NavigationItem {
   id: string;
 }
 
+// Configuration des Thèmes de couleurs
+// Cela permet de changer dynamiquement les classes Tailwind
+type ThemeColors = {
+  logoBg: string;           // Fond du logo
+  text: string;             // Texte coloré principal
+  textHoverNav: string;     // Hover des liens nav desktop (sur fond sombre/transparent)
+  bgLight: string;          // Fonds légers (boutons secondaires)
+  textDark: string;         // Texte foncé sur fonds légers
+  btnHover: string;         // Hover boutons secondaires
+  border: string;           // Bordures (si utilisées)
+  mobileActiveIcon: string; // Couleur icône active mobile
+  mobileActiveText: string; // Texte actif mobile
+};
+
+const THEMES: Record<string, ThemeColors> = {
+  ORANGE: {
+    logoBg: 'bg-orange-500 dark:bg-orange-600',
+    text: 'text-orange-500',
+    textHoverNav: 'hover:text-orange-200 dark:hover:text-orange-400',
+    bgLight: 'bg-orange-100 dark:bg-orange-900',
+    textDark: 'text-orange-700 dark:text-orange-300',
+    btnHover: 'hover:bg-orange-200 dark:hover:bg-orange-800',
+    border: 'border-orange-500',
+    mobileActiveIcon: 'text-orange-500 dark:text-orange-400',
+    mobileActiveText: 'text-orange-500 dark:text-orange-400'
+  },
+  VIOLET: {
+    logoBg: 'bg-violet-600',
+    text: 'text-violet-600',
+    textHoverNav: 'hover:text-violet-300 dark:hover:text-violet-400',
+    bgLight: 'bg-violet-100 dark:bg-violet-900',
+    textDark: 'text-violet-700 dark:text-violet-300',
+    btnHover: 'hover:bg-violet-200 dark:hover:bg-violet-800',
+    border: 'border-violet-600',
+    mobileActiveIcon: 'text-violet-600 dark:text-violet-400',
+    mobileActiveText: 'text-violet-600 dark:text-violet-400'
+  },
+  BLUE: {
+    logoBg: 'bg-blue-600',
+    text: 'text-blue-600',
+    textHoverNav: 'hover:text-blue-300 dark:hover:text-blue-400',
+    bgLight: 'bg-blue-100 dark:bg-blue-900',
+    textDark: 'text-blue-700 dark:text-blue-300',
+    btnHover: 'hover:bg-blue-200 dark:hover:bg-blue-800',
+    border: 'border-blue-600',
+    mobileActiveIcon: 'text-blue-600 dark:text-blue-400',
+    mobileActiveText: 'text-blue-600 dark:text-blue-400'
+  },
+  EMERALD: { // Pour Go
+    logoBg: 'bg-emerald-600',
+    text: 'text-emerald-600',
+    textHoverNav: 'hover:text-emerald-300 dark:hover:text-emerald-400',
+    bgLight: 'bg-emerald-100 dark:bg-emerald-900',
+    textDark: 'text-emerald-700 dark:text-emerald-300',
+    btnHover: 'hover:bg-emerald-200 dark:hover:bg-emerald-800',
+    border: 'border-emerald-600',
+    mobileActiveIcon: 'text-emerald-600 dark:text-emerald-400',
+    mobileActiveText: 'text-emerald-600 dark:text-emerald-400'
+  },
+  RED: { // Pour Point Relais
+    logoBg: 'bg-red-600',
+    text: 'text-red-600',
+    textHoverNav: 'hover:text-red-300 dark:hover:text-red-400',
+    bgLight: 'bg-red-100 dark:bg-red-900',
+    textDark: 'text-red-700 dark:text-red-300',
+    btnHover: 'hover:bg-red-200 dark:hover:bg-red-800',
+    border: 'border-red-600',
+    mobileActiveIcon: 'text-red-600 dark:text-red-400',
+    mobileActiveText: 'text-red-600 dark:text-red-400'
+  }
+};
+
 export default function NavbarHome() {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
+  const searchParams = useSearchParams();
 
+  // --- LOGIQUE DE DÉTECTION DU THÈME ---
+  const currentTheme = useMemo(() => {
+    // On lit le paramètre ?role=... de l'URL
+    const roleParam = searchParams.get('role')?.toUpperCase();
+    
+    switch (roleParam) {
+      case 'LIVREUR':
+      case 'FREELANCER':
+        return THEMES.VIOLET;
+      case 'AGENCY':
+        return THEMES.BLUE;
+      case 'GO':
+        return THEMES.EMERALD;
+      case 'POINT':
+      case 'FREELANCE':
+        return THEMES.RED;
+      case 'LINK':
+      case 'MARKET':
+      default:
+        return THEMES.ORANGE; // Défaut
+    }
+  }, [searchParams]);
 
-  // Navigation items avec icônes
+  // Gestion Scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const navigationItems: NavigationItem[] = [
     { href: '/', label: 'Accueil', icon: Home, id: 'home' },
     { href: '/expedition', label: 'Envoyer un colis', icon: Send, id: 'send' },
@@ -32520,20 +32571,20 @@ export default function NavbarHome() {
     setIsOpen(false);
   };
 
-
   return (
     <>
       {/* Desktop Navbar */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled || isOpen 
           ? 'bg-white/95 dark:bg-gray-900/95 shadow-lg backdrop-blur-md' 
-          : 'bg-transparent'
+          : 'bg-transparent backdrop-blur-xl'
       }`}>
         <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex justify-between items-center">
-            {/* Logo */}
+            
+            {/* Logo Dynamique */}
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-              <div className="bg-orange-500 dark:bg-orange-600 p-2 rounded-lg shadow-md">
+              <div className={`${currentTheme.logoBg} p-2 rounded-lg shadow-md transition-colors duration-300`}>
                 <Package className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <span className="text-xl sm:text-2xl font-bold text-gray-300 dark:text-gray-100">
@@ -32541,7 +32592,7 @@ export default function NavbarHome() {
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
+            {/* Desktop Navigation Dynamique */}
             <nav className="hidden lg:flex items-center gap-4 xl:gap-6">
               {navigationItems.slice(1, -1).map((item) => {
                 const IconComponent = item.icon;
@@ -32549,7 +32600,7 @@ export default function NavbarHome() {
                   <Link 
                     key={item.id}
                     href={item.href} 
-                    className="flex items-center gap-2 text-gray-300 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
+                    className={`flex items-center gap-2 text-gray-300 dark:text-gray-300 font-semibold ${currentTheme.textHoverNav} transition-colors group`}
                   >
                     <IconComponent className="w-4 h-4 group-hover:scale-110 transition-transform" />
                     <span className="hidden xl:inline">{item.label}</span>
@@ -32560,16 +32611,16 @@ export default function NavbarHome() {
               {/* Help Link */}
               <Link 
                 href="#how-it-works" 
-                className="flex items-center gap-2 text-gray-300 dark:text-gray-300 font-semibold hover:text-orange-200 dark:hover:text-orange-400 transition-colors group"
+                className={`flex items-center gap-2 text-gray-300 dark:text-gray-300 font-semibold ${currentTheme.textHoverNav} transition-colors group`}
               >
                 <HelpCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="hidden xl:inline">Aide</span>
               </Link>
 
-              {/* Account Button */}
+              {/* Account Button Dynamique */}
               <Link 
                 href="/login" 
-                className="flex items-center gap-2 bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 font-bold px-3 py-2 xl:px-5 xl:py-2 rounded-full hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors group"
+                className={`flex items-center gap-2 ${currentTheme.bgLight} ${currentTheme.textDark} ${currentTheme.btnHover} font-bold px-3 py-2 xl:px-5 xl:py-2 rounded-full transition-colors group`}
               >
                 <User className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="hidden xl:inline">Mon compte</span>
@@ -32578,7 +32629,6 @@ export default function NavbarHome() {
 
             {/* Mobile Menu Button */}
             <div className="lg:hidden flex items-center gap-2">
-              {/* Menu Button */}
               <button 
                 onClick={() => setIsOpen(!isOpen)} 
                 className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2"
@@ -32598,7 +32648,7 @@ export default function NavbarHome() {
               exit={{ opacity: 0, y: -20 }}
               className="lg:hidden bg-white dark:bg-gray-900 shadow-lg absolute top-full left-0 right-0 border-t dark:border-gray-700"
             >
-              <div className="flex flex-col gap-1 p-4 pb-20"> {/* Ajout de padding-bottom pour l'espace de navigation */}
+              <div className="flex flex-col gap-1 p-4 pb-20"> 
                 {navigationItems.slice(1).map((item) => {
                   const IconComponent = item.icon;
                   return (
@@ -32606,7 +32656,7 @@ export default function NavbarHome() {
                       key={item.id}
                       href={item.href} 
                       onClick={() => setIsOpen(false)} 
-                      className="flex items-center gap-3 text-gray-700 dark:text-gray-300 font-semibold text-base hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 p-3 rounded-lg transition-colors"
+                      className={`flex items-center gap-3 text-gray-700 dark:text-gray-300 font-semibold text-base hover:${currentTheme.text} ${currentTheme.btnHover} p-3 rounded-lg transition-colors`}
                     >
                       <IconComponent className="w-5 h-5" />
                       {item.label}
@@ -32616,7 +32666,7 @@ export default function NavbarHome() {
                 <Link 
                   href="/login" 
                   onClick={() => setIsOpen(false)} 
-                  className="flex items-center justify-center gap-3 bg-orange-500 dark:bg-orange-600 hover:bg-orange-600 dark:hover:bg-orange-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors"
+                  className={`flex items-center justify-center gap-3 ${currentTheme.logoBg} hover:opacity-90 text-white font-bold py-3 rounded-lg mt-2 transition-colors`}
                 >
                   <User className="w-5 h-5" />
                   Mon compte TiiBnTick
@@ -32627,7 +32677,7 @@ export default function NavbarHome() {
         </AnimatePresence>
       </header>
 
-      {/* Mobile Bottom Navigation */}
+      {/* Mobile Bottom Navigation Dynamique */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg">
         <div className="flex justify-around items-center py-2">
           {navigationItems.map((item) => {
@@ -32641,12 +32691,12 @@ export default function NavbarHome() {
                 onClick={() => handleTabClick(item.id)}
                 className={`flex flex-col items-center justify-center p-2 min-w-0 flex-1 transition-colors ${
                   isActive 
-                    ? 'text-orange-500 dark:text-orange-400' 
-                    : 'text-gray-500 dark:text-gray-400 hover:text-orange-500 dark:hover:text-orange-400'
+                    ? currentTheme.mobileActiveText 
+                    : `text-gray-500 dark:text-gray-400 hover:${currentTheme.text}`
                 }`}
               >
                 <div className={`p-1 rounded-lg transition-all ${
-                  isActive ? 'bg-orange-100 dark:bg-orange-900/30' : ''
+                  isActive ? currentTheme.bgLight : ''
                 }`}>
                   <IconComponent className={`w-5 h-5 ${isActive ? 'scale-110' : ''} transition-transform`} />
                 </div>
@@ -32666,12 +32716,12 @@ export default function NavbarHome() {
             onClick={() => handleTabClick('account')}
             className={`flex flex-col items-center justify-center p-2 min-w-0 flex-1 transition-colors ${
               activeTab === 'account' 
-                ? 'text-orange-500 dark:text-orange-400' 
-                : 'text-gray-500 dark:text-gray-400 hover:text-orange-500 dark:hover:text-orange-400'
+                ? currentTheme.mobileActiveText
+                : `text-gray-500 dark:text-gray-400 hover:${currentTheme.text}`
             }`}
           >
             <div className={`p-1 rounded-lg transition-all ${
-              activeTab === 'account' ? 'bg-orange-100 dark:bg-orange-900/30' : ''
+              activeTab === 'account' ? currentTheme.bgLight : ''
             }`}>
               <User className={`w-5 h-5 ${activeTab === 'account' ? 'scale-110' : ''} transition-transform`} />
             </div>
@@ -32680,7 +32730,6 @@ export default function NavbarHome() {
         </div>
       </nav>
 
-      {/* Spacer pour éviter que le contenu soit caché par la navigation mobile */}
       <div className="lg:hidden h-20"></div>
     </>
   );
@@ -33407,24 +33456,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pickndropback.o
 
 async function apiClient<T>(
   endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET', // Ajout de PATCH
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
   body?: any,
   headers?: Record<string, string>
 ): Promise<T> {
   
   const url = `${API_BASE_URL}${endpoint}`;
   
-  // Récupération et nettoyage du token
   let token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  if (token) {
-    token = token.replace(/^"(.*)"$/, '$1'); // Nettoyage des guillemets
-  }
+  if (token) token = token.replace(/^"(.*)"$/, '$1');
 
-  // --- LOG REQUEST (Consigne : Afficher le token) ---
-  console.groupCollapsed(`🌐 [API REQUEST] ${method} ${endpoint}`);
-  console.log(`🔑 Token:`, token ? `${token.substring(0, 15)}...` : 'NO TOKEN');
-  console.log(`📦 Payload:`, body);
-  console.groupEnd();
+  // Logs en VIOLET si le mot clé "deliverer" est dans l'URL pour différencier les flux visuellement
+  const isLivreur = endpoint.includes('deliverer');
+  const groupStyle = isLivreur 
+    ? 'color: #8b5cf6; font-weight: bold; background: #f3f0ff; padding: 2px 5px; border-radius: 4px;' 
+    : 'color: #3b82f6; font-weight: bold;';
+
+  console.groupCollapsed(`%c🌐 [API] ${method} ${endpoint}`, groupStyle);
 
   const config: RequestInit = {
     method,
@@ -33438,7 +33486,6 @@ async function apiClient<T>(
 
   if (body) {
     if (body instanceof FormData) {
-        // Le navigateur gère le Content-Type et boundary pour FormData
         const h = config.headers as Record<string, string>;
         delete h['Content-Type']; 
         config.body = body;
@@ -33449,59 +33496,45 @@ async function apiClient<T>(
 
   try {
     const response = await fetch(url, config);
-
-    // --- LOG RESPONSE ---
-    // Clonage pour pouvoir lire le body deux fois (pour le log et le return)
     const clone = response.clone();
     
     if (response.ok) {
         try {
-            const data = await clone.json();
-            console.groupCollapsed(`✅ [API SUCCESS] ${method} ${endpoint}`);
-            console.log('DATA:', data);
+            // Tente de parser, si vide retourne null sans erreur
+            const text = await clone.text();
+            const data = text ? JSON.parse(text) : {};
+            console.log('✅ Success Payload:', data);
             console.groupEnd();
+            return data as T;
         } catch(e) {
-            console.log(`✅ [API SUCCESS] ${method} ${endpoint} (No Content or Blob)`);
+            console.warn('⚠️ JSON Parse Warning (Success but malformed JSON)');
+            console.groupEnd();
+            return {} as T;
         }
     } else {
-         console.group(`❌ [API ERROR] ${response.status} ${endpoint}`);
-         const text = await clone.text();
-         console.error('Response:', text);
+         // --- CORRECTION DE L'ERREUR CONSOLE ---
+         const errorText = await clone.text();
+         console.warn(`❌ [API FAIL] Status: ${response.status}`);
+         if (errorText) console.error('Error Body:', errorText);
+         else console.log('Error Body is empty.');
+         
          console.groupEnd();
-    }
 
-    // GESTION DES ERREURS
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        // Gestion token expiré seulement si ce n'est pas le login
-        if (!endpoint.includes('/auth/login')) {
-             console.warn("⚠️ Session expirée détectée par l'API Client");
-             // Optionnel: Déclencher un event pour déconnecter
-             // if (typeof window !== 'undefined') localStorage.clear();
-        }
-      }
-
-      const errorText = await response.text();
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) { /* ignore */ }
-      
-      const message = errorData?.message || errorData?.error || `Erreur serveur (${response.status})`;
-      throw new Error(message);
-    }
-
-    const responseText = await response.text();
-    if (!responseText) return {} as T;
-
-    try {
-        return JSON.parse(responseText) as T;
-    } catch (e) {
-        return responseText as unknown as T;
+         // Tentative d'extraire un message propre
+         let errorMessage = `Erreur HTTP ${response.status}`;
+         try {
+             const jsonError = JSON.parse(errorText);
+             errorMessage = jsonError.message || jsonError.error || errorMessage;
+         } catch(e) {
+             if (errorText) errorMessage = errorText.substring(0, 100);
+         }
+         
+         throw new Error(errorMessage);
     }
 
   } catch (error: any) {
-    console.error(`💥 [API CLIENT EXCEPTION] ${method} ${endpoint}:`, error);
+    console.error(`💥 Network Error ${method} ${endpoint}:`, error);
+    console.groupEnd();
     throw error;
   }
 }
@@ -34909,11 +34942,10 @@ export const employeeService = {
 FICHIER: D:\4GI\PO\pick-n-drop\src\services\delivererService.tsx
 ================================================================================
 
-// FICHIER: src/services/delivererService.tsx
+'use client';
 import apiClient from './apiClient';
 
-// --- Types DTO Backend ---
-
+// Type enrichi avec les données nécessaires
 export interface DelivererPackage {
     id: string;
     trackingNumber: string;
@@ -34921,135 +34953,151 @@ export interface DelivererPackage {
     deliveryAddress: string;
     weight: number;
     deliveryFee: number;
-    currentStatus: string;
-    // Champs optionnels enrichis
-    recipientName?: string;
-    recipientPhone?: string;
+    currentStatus: 'FOR_PICKUP' | 'ASSIGNED_TO_DELIVERER' | 'IN_TRANSIT' | 'AT_ARRIVAL_RELAY_POINT' | 'DELIVERED';
+    
+    // Champs étendus du backend
+    currentRelayPointId?: string; // Crucial pour le MAP
+    departureRelayPointId?: string;
+    arrivalRelayPointId?: string;
+    
     senderName?: string;
     senderPhone?: string;
-    description?: string;
-    estimatedDeliveryTime?: string;
-    distance?: number;
-    createdAt?: string;
-}
-
-interface LocationUpdatePayload {
-    latitude: number;
-    longitude: number;
-    timestamp: string;
-}
-
-interface DeliveryPayload {
+    recipientName?: string;
     recipientPhone?: string;
-    deliveryNotes?: string;
-    signatureUrl?: string; 
+    recipientAddress?: string;
+    description?: string;
+    createdAt?: string;
+    dimensions?: string;
+    packageType?: string;
+    paymentStatus?: string;
+    specialInstructions?: string;
+    value?: number;
 }
 
-// Fonction utilitaire pour normaliser un colis venant du backend vers le format UI Livreur
+// Fonction utilitaire de log (Violet pour livreur)
+const logViolet = (label: string, data: any) => {
+    console.log(`%c🚚 [LIVREUR] ${label}`, 'color: #8b5cf6; font-weight: bold; background: #f3f0ff; padding: 2px 5px; border-radius: 4px;', data);
+};
+
+// Normalisation des données
 const normalizePackage = (p: any): DelivererPackage => {
     return {
         id: p.id,
-        trackingNumber: p.trackingNumber || p.tracking_number || 'N/A',
-        // On essaie plusieurs champs potentiels pour l'adresse de départ
-        pickupAddress: p.pickupAddress || p.departurePointName || p.departureRelayPoint?.name || 'Point Relais Départ',
-        // Idem pour l'arrivée
-        deliveryAddress: p.deliveryAddress || p.arrivalPointName || p.arrivalRelayPoint?.name || p.recipientAddress || 'Destination',
-        
+        trackingNumber: p.trackingNumber || 'N/A',
+        pickupAddress: p.pickupAddress || 'Point Départ',
+        deliveryAddress: p.deliveryAddress || p.recipientAddress || 'Destination',
         weight: p.weight || 0,
-        // Frais de livraison (salaire ou coût global, selon le besoin)
-        deliveryFee: Number(p.shippingCost || p.deliveryFee || 0),
+        deliveryFee: Number(p.deliveryFee || 0),
+        currentStatus: p.currentStatus || p.status || 'FOR_PICKUP',
         
-        currentStatus: p.status || p.currentStatus || 'FOR_PICKUP',
+        currentRelayPointId: p.currentRelayPointId || p.departureRelayPointId,
+        departureRelayPointId: p.departureRelayPointId,
+        arrivalRelayPointId: p.arrivalRelayPointId,
         
+        senderName: p.senderId ? "Client expéditeur" : "Inconnu", // ID masqué par défaut si pas de nom
+        senderPhone: "Masqué avant acceptation",
         recipientName: p.recipientName,
         recipientPhone: p.recipientPhone,
-        description: p.description
+        description: p.description,
+        createdAt: p.createdAt,
+        dimensions: p.dimensions,
+        packageType: p.packageType,
+        paymentStatus: p.paymentStatus,
+        specialInstructions: p.specialInstructions,
+        value: p.value
     };
 };
 
-// --- APPELS API ---
+const delivererService = {
 
-// 1. [FIXED] Obtenir UNIQUEMENT les colis disponibles (Statut FOR_PICKUP)
-const getAvailablePackages = async (): Promise<DelivererPackage[]> => {
-    // La réponse backend est de type : { count: number, message: string, packages: [...] }
-    try {
-        const response: any = await apiClient<any>('/api/deliverer/packages/available', 'GET');
+    /**
+     * Récupère tous les colis disponibles (Statut: FOR_PICKUP)
+     * Utiliser pour peupler la carte
+     */
+    getAvailablePackages: async (): Promise<DelivererPackage[]> => {
+        const url = '/api/deliverer/packages/available';
+        logViolet('GET REQUEST', url);
         
-        console.log("📦 [DelivererService] Raw Available Response:", response);
-        
-        // Extraction sécurisée du tableau
-        const rawPackages = Array.isArray(response) ? response : (response.packages || []);
-        
-        // Normalisation
-        return rawPackages.map(normalizePackage);
+        try {
+            const response: any = await apiClient(url, 'GET');
+            logViolet('GET RESPONSE', response);
 
-    } catch (error) {
-        console.error("Erreur getAvailablePackages:", error);
-        return [];
+            // Gestion structure : { packages: [...] }
+            const rawList = Array.isArray(response) ? response : (response.packages || []);
+            
+            return rawList.map(normalizePackage);
+        } catch (error) {
+            console.error("❌ Deliverer Service Error:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Mes Livraisons (ASSIGNED, IN_TRANSIT, etc.)
+     */
+    getMyDeliveries: async (): Promise<DelivererPackage[]> => {
+        const url = '/api/deliverer/packages/my-deliveries';
+        logViolet('GET REQUEST', url);
+        
+        try {
+            const response: any = await apiClient(url, 'GET');
+            logViolet('GET RESPONSE', response);
+            
+            const rawList = Array.isArray(response) ? response : (response.packages || []);
+            return rawList.map(normalizePackage);
+        } catch (error) {
+            // Fallback vide si 404 (pas de courses)
+            return [];
+        }
+    },
+
+    /**
+     * Accepter une course (S'assigner)
+     */
+    assignPackage: async (packageId: string): Promise<any> => {
+        const url = `/api/deliverer/packages/${packageId}/assign`;
+        logViolet('POST REQUEST (ASSIGN)', url);
+        return apiClient(url, 'POST', {});
+    },
+
+    /**
+     * Récupérer le colis (Débuter la course)
+     * Passe de ASSIGNED -> IN_TRANSIT
+     */
+    pickupPackage: async (packageId: string): Promise<any> => {
+        const url = `/api/deliverer/packages/${packageId}/pickup`;
+        logViolet('POST REQUEST (PICKUP)', url);
+        return apiClient(url, 'POST', {});
+    },
+
+    /**
+     * Terminer la course (Livrer)
+     * Passe de IN_TRANSIT -> DELIVERED
+     */
+    deliverPackage: async (packageId: string, confirmationCode?: string): Promise<any> => {
+        // Selon l'API, parfois 'deliver-to-client'
+        const url = `/api/deliverer/packages/${packageId}/deliver-to-client`;
+        logViolet('POST REQUEST (DELIVER)', { url, code: confirmationCode });
+        
+        // Payload optionnel pour code
+        const payload = confirmationCode ? { confirmationCode } : {};
+        return apiClient(url, 'POST', payload);
+    },
+
+    /**
+     * Récupérer TOUS les détails d'un colis spécifique
+     * Appelé quand on clique sur la Sidebar Details
+     */
+    getPackageFullDetails: async (packageId: string): Promise<DelivererPackage> => {
+        const url = `/api/packages/${packageId}`; // Route publique ou générique admin/user
+        logViolet('GET DETAILS', url);
+        const res: any = await apiClient(url, 'GET');
+        logViolet('DETAILS RESPONSE', res);
+        return normalizePackage(res);
     }
 };
 
-// 2. Mes colis assignés
-const getMyDeliveries = async (): Promise<DelivererPackage[]> => {
-    try {
-        const response: any = await apiClient<any>('/api/deliverer/packages/my-deliveries', 'GET');
-        // Gestion souple si l'API change de format
-        const rawPackages = Array.isArray(response) ? response : (response.packages || []);
-        return rawPackages.map(normalizePackage);
-    } catch (e) {
-        console.error("Erreur getMyDeliveries, fallback sur in-transit...", e);
-        return []; 
-    }
-};
-
-// 3. S'assigner un colis
-const assignPackage = async (packageId: string): Promise<any> => {
-    // Route POST /api/deliverer/packages/{id}/assign (D'après la doc)
-    return apiClient<any>(`/api/deliverer/packages/${packageId}/assign`, 'POST', {});
-};
-
-// 4. Récupérer un colis
-const pickupPackage = async (packageId: string, relayPointId?: string): Promise<any> => {
-    const url = relayPointId 
-        ? `/api/deliverer/packages/${packageId}/pickup?relayPointId=${relayPointId}`
-        : `/api/deliverer/packages/${packageId}/pickup`;
-        
-    return apiClient<any>(url, 'POST', {});
-};
-
-// 5. Livrer le colis
-const deliverPackage = async (packageId: string, data: DeliveryPayload): Promise<any> => {
-    // Le paramètre confirmationCode ou recipientPhone peut être passé en query ou body selon l'implémentation Java
-    // Ici on suppose le body
-    return apiClient<any>(`/api/deliverer/packages/${packageId}/deliver-to-client`, 'POST', {
-        recipientPhone: data.recipientPhone,
-        confirmationCode: "AUTO" // Si requis par le backend
-    });
-};
-
-// 5b. Livrer à un relais (optionnel)
-const deliverToRelay = async (packageId: string, relayPointId: string): Promise<any> => {
-    return apiClient<any>(`/api/deliverer/packages/${packageId}/deliver-to-relay?relayPointId=${relayPointId}`, 'POST');
-};
-
-
-// 6. Mise à jour Position GPS
-const updateLocation = async (delivererId: string, lat: number, lng: number): Promise<void> => {
-    // L'endpoint dans votre Swagger est : PUT /api/deliverer/packages/{packageId}/location
-    // Mais pour mettre à jour la pos du livreur général, ce serait un autre endpoint. 
-    // On garde celui fourni mais attention aux erreurs 404 si ID incorrect
-    return apiClient(`/api/employees/${delivererId}/location`, 'PUT', { latitude: lat, longitude: lng });
-};
-
-export const delivererService = {
-    getAvailablePackages, 
-    getMyDeliveries,
-    assignPackage,
-    pickupPackage,
-    deliverPackage,
-    deliverToRelay,
-    updateLocation
-};
+export { delivererService };
 
 
 ================================================================================
@@ -35059,7 +35107,7 @@ FICHIER: D:\4GI\PO\pick-n-drop\.next\types\routes.d.ts
 // This file is generated automatically by Next.js
 // Do not edit this file manually
 
-type AppRoutes = "/" | "/[slug]" | "/agency/operations" | "/agency/staff" | "/announce" | "/collect-package" | "/dashboard" | "/depot" | "/emit-package" | "/expedition" | "/home" | "/landing" | "/login" | "/map" | "/marketplace" | "/pricing" | "/register" | "/superadmin" | "/track-package" | "/withdraw-package"
+type AppRoutes = "/" | "/[slug]" | "/agency/operations" | "/agency/staff" | "/announce" | "/collect-package" | "/dashboard" | "/depot" | "/emit-package" | "/expedition" | "/home" | "/landing" | "/login" | "/map" | "/marketplace" | "/my-deliveries" | "/pricing" | "/register" | "/superadmin" | "/track-package" | "/withdraw-package"
 type PageRoutes = never
 type LayoutRoutes = "/"
 type RedirectRoutes = never
@@ -35083,6 +35131,7 @@ interface ParamMap {
   "/login": {}
   "/map": {}
   "/marketplace": {}
+  "/my-deliveries": {}
   "/pricing": {}
   "/register": {}
   "/superadmin": {}
@@ -35303,6 +35352,15 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
   type __Unused = __Check
 }
 
+// Validate ../../src/app/my-deliveries/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/my-deliveries">> = Specific
+  const handler = {} as typeof import("../../src/app/my-deliveries/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/">> = Specific
@@ -35314,61 +35372,3 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
 
 // Validate ../../src/app/pricing/page.tsx
 {
-  type __IsExpected<Specific extends AppPageConfig<"/pricing">> = Specific
-  const handler = {} as typeof import("../../src/app/pricing/page.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
-// Validate ../../src/app/register/page.tsx
-{
-  type __IsExpected<Specific extends AppPageConfig<"/register">> = Specific
-  const handler = {} as typeof import("../../src/app/register/page.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
-// Validate ../../src/app/superadmin/page.tsx
-{
-  type __IsExpected<Specific extends AppPageConfig<"/superadmin">> = Specific
-  const handler = {} as typeof import("../../src/app/superadmin/page.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
-// Validate ../../src/app/track-package/page.tsx
-{
-  type __IsExpected<Specific extends AppPageConfig<"/track-package">> = Specific
-  const handler = {} as typeof import("../../src/app/track-package/page.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
-// Validate ../../src/app/withdraw-package/page.tsx
-{
-  type __IsExpected<Specific extends AppPageConfig<"/withdraw-package">> = Specific
-  const handler = {} as typeof import("../../src/app/withdraw-package/page.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
-
-
-
-
-
-
-// Validate ../../src/app/layout.tsx
-{
-  type __IsExpected<Specific extends LayoutConfig<"/">> = Specific
-  const handler = {} as typeof import("../../src/app/layout.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
