@@ -22,7 +22,9 @@ const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContai
 const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(m => m.Popup), { ssr: false });
-const useMap = dynamic(() => import('react-leaflet').then(m => m.useMap), { ssr: false });
+
+// Import direct du hook (ne peut pas être dynamic)
+import { useMap } from 'react-leaflet';
 
 // Helper Distance (Haversine)
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -57,7 +59,7 @@ const MapController = ({
     packages: PackageWithLocation[], 
     onSelect: (p: PackageWithLocation) => void
 }) => {
-    const map = (useMap as any)();
+    const map = useMap();
     const [L, setL] = useState<any>(null);
     const [routeLayer, setRouteLayer] = useState<any>(null);
 
@@ -409,7 +411,7 @@ export default function FindDelivery({ onSelectPackage, onClose }: FindDeliveryP
                      isOpen={!!activePkg}
                      pkg={activePkg!}
                      onClose={() => setActivePkg(null)}
-                                          onAssign={() => {
+                     onAssign={() => {
                          // --- LA CORRECTION PRINCIPALE EST ICI ---
                          // Vérifie si la prop existe avant de l'appeler
                          if (activePkg && typeof onSelectPackage === 'function') {
