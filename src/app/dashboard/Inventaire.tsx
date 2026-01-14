@@ -5,19 +5,27 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Package, PlusCircle, Search, Filter, Eye, X, Phone, Send, Archive, 
   Inbox, Loader2, ArrowUpRight, ArrowDownLeft, Building, Clock, Truck, CheckCircle, Sparkles, 
-  AlertTriangle, Zap, MoreVertical, ArchiveRestore, Send as SendIcon
+  AlertTriangle, Zap, MoreVertical, ArchiveRestore, Send as SendIcon,
+  FileText,
+  Info,
+  User,
+  Ruler,
+  MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { UserProfile } from './page';
 import { relayPointService, RelayPoint } from '@/services/relayPointService';
 import { DepotColis } from '../depot/depot';
 import { WithdrawPackagePage } from '../withdraw-package/retrait';
+import { FullPackageDetails, packageService } from '@/services/packageService';
+import { BanknotesIcon } from '@heroicons/react/24/outline';
 
 type ParcelStatusUI = 'En attente de dépôt' | 'En stock' | 'Retiré' | 'En transit' | 'Au départ' | 'Annulé'| 'Arrivé au relais';
 type ParcelType = 'Standard' | 'Express';
 
 interface Parcel {
-  id: string;
+  id: string;              // <--- L'UUID technique (pour les appels API)
+  trackingId: string;      // <--- Le "PND..." pour l'affichage visuel
   status: ParcelStatusUI;
   type: ParcelType;
   arrivalDate: string;
@@ -138,18 +146,17 @@ function InventoryCard({
             
             {/* Barre latérale colorée */}
             <div className={`w-1.5 self-stretch rounded-l-xl ${statusBorder} flex-shrink-0`}></div>
-            
-            {/* Contenu Principal Clickable */}
             <div className="flex-1 flex items-center gap-4 py-3 px-3 cursor-pointer min-w-0" onClick={onClickDetails}>
                 
-                {/* Icone + ID */}
+                {/* Icone + Tracking ID */}
                 <div className="flex items-center gap-3 min-w-[130px]">
                     <div className={`p-2 rounded-lg ${dirColor}`}>
                         <DirIcon className="w-4 h-4" />
                     </div>
                     <div>
-                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-sm block truncate max-w-[90px]">
-                            {parcel.id.length > 10 ? parcel.id.substring(0,8)+'..' : parcel.id}
+                        {/* CORRECTION ICI : parcel.trackingId au lieu de parcel.id */}
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-sm block truncate max-w-[100px]" title={parcel.trackingId}>
+                            {parcel.trackingId} 
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
                             {parcel.arrivalDate}
@@ -234,9 +241,56 @@ function InventoryCard({
     );
 }
 
-// Modale de détails stylisée
-const DetailsModal = ({ parcel, onClose }: { parcel: Parcel | null; onClose: () => void; }) => {
-  if (!parcel) return null;
+// --- NOUVEAU COMPOSANT : MODALE DÉTAILS AVANCÉS ---
+const DetailsModal = ({ 
+  packageId, 
+  onClose,
+  onActionDepot,      // <--- Nouveau prop
+  onActionRetrait     // <--- Nouveau prop
+}: { 
+  packageId: string | null; 
+  onClose: () => void;
+  onActionDepot: (tracking: string) => void;   // Fonction passée du parent
+  onActionRetrait: (tracking: string) => void; // Fonction passée du parent
+}) => {
+  const [data, setData] = useState<FullPackageDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Helper pour éviter les crashs sur des champs vides
+const safeStatus = (data: any) => (data.status || data.currentStatus || 'INCONNU').toUpperCase();
+const safePayment = (data: any) => (data.paymentStatus || 'PENDING').toUpperCase();
+
+  // Charger les données dès que la modale s'ouvre avec un ID
+  useEffect(() => {
+    if (!packageId) return;
+
+    const fetchDetails = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            // C'est ici que les logs définis dans le service s'afficheront
+            const fullDetails = await packageService.getPackageById(packageId);
+            setData(fullDetails);
+        } catch (err: any) {
+            setError("Impossible de charger les détails complets. Vérifiez la connexion.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchDetails();
+  }, [packageId]);
+
+    // Conditions pour afficher les boutons
+  const showDepositButton = ['PRE_REGISTERED', 'PENDING', 'EN_ATTENTE_DE_DEPOT', 'PENDING_DEPOSIT'].some(s => status.includes(s));
+  
+  // Note: On adapte la logique selon si le colis est "au relais" pour un retrait client final
+  // ou si on veut valider son arrivée depuis un transporteur (c'est souvent le même endpoint "receive" ou "retrait")
+  // Ici on suit la logique de "Retrait Client"
+  const showWithdrawButton = ['ARRIVE_AU_RELAIS', 'AT_ARRIVAL_RELAY_POINT', 'AT_RELAY_POINT', 'AVAILABLE'].some(s => status.includes(s));
+
+  if (!packageId) return null;
 
   return (
     <motion.div
@@ -245,63 +299,188 @@ const DetailsModal = ({ parcel, onClose }: { parcel: Parcel | null; onClose: () 
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col"
+        initial={{ scale: 0.95, opacity: 0, y: 20 }} 
+        animate={{ scale: 1, opacity: 1, y: 0 }} 
+        exit={{ scale: 0.95, opacity: 0, y: 20 }}
+        className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Modal */}
-        <div className="bg-gradient-to-r from-orange-500 to-amber-600 p-6 text-white flex justify-between items-start relative overflow-hidden">
+        <div className="bg-gradient-to-r from-orange-500 to-amber-600 p-6 text-white flex justify-between items-start relative overflow-hidden shrink-0">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
             <div className="z-10">
                 <div className="flex items-center gap-3 mb-2">
                     <span className="p-2 bg-white/20 rounded-lg backdrop-blur-sm border border-white/20"><Package className="w-6 h-6" /></span>
-                    <h2 className="text-2xl font-bold tracking-tight">{parcel.designation}</h2>
+                    <div>
+                        <h2 className="text-xl font-bold tracking-tight">
+                            {/* Protection ici aussi au cas où description manque */}
+                            {data?.description || data?.trackingNumber}
+                        </h2>
+                        <p className="text-orange-100 text-xs font-mono opacity-90">{data?.trackingNumber}</p>
+                    </div>
                 </div>
-                <p className="text-orange-100 text-sm font-mono opacity-90 flex items-center gap-2"><span className="bg-black/20 px-2 py-0.5 rounded text-xs">#{parcel.id}</span> {parcel.status}</p>
+                {!loading && data && (
+                    <div className="flex gap-2 mt-2">
+                        {/* --- LA CORRECTION PRINCIPALE EST ICI --- */}
+                        <span className="bg-black/20 px-2 py-0.5 rounded text-xs font-medium uppercase border border-white/10">
+                            {safeStatus(data).replace(/_/g, ' ')}
+                        </span>
+                        {/* -------------------------------------- */}
+                        
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase border border-white/10 ${safePayment(data) === 'PAID' ? 'bg-green-500/20 text-green-100' : 'bg-red-500/20 text-red-100'}`}>
+                            {safePayment(data) === 'PAID' ? 'PAYÉ' : 'NON PAYÉ'}
+                        </span>
+                    </div>
+                )}
             </div>
             <button onClick={onClose} className="bg-black/20 hover:bg-black/40 text-white p-2 rounded-full transition z-10"><X className="w-5 h-5" /></button>
         </div>
 
-        {/* Content */}
-        <div className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
-            <div className="grid grid-cols-3 gap-4 text-center">
-                 <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border dark:border-slate-700">
-                     <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Date</p>
-                     <p className="text-sm font-bold text-slate-700 dark:text-white">{parcel.arrivalDate}</p>
-                 </div>
-                 <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border dark:border-slate-700">
-                     <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Type</p>
-                     <p className="text-sm font-bold text-slate-700 dark:text-white">{parcel.type}</p>
-                 </div>
-                 <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border dark:border-slate-700">
-                     <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Coût</p>
-                     <p className="text-sm font-bold text-green-600">{parcel.shippingCost.toLocaleString()} F</p>
-                 </div>
-            </div>
-            <div className="relative border-l-2 border-dashed border-slate-300 dark:border-slate-600 ml-3 space-y-8 pl-6">
-                 <div className="relative">
-                     <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-white dark:bg-slate-800 border-4 border-blue-500"></div>
-                     <h4 className="text-xs font-bold uppercase text-slate-400 mb-1">Expéditeur</h4>
-                     <p className="font-bold text-slate-800 dark:text-white">{parcel.sender.name}</p>
-                     <p className="text-sm text-slate-500">{parcel.sender.phone}</p>
-                     <p className="text-xs text-slate-400 mt-1 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg inline-block border dark:border-slate-700">📍 {parcel.sender.originAddress}</p>
-                 </div>
-                 <div className="relative">
-                     <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-white dark:bg-slate-800 border-4 border-green-500"></div>
-                     <h4 className="text-xs font-bold uppercase text-slate-400 mb-1">Destinataire</h4>
-                     <p className="font-bold text-slate-800 dark:text-white">{parcel.recipient.name}</p>
-                     <p className="text-sm text-slate-500">{parcel.recipient.phone}</p>
-                     <p className="text-xs text-slate-400 mt-1 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg inline-block border dark:border-slate-700">📍 {parcel.recipient.deliveryAddress}</p>
-                 </div>
-            </div>
+        {/* Corps */}
+        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 relative min-h-[300px]">
+            
+            {loading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-800/50">
+                    <Loader2 className="w-12 h-12 text-orange-600 animate-spin mb-4"/>
+                    <p className="text-slate-600 dark:text-slate-300 font-medium animate-pulse">Synchronisation avec le serveur...</p>
+                </div>
+            ) : error ? (
+                <div className="text-center py-12">
+                    <p className="text-red-500 font-bold mb-4">{error}</p>
+                    <button onClick={onClose} className="text-sm underline">Fermer</button>
+                </div>
+            ) : data ? (
+                <div className="space-y-8">
+                    
+                    {/* 1. KPIs Rapides */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                             <p className="text-xs text-slate-500 uppercase font-bold mb-1">Status Actuel</p>
+                             <p className="text-sm font-black text-slate-800 dark:text-white break-words">{safeStatus(data).replace(/_/g, ' ')}</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                             <p className="text-xs text-slate-500 uppercase font-bold mb-1">Montant Livraison</p>
+                             <p className="text-xl font-black text-orange-600">{(data.shippingCost || data.deliveryFee || 0).toLocaleString()} F</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                             <p className="text-xs text-slate-500 uppercase font-bold mb-1">Type & Poids</p>
+                             <p className="text-sm font-bold text-slate-800 dark:text-white">{data.packageType || 'Standard'} • {data.weight} kg</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                             <p className="text-xs text-slate-500 uppercase font-bold mb-1">Créé le</p>
+                             <p className="text-sm font-bold text-slate-800 dark:text-white">{new Date(data.createdAt).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+
+                    {/* 2. Expéditeur / Destinataire */}
+                    <div className="grid md:grid-cols-2 gap-8 relative">
+                        {/* Ligne séparatrice verticale déco */}
+                        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 w-px bg-slate-200 dark:bg-slate-700 transform -translate-x-1/2"></div>
+                        
+                        <div>
+                             <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4 bg-blue-50 dark:bg-blue-900/20 text-blue-700 px-3 py-1 rounded-lg w-fit">
+                                 <ArrowUpRight className="w-4 h-4"/> Expéditeur
+                             </h3>
+                             <div className="space-y-3 pl-2">
+                                 <p className="text-sm font-semibold">{data.senderName}</p>
+                                 <p className="text-sm text-slate-500 flex items-center gap-2"><span className="text-xs font-mono bg-slate-100 p-1 rounded">TEL</span> {data.senderPhone}</p>
+                                 {data.pickupAddress && (
+                                    <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded flex gap-2">
+                                        <MapPin className="w-4 h-4 shrink-0"/> {data.pickupAddress}
+                                    </p>
+                                 )}
+                             </div>
+                        </div>
+
+                        <div>
+                             <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4 bg-green-50 dark:bg-green-900/20 text-green-700 px-3 py-1 rounded-lg w-fit">
+                                 <ArrowDownLeft className="w-4 h-4"/> Destinataire
+                             </h3>
+                             <div className="space-y-3 pl-2">
+                                 <p className="text-sm font-semibold">{data.recipientName}</p>
+                                 <p className="text-sm text-slate-500 flex items-center gap-2"><span className="text-xs font-mono bg-slate-100 p-1 rounded">TEL</span> {data.recipientPhone}</p>
+                                 {data.deliveryAddress && (
+                                    <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded flex gap-2">
+                                        <MapPin className="w-4 h-4 shrink-0"/> {data.deliveryAddress}
+                                    </p>
+                                 )}
+                             </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Infos Colis & Trajet */}
+                    <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
+                        <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                             <Info className="w-4 h-4"/> Caractéristiques Techniques
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                             <div className="flex justify-between p-2 border-b dark:border-slate-700">
+                                 <span className="text-slate-500">Contenu / Description</span>
+                                 <span className="font-medium text-right max-w-[200px]">{data.description}</span>
+                             </div>
+                             <div className="flex justify-between p-2 border-b dark:border-slate-700">
+                                 <span className="text-slate-500">Valeur Déclarée</span>
+                                 <span className="font-medium">{(data.value || 0).toLocaleString()} FCFA</span>
+                             </div>
+                             <div className="flex justify-between p-2 border-b dark:border-slate-700">
+                                 <span className="text-slate-500">Dimensions</span>
+                                 <span className="font-medium">{data.dimensions && data.dimensions !== "{}" ? data.dimensions : "Standard"}</span>
+                             </div>
+                             <div className="flex justify-between p-2 border-b dark:border-slate-700">
+                                 <span className="text-slate-500">Option Livraison</span>
+                                 <span className="font-medium">{data.deliveryOption || "Standard"}</span>
+                             </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {data.isFragile && <span className="text-xs font-bold text-red-600 bg-red-100 px-3 py-1 rounded-full">FRAGILE</span>}
+                            {data.isPerishable && <span className="text-xs font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">PERISSABLE</span>}
+                            {data.specialInstructions && <div className="w-full text-xs text-orange-600 bg-orange-50 p-3 rounded mt-2 font-medium">⚠️ {data.specialInstructions}</div>}
+                        </div>
+                    </div>
+                    
+                </div>
+            ) : null}
         </div>
-        <div className="p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end">
-             <button onClick={onClose} className="px-5 py-2 rounded-xl bg-white border dark:bg-slate-700 dark:border-slate-600 dark:text-white text-slate-700 font-bold text-sm shadow-sm hover:bg-slate-50">Fermer</button>
+
+        {/* --- 4. SECTION FOOTER ACTIONS --- */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t dark:border-slate-700 flex justify-between items-center">
+            
+            <div className="flex gap-3">
+                 {/* BOUTON DÉPÔT (Apparaît si statut En Attente) */}
+                 {showDepositButton && (
+                     <button 
+                        onClick={() => data?.trackingNumber && onActionDepot(data.trackingNumber)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-orange-200 dark:shadow-none transition-transform hover:-translate-y-0.5 active:scale-95"
+                     >
+                        <SendIcon className="w-4 h-4" /> Enregistrer le Dépôt
+                     </button>
+                 )}
+
+                 {/* BOUTON RETRAIT (Apparaît si statut Arrivé) */}
+                 {showWithdrawButton && (
+                     <button 
+                        onClick={() => data?.trackingNumber && onActionRetrait(data.trackingNumber)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-green-200 dark:shadow-none transition-transform hover:-translate-y-0.5 active:scale-95"
+                     >
+                        <ArchiveRestore className="w-4 h-4" /> Valider le Retrait
+                     </button>
+                 )}
+            </div>
+
+            <button 
+                onClick={onClose} 
+                className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-bold rounded-xl transition"
+            >
+                Fermer
+            </button>
         </div>
       </motion.div>
     </motion.div>
   );
 };
+
+
 
 export default function InventoryPage({ profile }: { profile: UserProfile }) {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -311,6 +490,11 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
   const [myRelayId, setMyRelayId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+    // -- STATES MODALE DÉTAILS --
+  const [selectedFullPackage, setSelectedFullPackage] = useState<FullPackageDetails | null>(null);
+    // NOUVEAU STATE : ID du colis à voir en détail (pas tout l'objet partiel)
+  const [detailModalPackageId, setDetailModalPackageId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Tous' | ParcelStatusUI>('Tous');
   const [selectedParcel, setSelectedParcel] = useState<Parcel | null>(null);
@@ -353,7 +537,49 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
 
     try {
       let targetRelayId = myRelayId;
+            // 1. SI C'EST UN EMPLOYE : Utiliser son assignation
+
+      // 1. DÉTECTION AUTOMATIQUE (MODE EMPLOYÉ GÉRANT)
+      // Si l'ID est présent dans le profil, on bypass la logique de propriétaire
+      if (!targetRelayId && profile.assigned_relay_point_id) {
+          console.log("🎯 Mode Gérant Employé : Chargement direct par ID Relais", profile.assigned_relay_point_id);
+          targetRelayId = profile.assigned_relay_point_id;
+          
+          // Récupération des infos du relais (Nom, adresse...) pour l'affichage de l'en-tête
+          try {
+             // C'EST ICI LA RECHERCHE "BY ID" DEMANDÉE
+             const relayData = await relayPointService.getRelayPointById(targetRelayId);
+             setMyRelay(relayData); // Met à jour le titre du dashboard (ex: "Point Relais Akwa")
+             setMyRelayId(targetRelayId);
+          } catch(e) {
+             console.error("Impossible de charger les détails du relais assigné");
+             // On continue quand même avec l'ID pour charger les colis
+          }
+      }
+      
       if (!targetRelayId) {
+                // 1. Cas Employé Gérant (ID injecté par userService)
+        if (profile.assigned_relay_point_id) {
+             targetRelayId = profile.assigned_relay_point_id;
+             console.log("🕵️ Chargement Inventaire (Vue Employé) pour Relay:", targetRelayId);
+             
+             // Il faut charger les détails du point pour l'affichage (Nom, adresse...)
+             // (car ils ne sont pas complets dans le profil user)
+             // Astuce: on charge tout et on trouve, ou un getById si dispo
+             const allPointsRaw = await relayPointService.getAllRelayPoints();
+             const safePoints = safeExtractArray(allPointsRaw);
+             const found = safePoints.find((p:any) => String(p.id) === String(targetRelayId));
+             if(found) setMyRelay(found);
+        } 
+        // 2. Cas Propriétaire (Freelance standard)
+        else {
+             const allPointsRaw = await relayPointService.getAllRelayPoints();
+             const safePoints = safeExtractArray(allPointsRaw);
+             const found = safePoints.find((p: any) => String(p.ownerId) === String(profile.id));
+             if(found) targetRelayId = found.id;
+             if(found) setMyRelay(found);
+        }
+
         const allPointsRaw = await relayPointService.getAllRelayPoints();
         const safePoints = safeExtractArray(allPointsRaw);
         const found = safePoints.find(p => String(p.ownerId) === String(profile.id));
@@ -376,8 +602,8 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
         const uiParcels: Parcel[] = [];
 
         const convertToUi = (p: any): Parcel => {
-          const trackNum = p.trackingNumber || p.tracking_number;
-          const rawId = getSafeId(p) || trackNum;
+          const trackNum = p.trackingNumber || p.tracking_number || "N/A";
+          const rawId = getSafeId(p) || trackNum || p.id || p.packageId;
           const isExpeditionList = forExpedition.some((x: any) => getSafeId(x) === rawId || x.trackingNumber === trackNum);
           const isPickupList = forPickup.some((x: any) => getSafeId(x) === rawId || x.trackingNumber === trackNum);
           const depId = String(p.departureRelayPointId || p.departurePointId || '');
@@ -386,7 +612,8 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
           const isFromMe = isExpeditionList || depId === myIdStr;
           const isToMe = isPickupList || arrId === myIdStr;
           return {
-            id: trackNum || "N/A",
+            id: rawId || "N/A",
+            trackingId: trackNum || "N/A",
             rawStatus: p.status || p.currentStatus || "UNKNOWN",
             status: mapStatus(p.status || p.currentStatus, isFromMe, isToMe),
             type: (Number(p.deliveryFee || p.shippingCost) > 15000) ? 'Express' : 'Standard',
@@ -449,7 +676,15 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
 
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-700">
-      <AnimatePresence>{isModalOpen && <DetailsModal parcel={selectedParcel} onClose={() => setIsModalOpen(false)} />}</AnimatePresence>
+      {/* 4. MODALE CONNECTÉE */}
+      <AnimatePresence>
+          {detailModalPackageId && (
+              <DetailsModal 
+                  packageId={detailModalPackageId} 
+                  onClose={() => setDetailModalPackageId(null)} 
+              />
+          )}
+      </AnimatePresence>
       <AnimatePresence mode="wait">
         {activeView === 'inventory' ? (
           <motion.div key="inventory-main" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
@@ -488,10 +723,10 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
                          <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
                          <select className="w-full pl-11 pr-8 py-3 rounded-xl bg-gray-50 dark:bg-slate-800 border-0 focus:ring-2 focus:ring-orange-500 text-slate-700 dark:text-slate-200 font-bold cursor-pointer appearance-none" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
                             <option value="Tous">Tous les status</option>
-                            <option value="En stock">📦 En Stock</option>
-                            <option value="En attente de dépôt">⏳ Attente Dépôt</option>
-                            <option value="En transit">🚚 En Transit</option>
-                            <option value="Retiré">✅ Terminés</option>
+                            <option value="En stock">En Stock</option>
+                            <option value="En attente de dépôt">Attente Dépôt</option>
+                            <option value="En transit">En Transit</option>
+                            <option value="Retiré">Terminés</option>
                          </select>
                      </div>
                 </div>
@@ -507,7 +742,7 @@ export default function InventoryPage({ profile }: { profile: UserProfile }) {
                             <InventoryCard 
                                 key={parcel.id} 
                                 parcel={parcel} 
-                                onClickDetails={() => { setSelectedParcel(parcel); setIsModalOpen(true); }} 
+                                onClickDetails={() => setDetailModalPackageId(parcel.id)} 
                                 onActionDepot={() => handleTriggerDepot(parcel.id)}
                                 onActionRetrait={() => handleTriggerRetrait(parcel.id)}
                             />

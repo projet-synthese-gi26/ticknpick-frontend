@@ -1,0 +1,314 @@
+flow:
+  name: delivery_backend
+  version: 1.0.0
+  description: Flow backend de livraison - Requêtes HTTP et déclenchements BD
+  states:
+    - id: deliverer_idle
+      label: Livreur inactif
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: packages_loaded
+      label: Colis chargés en mémoire
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: package_self_assigned
+      label: Colis auto-assigné
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 700
+        y: 100
+    - id: package_picked_up
+      label: Colis récupéré
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1000
+        y: 100
+    - id: package_in_delivery
+      label: Colis en cours de livraison
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1300
+        y: 100
+    - id: package_delivered_to_relay
+      label: Colis livré au point relais
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 1600
+        y: 100
+    - id: package_delivered_to_client
+      label: Colis livré au client
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1900
+        y: 100
+    - id: assignment_failed
+      label: Échec d'assignation
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 700
+        y: 300
+  transitions:
+    - id: get_available_packages_request
+      label: GET /api/deliverer/packages/available
+      from: deliverer_idle
+      to: packages_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/available
+        handler:
+          service: DelivererController
+          method: getAvailablePackages
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 30
+        database_operations:
+          - select_packages_with_status_FOR_PICKUP
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - return_available_packages_list
+        permissions:
+          roles: [DELIVERER]
+    - id: get_nearby_packages_request
+      label: GET /api/deliverer/packages/nearby
+      from: deliverer_idle
+      to: packages_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/nearby
+        handler:
+          service: DelivererController
+          method: getNearbyPackages
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 50
+        database_operations:
+          - select_packages_with_status_FOR_PICKUP
+          - filter_by_geographic_distance
+        triggers:
+          - calculate_distance_from_deliverer_location
+          - return_nearby_packages_list
+        validation:
+          - field: latitude
+            rules: [required, numeric, between:-90,90]
+          - field: longitude
+            rules: [required, numeric, between:-180,180]
+          - field: radiusKm
+            rules: [numeric, min:1, max:50]
+        permissions:
+          roles: [DELIVERER]
+    - id: assign_package_to_self_request
+      label: POST /api/deliverer/packages/{packageId}/assign
+      from: packages_loaded
+      to: package_self_assigned
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        handler:
+          service: DelivererController
+          method: assignPackageToSelf
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 110
+        database_operations:
+          - update_package_status_ASSIGNED_TO_DELIVERER
+          - update_assigned_deliverer_id
+          - update_assigned_delivery_at
+          - insert_package_history_entry
+        triggers:
+          - verify_package_status_FOR_PICKUP
+          - verify_package_not_already_assigned
+          - extract_deliverer_id_from_jwt
+          - record_assignment_timestamp
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+        permissions:
+          roles: [DELIVERER]
+    - id: pickup_package_request
+      label: POST /api/deliverer/packages/{packageId}/pickup
+      from: package_self_assigned
+      to: package_picked_up
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/pickup
+        handler:
+          service: DelivererController
+          method: pickupPackage
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 140
+        database_operations:
+          - update_package_status_IN_TRANSIT
+          - update_pickup_coordinates
+          - update_pickup_at
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_package_status_ASSIGNED_TO_DELIVERER
+          - record_pickup_location_and_time
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: update_location_request
+      label: PUT /api/deliverer/packages/{packageId}/location
+      from: package_picked_up
+      to: package_in_delivery
+      backend:
+        route:
+          method: PUT
+          path: /api/deliverer/packages/{packageId}/location
+        handler:
+          service: DelivererController
+          method: updatePackageLocation
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 260
+        database_operations:
+          - update_package_current_latitude
+          - update_package_current_longitude
+          - update_package_updated_at
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - record_real_time_location
+        validation:
+          - field: latitude
+            rules: [required, numeric, between:-90,90]
+          - field: longitude
+            rules: [required, numeric, between:-180,180]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: deliver_to_relay_point_request
+      label: POST /api/deliverer/packages/{packageId}/deliver-to-relay
+      from: package_in_delivery
+      to: package_delivered_to_relay
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-relay
+        handler:
+          service: DelivererController
+          method: deliverToRelayPoint
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 165
+        database_operations:
+          - update_package_status_AT_ARRIVAL_RELAY_POINT
+          - update_current_relay_point_id
+          - update_delivery_coordinates
+          - update_delivery_at
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_package_status_IN_TRANSIT
+          - record_delivery_to_relay_point
+          - notify_recipient_package_arrived
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: deliver_to_client_request
+      label: POST /api/deliverer/packages/{packageId}/deliver-to-client
+      from: package_in_delivery
+      to: package_delivered_to_client
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-client
+        handler:
+          service: DelivererController
+          method: deliverToClient
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 190
+        database_operations:
+          - update_package_status_DELIVERED
+          - update_actual_delivery_date
+          - update_delivery_coordinates
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_recipient_phone_if_provided
+          - record_direct_delivery
+          - calculate_deliverer_commission
+          - notify_sender_delivery_completed
+        validation:
+          - field: recipientPhone
+            rules: [phone, matches_package_recipient]
+          - field: confirmationCode
+            rules: [string, min:3]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: get_my_deliveries_request
+      label: GET /api/deliverer/packages/my-deliveries
+      from: package_self_assigned
+      to: package_self_assigned
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/my-deliveries
+        handler:
+          service: DelivererController
+          method: getMyDeliveries
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 85
+        database_operations:
+          - select_packages_by_assigned_deliverer_id
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - return_assigned_packages_list
+        permissions:
+          roles: [DELIVERER]
+    - id: get_package_details_request
+      label: GET /api/deliverer/packages/{packageId}/details
+      from: package_self_assigned
+      to: package_self_assigned
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/{packageId}/details
+        handler:
+          service: DelivererController
+          method: getPackageDetails
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 220
+        database_operations:
+          - select_package_by_id
+          - verify_deliverer_access_rights
+        triggers:
+          - verify_deliverer_assigned_or_package_available
+          - return_package_details
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer_or_package_available]
+    - id: assignment_failed_already_taken
+      label: Colis déjà pris
+      from: packages_loaded
+      to: assignment_failed
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        triggers:
+          - return_400_bad_request
+          - return_package_already_assigned_error
+        database_operations:
+          - verify_package_status_not_FOR_PICKUP

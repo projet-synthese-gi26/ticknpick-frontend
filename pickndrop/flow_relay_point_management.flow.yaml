@@ -1,0 +1,542 @@
+flow:
+  name: relay_point_management_backend
+  version: 1.0.0
+  description: Flow backend de gestion des points relais - Requêtes HTTP et déclenchements BD
+  states:
+    - id: relay_owner_dashboard
+      label: Tableau de bord Propriétaire
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 1090
+        'y': 150
+    - id: relay_point_creation_form
+      label: Formulaire de création
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 770
+        'y': 430
+    - id: relay_point_details_review
+      label: Révision des détails
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 770
+        'y': 710
+    - id: relay_point_created
+      label: Point relais créé
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 930
+        'y': 990
+    - id: relay_point_active
+      label: Point relais actif
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1090
+        'y': 1270
+    - id: relay_point_list
+      label: Liste des points relais
+      type: intermediate
+      color: '#e1f5fe'
+      position:
+        x: 1090
+        'y': 430
+    - id: relay_point_edit_form
+      label: Formulaire de modification
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1410
+        'y': 710
+    - id: relay_point_updated
+      label: Point relais modifié
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 1250
+        'y': 990
+    - id: package_inventory
+      label: Inventaire des colis
+      type: intermediate
+      color: '#fce4ec'
+      position:
+        x: 1410
+        'y': 430
+    - id: creation_error
+      label: Erreur de création
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 1090
+        'y': 710
+  transitions:
+    - id: start_relay_creation
+      label: Créer un nouveau point relais
+      from: relay_owner_dashboard
+      to: relay_point_creation_form
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points/management/create
+        handler:
+          service: RelayPointManagementController
+          method: createRelayPoint
+          file: src/main/java/com/pickndrop/controller/RelayPointManagementController.java
+          line: 32
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+        validation: []
+      frontend:
+        component: RelayPointCreationForm
+        route: /relay-points/create
+        state_management:
+          store: relayPointStore
+          actions:
+            - initRelayPointCreation
+            - loadStorageCapacities
+        ui:
+          loading_state: isLoadingForm
+          error_handling: showFormError
+    - id: submit_relay_details
+      label: Soumettre les détails
+      from: relay_point_creation_form
+      to: relay_point_details_review
+      backend:
+        route:
+          method: POST
+          path: /api/relay-points/management/create
+        handler:
+          service: RelayPointManagementService
+          method: createRelayPoint
+          file: src/main/java/com/pickndrop/service/RelayPointManagementService.java
+          line: 45
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: is_verified_business_actor
+        validation:
+          - field: relayPointName
+            rules:
+              - required
+              - min:3
+              - max:100
+          - field: relayPointAddress
+            rules:
+              - required
+              - min:10
+          - field: relayPointLocality
+            rules:
+              - required
+              - min:3
+          - field: openingHours
+            rules:
+              - required
+          - field: storageCapacity
+            rules:
+              - required
+              - in:SMALL,MEDIUM,LARGE,EXTRA_LARGE
+          - field: latitude
+            rules:
+              - required
+              - numeric
+              - between:-90,90
+          - field: longitude
+            rules:
+              - required
+              - numeric
+              - between:-180,180
+      frontend:
+        component: RelayPointReview
+        route: /relay-points/review
+        state_management:
+          store: relayPointStore
+          actions:
+            - createRelayPoint
+            - setRelayPointData
+        ui:
+          loading_state: isCreatingRelayPoint
+          error_handling: showCreationError
+          success_redirect: /relay-points/review
+    - id: relay_creation_failed
+      label: Échec de création
+      from: relay_point_creation_form
+      to: creation_error
+      backend:
+        route:
+          method: POST
+          path: /api/relay-points/management/create
+        handler:
+          service: RelayPointManagementService
+          method: createRelayPoint
+          file: src/main/java/com/pickndrop/service/RelayPointManagementService.java
+          line: 45
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+      frontend:
+        component: CreationError
+        route: /relay-points/create
+        state_management:
+          store: relayPointStore
+          actions:
+            - setCreationError
+            - resetRelayPointForm
+        ui:
+          error_handling: showValidationErrors
+    - id: confirm_relay_creation
+      label: Confirmer la création
+      from: relay_point_details_review
+      to: relay_point_created
+      backend:
+        route:
+          method: POST
+          path: /api/relay-points/management/create
+        handler:
+          service: RelayPointManagementService
+          method: createRelayPoint
+          file: src/main/java/com/pickndrop/service/RelayPointManagementService.java
+          line: 45
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+        validation:
+          - field: relayPointData
+            rules:
+              - required
+              - valid_relay_point_structure
+      frontend:
+        component: RelayPointCreated
+        route: /relay-points/{relayPointId}/created
+        state_management:
+          store: relayPointStore
+          actions:
+            - confirmRelayPoint
+            - addToMyRelayPoints
+        ui:
+          loading_state: isConfirming
+          success_redirect: /relay-points/{relayPointId}/created
+    - id: activate_relay_point
+      label: Activer le point relais
+      from: relay_point_created
+      to: relay_point_active
+      backend:
+        route:
+          method: PUT
+          path: /api/relay-points/{relayPointId}/activate
+        handler:
+          service: RelayPointService
+          method: activate
+          file: src/main/java/com/pickndrop/service/RelayPointService.java
+          line: 120
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: owns_relay_point
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: RelayPointActive
+        route: /relay-points/{relayPointId}/active
+        state_management:
+          store: relayPointStore
+          actions:
+            - activateRelayPoint
+            - updateRelayPointStatus
+        ui:
+          loading_state: isActivating
+          success_redirect: /relay-points/{relayPointId}/dashboard
+    - id: view_my_relay_points
+      label: Voir mes points relais
+      from: relay_owner_dashboard
+      to: relay_point_list
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points
+        handler:
+          service: RelayPointController
+          method: getAll
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 40
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+        validation: []
+      frontend:
+        component: RelayPointList
+        route: /relay-points/my-relay-points
+        state_management:
+          store: relayPointStore
+          actions:
+            - loadMyRelayPoints
+            - refreshRelayPointStatus
+        ui:
+          loading_state: isLoadingRelayPoints
+          error_handling: showRelayPointLoadError
+    - id: edit_relay_point
+      label: Modifier un point relais
+      from: relay_point_list
+      to: relay_point_edit_form
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points/{relayPointId}
+        handler:
+          service: RelayPointController
+          method: getById
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 35
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: owns_relay_point
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: RelayPointEditForm
+        route: /relay-points/{relayPointId}/edit
+        state_management:
+          store: relayPointStore
+          actions:
+            - loadRelayPointForEdit
+            - initEditForm
+        ui:
+          loading_state: isLoadingRelayPoint
+          error_handling: showLoadError
+    - id: submit_relay_updates
+      label: Soumettre les modifications
+      from: relay_point_edit_form
+      to: relay_point_updated
+      backend:
+        route:
+          method: PUT
+          path: /api/relay-points/management/{relayPointId}
+        handler:
+          service: RelayPointManagementController
+          method: updateRelayPoint
+          file: src/main/java/com/pickndrop/controller/RelayPointManagementController.java
+          line: 45
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: owns_relay_point
+        validation:
+          - field: relayPointName
+            rules:
+              - required
+              - min:3
+              - max:100
+          - field: relayPointAddress
+            rules:
+              - required
+              - min:10
+          - field: openingHours
+            rules:
+              - required
+          - field: storageCapacity
+            rules:
+              - required
+              - in:SMALL,MEDIUM,LARGE,EXTRA_LARGE
+      frontend:
+        component: RelayPointUpdated
+        route: /relay-points/{relayPointId}/updated
+        state_management:
+          store: relayPointStore
+          actions:
+            - updateRelayPoint
+            - refreshRelayPointData
+        ui:
+          loading_state: isUpdatingRelayPoint
+          error_handling: showUpdateError
+          success_redirect: /relay-points/{relayPointId}/updated
+    - id: return_to_relay_list
+      label: Retourner à la liste
+      from: relay_point_updated
+      to: relay_point_list
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points
+        handler:
+          service: RelayPointController
+          method: getAll
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 40
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+      frontend:
+        component: RelayPointList
+        route: /relay-points/my-relay-points
+        state_management:
+          store: relayPointStore
+          actions:
+            - refreshMyRelayPoints
+            - clearUpdateStatus
+        ui:
+          loading_state: isRefreshingList
+    - id: view_package_inventory
+      label: Voir l'inventaire des colis
+      from: relay_owner_dashboard
+      to: package_inventory
+      backend:
+        route:
+          method: GET
+          path: /api/packages/relay-point/{relayPointId}
+        handler:
+          service: PackageController
+          method: getPackagesByRelayPoint
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 320
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: owns_relay_point
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: PackageInventory
+        route: /relay-points/{relayPointId}/inventory
+        state_management:
+          store: packageStore
+          actions:
+            - loadRelayPointPackages
+            - refreshInventory
+        ui:
+          loading_state: isLoadingInventory
+          error_handling: showInventoryError
+    - id: manage_package_in_inventory
+      label: Gérer un colis de l'inventaire
+      from: package_inventory
+      to: package_inventory
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: package_in_owned_relay_point
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: status
+            rules:
+              - required
+              - in:FOR_PICKUP,READY_FOR_PICKUP,WITHDRAWN
+      frontend:
+        component: PackageInventory
+        route: /relay-points/{relayPointId}/inventory
+        state_management:
+          store: packageStore
+          actions:
+            - updatePackageStatus
+            - refreshInventory
+        ui:
+          loading_state: isUpdatingPackage
+          error_handling: showPackageUpdateError
+    - id: retry_relay_creation
+      label: Réessayer la création
+      from: creation_error
+      to: relay_point_creation_form
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points/management/create
+        handler:
+          service: RelayPointManagementController
+          method: createRelayPoint
+          file: src/main/java/com/pickndrop/controller/RelayPointManagementController.java
+          line: 32
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+      frontend:
+        component: RelayPointCreationForm
+        route: /relay-points/create
+        state_management:
+          store: relayPointStore
+          actions:
+            - clearCreationError
+            - resetRelayPointForm
+        ui:
+          loading_state: isResetting
+    - id: view_relay_details_from_list
+      label: Voir détails du point relais
+      from: relay_point_list
+      to: package_inventory
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points/{relayPointId}
+        handler:
+          service: RelayPointController
+          method: getById
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 35
+        permissions:
+          roles:
+            - FREELANCE
+            - AGENCY_OWNER
+            - EMPLOYEE
+          conditions: owns_relay_point
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: PackageInventory
+        route: /relay-points/{relayPointId}/inventory
+        state_management:
+          store: relayPointStore
+          actions:
+            - loadRelayPointDetails
+            - loadRelayPointPackages
+        ui:
+          loading_state: isLoadingDetails

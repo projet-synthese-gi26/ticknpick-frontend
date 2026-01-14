@@ -4,7 +4,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { NotificationProvider } from '../context/NotificationContext';
 import NotificationBanner from '../components/NotificationBanner';
-import CookieBanner from '@/components/CookieBanner';
+import CookieBanner from '@/components/ui/CookieBanner';
 // IMPORTATION
 import { AuthProvider } from '@/context/AuthContext';
 

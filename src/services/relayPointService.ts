@@ -6,6 +6,7 @@ import apiClient from './apiClient';
 export interface RelayPoint {
     id: string; // UUID
     ownerId: string; // UUID du owner
+    agency_id: string; // Utilisation snake_case comme dans ton JSON
     relayPointName: string;
     
     // Gestion des doubles noms possibles (snake_case vs camelCase)
@@ -147,8 +148,34 @@ const getPackagesForPickup = async (relayPointId: string): Promise<any[]> => {
 
 // Liste globale
 const getAllPackages = async (relayPointId: string): Promise<any[]> => {
-    return apiClient<any[]>(`/api/relay-points/${relayPointId}/packages`, 'GET');
+    return apiClient<any[]>(`/api/packages/for-delivery`, 'GET');
     
+};
+
+/**
+ * Création d'un point relais POUR UNE AGENCE SPÉCIFIQUE
+ * Route: POST /api/agencies/{agencyId}/relay-points
+ */
+const createRelayPointForAgency = async (agencyId: string, data: Partial<CreateRelayPointPayload>): Promise<RelayPoint> => {
+    console.group(`🏗️ [RelayPointService] POST /api/agencies/${agencyId}/relay-points`);
+    console.log("📦 Payload envoyé:", data);
+    
+    try {
+        const response = await apiClient<RelayPoint>(`/api/agencies/${agencyId}/relay-points`, 'POST', data);
+        console.log("✅ Réponse création:", response);
+        console.groupEnd();
+        return response;
+    } catch (error) {
+        console.error("❌ Erreur création:", error);
+        console.groupEnd();
+        throw error;
+    }
+};
+// Ajouter cette fonction si elle manque
+const getRelayPointById = async (id: string): Promise<RelayPoint> => {
+    console.log(`📦 [RelayPointService] GET By ID: ${id}`);
+    // Endpoint selon Swagger: /api/relay-points/{id}
+    return apiClient<RelayPoint>(`/api/relay-points/${id}`, 'GET');
 };
 
 
@@ -157,6 +184,9 @@ export const relayPointService = {
     getMyRelayPoints: getAllRelayPoints, // Alias pour compat
     createRelayPoint,
     updateRelayPoint,
+    extractArray,
+    getRelayPointById,  // NOUVEAU
+    createRelayPointForAgency, // NOUVEAU
     receivePackage,      // NOUVEAU
     dispatchPackage,     // NOUVEAU
     getPackagesForExpedition, // NOUVEAU

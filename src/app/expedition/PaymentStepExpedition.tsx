@@ -101,6 +101,9 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
   const [trackingNumber, setTrackingNumber] = useState(''); // Stockera le vrai tracking number du backend
   const [mobileOperator, setMobileOperator] = useState<'orange' | 'mtn'>('orange');
   const [mobilePhone, setMobilePhone] = useState('');
+  const [method, setMethod] = useState<'cash'|'mobile'|'recipient'>('cash');
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   const router = useRouter(); 
   const { addNotification } = useNotification();
@@ -274,92 +277,77 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
       alert("Une erreur est survenue lors de la génération du bordereau PDF.");
     }
   };
+    const handleSubmit = async () => {
+      setLoading(true);
+      setApiError(null);
 
+      try {
+          console.log("🚀 Construction Payload...");
 
-  // --- SOUMISSION DES DONNÉES AU BACKEND ---
-  const handleSubmit = async () => {
-    console.log("🚀 Début de la soumission du colis...");
-    setIsProcessing(true);
-    
-    try {
-        // 1. Construction des dimensions JSON stringifié
-        const dimsObject = {
-            length: parseFloat(allData.length || '0'),
-            width: parseFloat(allData.width || '0'),
-            height: parseFloat(allData.height || '0')
-        };
+          // Mapping pour DTO Backend (strictement typé)
+          // Note: Departure/Arrival Point IDs doivent être des strings UUID
+          
+          const payload: PackageCreationPayload = {
+              // --- Infos Techniques ---
+              departureRelayPointId: String(allData.departurePointId),
+              arrivalRelayPointId: String(allData.arrivalPointId),
+              pickupAddress: allData.departurePointName,
+              deliveryAddress: allData.arrivalPointName,
+              
+              // --- Infos Personnes ---
+              senderName: allData.senderName,
+              senderPhone: allData.senderPhone,
+              senderEmail: allData.senderEmail, // (Nouveau champ backend si dispo)
+              senderAddress: allData.senderAddress,
+              
+              recipientName: allData.recipientName,
+              recipientPhone: allData.recipientPhone,
+              recipientAddress: allData.recipientAddress || allData.recipientPhone,
 
-        // 2. Type de paquet
-        let pType = 'STANDARD';
-        if (allData.isFragile) pType = 'FRAGILE';
-        else if (allData.isPerishable) pType = 'PERISHABLE';
+              // --- Contenu ---
+              description: allData.designation + (allData.description ? ` (${allData.description})` : ''),
+              packageType: allData.isFragile ? 'FRAGILE' : (allData.isPerishable ? 'PERISHABLE' : 'STANDARD'),
+              weight: parseFloat(allData.weight),
+              value: parseFloat(allData.declaredValue) || 0,
+              
+              // JSON des dimensions (attendu par le backend en string)
+              dimensions: JSON.stringify({ 
+                  length: allData.length, width: allData.width, height: allData.height 
+              }),
+              
+              // --- Logistique & Financier ---
+              deliveryOption: 'RELAY_POINT_DELIVERY', // Par défaut
+              deliveryFee: totalPrice,
+              specialInstructions: `Logistique: ${allData.logistics}. Payé par: ${method}.`
+          };
 
-        // 3. Nettoyage du téléphone (on enlève les espaces et on assure le +237)
-        let cleanRecipientPhone = allData.recipientPhone.replace(/\s+/g, '');
-        if (!cleanRecipientPhone.startsWith('+')) cleanRecipientPhone = '+237' + cleanRecipientPhone;
+          // 1. Appel Création API
+          console.log("📤 POST /api/packages", payload);
+          const response = await packageService.createPackage(payload);
+          
+          if (!response || !response.trackingNumber) throw new Error("Réponse API invalide (Pas de tracking)");
+          
+          const trackingNumber = response.trackingNumber;
 
-                // Nettoyage Téléphone Sender (Optionnel, bon format pour API)
-        let cleanSenderPhone = allData.senderPhone.replace(/\s+/g, '');
-        // Pas de force +237 si c'est déjà saisi, mais recommandé
+          // 2. Gestion Paiement (Simulation API Paiement si 'mobile')
+          if (method === 'mobile') {
+              // Simulation appel service de paiement externe
+              // await packageService.processPayment(response.id, ...);
+          }
 
-        // 4. CONSTRUCTION DU PAYLOAD COMPLET
-        const payload: PackageCreationPayload = {
-            senderName: allData.senderName,
-            senderPhone: cleanSenderPhone, 
-            
-            // Infos Destinataire
-            recipientName: allData.recipientName,
-            recipientPhone: cleanRecipientPhone,
-            recipientAddress: allData.recipientAddress || "Adresse non précisée",
-            
-            // Infos Lieux (Noms affichés dans l'historique ou sur le bordereau)
-            // Important : Ce sont des strings, le backend stocke l'historique ou les détails d'adresse
-            pickupAddress: allData.departurePointName, 
-            deliveryAddress: allData.arrivalPointName, 
-            
-            // IDs techniques pour la relation SQL
-            departureRelayPointId: String(allData.departurePointId),
-            arrivalRelayPointId: String(allData.arrivalPointId),
-            
-            // Caractéristiques physiques
-            packageType: pType,
-            weight: parseFloat(allData.weight),
-            dimensions: JSON.stringify(dimsObject), // Format String JSON "{\"length\":...}"
-            description: allData.designation + (allData.description ? ` - ${allData.description}` : ''),
-            value: allData.isInsured ? (parseFloat(allData.declaredValue) || 0) : 0,
-            
-            // Logistique
-            deliveryOption: 'RELAY_POINT_DELIVERY',
-            specialInstructions: `Paiement: ${selectedMethod === 'recipient' ? 'Destinataire' : 'Expéditeur'}. Logistique: ${allData.logistics}`,
-            deliveryFee: Number(totalPrice)
-        };
+          console.log("✅ Colis Créé :", trackingNumber);
+          
+          // 3. Callback succès pour passer à l'écran de fin
+          onPaymentFinalized({ ...allData.pricing, trackingNumber });
 
-        console.log("📦 PAYLOAD ENVOYÉ AU BACKEND :", JSON.stringify(payload, null, 2));
-
-        // 5. APPEL SERVICE
-        const response = await packageService.createPackage(payload);
-        
-        console.log("✅ RÉPONSE BACKEND REÇUE :", response);
-        
-        const newTracking = response.trackingNumber || (response as any).tracking_number;
-        
-        if (!newTracking) throw new Error("Numéro de suivi manquant dans la réponse backend.");
-
-        setTrackingNumber(newTracking);
-        setPaymentSuccess(true);
-        addNotification(`Colis créé ! Suivi : ${newTracking}`, 'success');
-
-    } catch (err: any) {
-        console.error("❌ ERREUR D'ENVOI :", err);
-        // Affiche le message détaillé de l'erreur s'il existe (ex: validation backend)
-        const errorMsg = err.message || JSON.stringify(err);
-        addNotification("Erreur lors de la création: " + errorMsg, 'error');
-    } finally {
-        setIsProcessing(false);
-    }
+      } catch (err: any) {
+          console.error("❌ Erreur Création :", err);
+          const msg = err.message || "Erreur de connexion serveur.";
+          setApiError(msg);
+      } finally {
+          setLoading(false);
+      }
   };
-
-
 
   // Animation des variantes
   const containerVariants = {

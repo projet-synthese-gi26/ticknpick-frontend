@@ -30,46 +30,97 @@ export interface PaymentProcessResponse {
     transactionId?: string;
 }
 
-// Interface DTO pour la Création (POST)
-// Correspond strictement au JSON attendu par votre Backend
+// --- Types DTO pour création de Colis ---
 export interface PackageCreationPayload {
+  // Infos techniques obligatoires
+  pickupAddress: string;
+  deliveryAddress: string;
+  departureRelayPointId: string;
+  arrivalRelayPointId: string;
+  
+  // Destinataire
   recipientName: string;
   recipientPhone: string;
   recipientAddress: string;
-
-    // --- AJOUTS NOUVEAUX CHAMPS ---
-  senderName?: string;      // Nom de l'expéditeur
-  senderPhone?: string;     // Téléphone de l'expéditeur
-  senderAddress?: string;   // Adresse précise si besoin
-  // -----------------------------
   
-  pickupAddress: string;    // Adresse Départ
-  deliveryAddress: string;  // Adresse Arrivée
-  
-  packageType: string;      // STANDARD, FRAGILE...
+  // Détails Colis
+  packageType: string;
   weight: number;
-  dimensions: string;       // JSON Stringify: "{\"length\":...}"
+  dimensions: string; // JSON stringifié
   description: string;
-  value: number;
+  value: number; // Valeur déclarée (Assurance)
   
-  deliveryOption: string;   // RELAY_POINT_DELIVERY par défaut
-  
-  departureRelayPointId: string; // UUID
-  arrivalRelayPointId: string;   // UUID
-  
-  specialInstructions: string;
+  // Financier & Logistique
+  deliveryOption: string;
   deliveryFee: number;
+  specialInstructions: string;
+
+  // -- INFO EXPÉDITEUR --
+  // Bien que le backend utilise souvent le token utilisateur, 
+  // on envoie explicitement ces champs pour forcer la mise à jour 
+  // si le formulaire diffère du profil utilisateur ou pour l'historique.
+  senderName?: string;
+  senderPhone?: string;
+  senderAddress?: string;
+  senderEmail?: string; 
 }
+
+// Interface complète selon la documentation Swagger
+export interface FullPackageDetails {
+    id: string;
+    trackingNumber: string;
+    status: string;
+    description: string;
+    weight: number;
+    width?: number;
+    length?: number;
+    height?: number;
+    dimensions?: string; // Parfois retourné en JSON string
+    shippingCost: number;
+    value?: number;
+    packageType: string;
+    isFragile: boolean;
+    isPerishable: boolean;
+    paymentStatus: string;
+    createdAt: string;
+    updatedAt: string;
+    specialInstructions?: string;
+    
+    // Relations étendues
+    senderName: string;
+    senderPhone: string;
+    senderAddress?: string; // Si dispo
+    
+    recipientName: string;
+    recipientPhone: string;
+    recipientAddress: string;
+
+    pickupAddress?: string;
+    deliveryAddress?: string;
+    
+    departurePointName?: string;
+    arrivalPointName?: string;
+    
+    // Historique ou métadonnées supplémentaires
+    history?: any[]; 
+}
+
 
 export interface CreatePackageResponse {
-  id?: string;
+  id: string;
   trackingNumber: string;
   status: string;
+  shippingCost: number;
 }
+
 
 // === SERVICES ===
 
 const createPackage = async (payload: PackageCreationPayload): Promise<CreatePackageResponse> => {
+  // Transformation potentielle des données avant envoi si nécessaire
+  console.log("📤 Sending Package Creation Payload:", payload);
+  
+  // Endpoint POST standard
   return apiClient<CreatePackageResponse>('/api/packages', 'POST', payload);
 };
 
@@ -97,8 +148,27 @@ const markAsDelivered = async (packageId: string): Promise<any> => {
 // (Pour l'inventaire pro, on garde getPackagesByRelayPoint ici si besoin, déjà traité)
 const getPackagesByRelayPoint = async (id: string) => apiClient(`/api/packages/relay-point/${id}`, 'GET');
 
-const processPayment = async (packageId: string, paymentData: { paymentMethod: string, paymentType: 'PREPAID' | 'POSTPAID' }): Promise<PaymentProcessResponse> => {
-    return apiClient<PaymentProcessResponse>(`/api/payments/process/${packageId}`, 'POST', paymentData);
+
+const processPayment = async (packageId: string, paymentData: any): Promise<any> => {
+    return apiClient<any>(`/api/payments/process/${packageId}`, 'POST', paymentData);
+};
+
+// --- AJOUT DE CETTE FONCTION ---
+const getPackageById = async (packageId: string): Promise<FullPackageDetails> => {
+    const url = `/api/packages/${packageId}`;
+    console.log(`%c🚀 [REQUEST] GET ${url}`, 'color: #0ea5e9; font-weight: bold;');
+    
+    try {
+        const response = await apiClient<FullPackageDetails>(url, 'GET');
+        
+        console.log(`%c✅ [RESPONSE] Details for ${packageId}:`, 'color: #22c55e; font-weight: bold;');
+        console.log(response); // Le log complet de l'objet
+        
+        return response;
+    } catch (error) {
+        console.error(`%c❌ [ERROR] GET ${url}`, 'color: #ef4444; font-weight: bold;', error);
+        throw error;
+    }
 };
 
 
@@ -106,6 +176,7 @@ export const packageService = {
   createPackage,
   trackPackage,
   getMyPackages,
+  getPackageById, // NOUVEAU
   getPackagesByRelayPoint,
   markAsDelivered, // NOUVEAU
   getPackageByTracking,

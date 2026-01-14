@@ -1,22 +1,26 @@
 // FICHIER: src/services/apiClient.ts
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://TiiBnTickback.onrender.com';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pickndropback.onrender.com';
 
 async function apiClient<T>(
   endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
   body?: any,
   headers?: Record<string, string>
 ): Promise<T> {
   
   const url = `${API_BASE_URL}${endpoint}`;
   
-  // Récupération et nettoyage du token
-  let token = localStorage.getItem('authToken');
-  if (token) {
-    // Enlève les guillemets si présents
-    token = token.replace(/^"(.*)"$/, '$1');
-  }
+  let token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+  if (token) token = token.replace(/^"(.*)"$/, '$1');
+
+  // Logs en VIOLET si le mot clé "deliverer" est dans l'URL pour différencier les flux visuellement
+  const isLivreur = endpoint.includes('deliverer');
+  const groupStyle = isLivreur 
+    ? 'color: #8b5cf6; font-weight: bold; background: #f3f0ff; padding: 2px 5px; border-radius: 4px;' 
+    : 'color: #3b82f6; font-weight: bold;';
+
+  console.groupCollapsed(`%c🌐 [API] ${method} ${endpoint}`, groupStyle);
 
   const config: RequestInit = {
     method,
@@ -30,7 +34,6 @@ async function apiClient<T>(
 
   if (body) {
     if (body instanceof FormData) {
-        // Le navigateur gère le Content-Type et boundary pour FormData
         const h = config.headers as Record<string, string>;
         delete h['Content-Type']; 
         config.body = body;
@@ -41,51 +44,45 @@ async function apiClient<T>(
 
   try {
     const response = await fetch(url, config);
-
-    // GESTION DES ERREURS
-    if (!response.ok) {
-      // Cas spécial : Si c'est une tentative de Login (401), ce n'est pas une "Session Expirée"
-      if (endpoint.includes('/auth/login') && response.status === 401) {
-         throw new Error("Email ou mot de passe incorrect.");
-      }
-
-      // Cas standard : 401 sur une autre route = Token invalide/expiré
-      if (response.status === 401 || response.status === 403) {
-        if (typeof window !== 'undefined') {
-             localStorage.removeItem('authToken');
-             localStorage.removeItem('user');
-             // On peut forcer une redirection ici si nécessaire, mais attention aux boucles
-             // window.location.href = '/login';
+    const clone = response.clone();
+    
+    if (response.ok) {
+        try {
+            // Tente de parser, si vide retourne null sans erreur
+            const text = await clone.text();
+            const data = text ? JSON.parse(text) : {};
+            console.log('✅ Success Payload:', data);
+            console.groupEnd();
+            return data as T;
+        } catch(e) {
+            console.warn('⚠️ JSON Parse Warning (Success but malformed JSON)');
+            console.groupEnd();
+            return {} as T;
         }
-        throw new Error("Session expirée, veuillez vous reconnecter.");
-      }
+    } else {
+         // --- CORRECTION DE L'ERREUR CONSOLE ---
+         const errorText = await clone.text();
+         console.warn(`❌ [API FAIL] Status: ${response.status}`);
+         if (errorText) console.error('Error Body:', errorText);
+         else console.log('Error Body is empty.');
+         
+         console.groupEnd();
 
-      // Tenter de lire le message d'erreur du backend
-      const errorText = await response.text();
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        // Si ce n'est pas du JSON
-      }
-      
-      const message = errorData?.message || errorData?.error || `Erreur serveur (${response.status})`;
-      throw new Error(message);
-    }
-
-    // Traitement de la réponse (JSON ou vide)
-    const responseText = await response.text();
-    if (!responseText) return {} as T;
-
-    try {
-        return JSON.parse(responseText) as T;
-    } catch (e) {
-        // Si la réponse n'est pas du JSON mais que le statut est OK
-        return responseText as unknown as T;
+         // Tentative d'extraire un message propre
+         let errorMessage = `Erreur HTTP ${response.status}`;
+         try {
+             const jsonError = JSON.parse(errorText);
+             errorMessage = jsonError.message || jsonError.error || errorMessage;
+         } catch(e) {
+             if (errorText) errorMessage = errorText.substring(0, 100);
+         }
+         
+         throw new Error(errorMessage);
     }
 
   } catch (error: any) {
-    console.error(`[API Client] Erreur sur ${method} ${endpoint}:`, error.message);
+    console.error(`💥 Network Error ${method} ${endpoint}:`, error);
+    console.groupEnd();
     throw error;
   }
 }

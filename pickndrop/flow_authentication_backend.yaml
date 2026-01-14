@@ -1,0 +1,225 @@
+flow:
+  name: authentication_registration_backend
+  version: 1.0.0
+  description: Flow backend d'authentification et enregistrement - Requêtes HTTP et déclenchements
+  states:
+    - id: unauthenticated
+      label: Non authentifié
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: client_created
+      label: Client créé en BD
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 400
+        y: 100
+    - id: business_actor_created
+      label: Acteur métier créé en BD
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 400
+        y: 200
+    - id: authenticated_with_token
+      label: Authentifié avec JWT
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 700
+        y: 150
+    - id: registration_failed
+      label: Échec d'enregistrement
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 400
+        y: 300
+    - id: login_failed
+      label: Échec de connexion
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 700
+        y: 300
+  transitions:
+    - id: register_client_request
+      label: POST /api/auth/register/client
+      from: unauthenticated
+      to: client_created
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/client
+        handler:
+          service: AuthService
+          method: registerClient
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 78
+        database_operations:
+          - create_user_with_account_type_CLIENT
+          - create_client_record
+        triggers:
+          - generate_user_id
+          - hash_password
+          - set_account_type_CLIENT
+          - set_is_active_true
+          - create_timestamp
+        validation:
+          - field: name
+            rules: [required, min:2]
+          - field: email
+            rules: [required, email, unique:users,email]
+          - field: password
+            rules: [required, min:8]
+          - field: phoneNumber
+            rules: [required, phone]
+    - id: register_freelance_request
+      label: POST /api/auth/register/freelance
+      from: unauthenticated
+      to: business_actor_created
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/freelance
+        handler:
+          service: AuthService
+          method: registerBusinessActor
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 95
+        database_operations:
+          - create_user_with_account_type_FREELANCE
+          - create_business_actor_record
+          - create_freelance_record
+        triggers:
+          - generate_user_id
+          - hash_password
+          - set_account_type_FREELANCE
+          - set_business_actor_type_FREELANCE
+          - set_is_verified_false
+          - create_timestamp
+        validation:
+          - field: businessName
+            rules: [required, min:3]
+          - field: businessAddress
+            rules: [required, min:10]
+    - id: register_deliverer_request
+      label: POST /api/auth/register/deliverer
+      from: unauthenticated
+      to: business_actor_created
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/deliverer
+        handler:
+          service: AuthService
+          method: registerBusinessActor
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 95
+        database_operations:
+          - create_user_with_account_type_DELIVERER
+          - create_business_actor_record
+          - create_deliverer_record
+        triggers:
+          - generate_user_id
+          - hash_password
+          - set_account_type_DELIVERER
+          - set_business_actor_type_DELIVERER
+          - set_is_available_false
+          - create_timestamp
+    - id: register_agency_owner_request
+      label: POST /api/auth/register/agency-owner
+      from: unauthenticated
+      to: business_actor_created
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/agency-owner
+        handler:
+          service: AuthService
+          method: registerBusinessActor
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 95
+        database_operations:
+          - create_user_with_account_type_AGENCY_OWNER
+          - create_business_actor_record
+          - create_agency_owner_record
+        triggers:
+          - generate_user_id
+          - hash_password
+          - set_account_type_AGENCY_OWNER
+          - set_business_actor_type_AGENCY_OWNER
+    - id: login_request
+      label: POST /api/auth/login
+      from: client_created
+      to: authenticated_with_token
+      backend:
+        route:
+          method: POST
+          path: /api/auth/login
+        handler:
+          service: AuthService
+          method: login
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 45
+        database_operations:
+          - find_user_by_email
+          - verify_password_hash
+        triggers:
+          - generate_jwt_token
+          - set_user_claims_in_token
+          - return_auth_response_dto
+        validation:
+          - field: email
+            rules: [required, email, exists:users,email]
+          - field: password
+            rules: [required, min:6]
+    - id: login_business_actor
+      label: POST /api/auth/login
+      from: business_actor_created
+      to: authenticated_with_token
+      backend:
+        route:
+          method: POST
+          path: /api/auth/login
+        handler:
+          service: AuthService
+          method: login
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 45
+        database_operations:
+          - find_user_by_email
+          - verify_password_hash
+          - load_business_actor_data
+        triggers:
+          - generate_jwt_token
+          - set_business_actor_claims
+          - return_auth_response_dto
+    - id: registration_validation_failed
+      label: Validation échouée
+      from: unauthenticated
+      to: registration_failed
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/*
+        triggers:
+          - return_400_bad_request
+          - return_validation_errors
+        database_operations: []
+    - id: login_credentials_invalid
+      label: Identifiants invalides
+      from: client_created
+      to: login_failed
+      backend:
+        route:
+          method: POST
+          path: /api/auth/login
+        triggers:
+          - return_401_unauthorized
+          - return_invalid_credentials_message
+        database_operations:
+          - find_user_by_email_failed_or_password_mismatch

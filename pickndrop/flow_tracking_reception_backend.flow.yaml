@@ -1,0 +1,335 @@
+flow:
+  name: package_tracking_reception_backend
+  version: 1.0.0
+  description: Flow backend de suivi et réception des colis - Requêtes HTTP et déclenchements BD
+  states:
+    - id: package_unknown
+      label: Colis inconnu
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: package_found_with_history
+      label: Colis trouvé avec historique
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: package_at_destination_relay
+      label: Colis au point relais destination
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 700
+        y: 100
+    - id: recipient_notified
+      label: Destinataire notifié
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 1000
+        y: 100
+    - id: recipient_verified
+      label: Destinataire vérifié
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1300
+        y: 100
+    - id: package_collected
+      label: Colis récupéré
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1600
+        y: 100
+    - id: package_not_found
+      label: Colis non trouvé
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 400
+        y: 300
+    - id: verification_failed
+      label: Échec de vérification
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 1300
+        y: 300
+  transitions:
+    - id: track_package_by_tracking_number_request
+      label: GET /api/packages/tracking/{trackingNumber}
+      from: package_unknown
+      to: package_found_with_history
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        handler:
+          service: PackageController
+          method: trackPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 155
+        database_operations:
+          - select_package_by_tracking_number
+          - select_package_history_by_package_id
+        triggers:
+          - verify_tracking_number_exists
+          - load_package_with_complete_history
+          - return_package_and_history_data
+        validation:
+          - field: trackingNumber
+            rules: [required, string, min:8, max:20, exists:packages,tracking_number]
+        permissions:
+          roles: []
+    - id: get_package_details_request
+      label: GET /api/packages/{packageId}
+      from: package_found_with_history
+      to: package_found_with_history
+      backend:
+        route:
+          method: GET
+          path: /api/packages/{packageId}
+        handler:
+          service: PackageController
+          method: getPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 145
+        database_operations:
+          - select_package_by_id
+        triggers:
+          - return_package_details
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+        permissions:
+          roles: []
+    - id: package_arrives_at_destination_request
+      label: PUT /api/packages/{packageId}/status (AT_ARRIVAL_RELAY_POINT)
+      from: package_found_with_history
+      to: package_at_destination_relay
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        database_operations:
+          - update_package_status_AT_ARRIVAL_RELAY_POINT
+          - update_current_relay_point_id
+          - update_arrival_timestamp
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_authorization
+          - set_package_at_destination_relay
+          - trigger_recipient_notification
+        validation:
+          - field: status
+            rules: [required, equals:AT_ARRIVAL_RELAY_POINT]
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [DELIVERER, EMPLOYEE, FREELANCE]
+    - id: send_arrival_notification_request
+      label: POST /api/notifications/send
+      from: package_at_destination_relay
+      to: recipient_notified
+      backend:
+        route:
+          method: POST
+          path: /api/notifications/send
+        handler:
+          service: NotificationService
+          method: sendArrivalNotification
+          file: src/main/java/com/pickndrop/service/NotificationService.java
+          line: 78
+        database_operations:
+          - insert_notification_record
+          - update_notification_send_attempts
+        triggers:
+          - generate_pickup_code
+          - send_sms_to_recipient_phone
+          - record_notification_sent
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+          - field: recipientPhone
+            rules: [required, phone]
+        permissions:
+          roles: [SYSTEM, EMPLOYEE, FREELANCE]
+    - id: verify_recipient_identity_request
+      label: POST /api/packages/{packageId}/verify-recipient
+      from: recipient_notified
+      to: recipient_verified
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/verify-recipient
+        handler:
+          service: PackageReceptionService
+          method: verifyRecipient
+          file: src/main/java/com/pickndrop/service/PackageReceptionService.java
+          line: 45
+        database_operations:
+          - select_package_by_id
+          - verify_recipient_phone_matches
+          - verify_pickup_code_matches
+        triggers:
+          - validate_recipient_identity
+          - validate_pickup_code
+          - prepare_for_collection
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+          - field: recipientPhone
+            rules: [required, phone, matches_package_recipient]
+          - field: pickupCode
+            rules: [required, string, min:4]
+          - field: idDocument
+            rules: [string, min:8]
+        permissions:
+          roles: [EMPLOYEE, FREELANCE]
+    - id: collect_package_request
+      label: POST /api/packages/{packageId}/collect
+      from: recipient_verified
+      to: package_collected
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/collect
+        handler:
+          service: PackageReceptionService
+          method: collectPackage
+          file: src/main/java/com/pickndrop/service/PackageReceptionService.java
+          line: 78
+        database_operations:
+          - update_package_status_WITHDRAWN
+          - update_withdrawal_date
+          - update_withdrawer_details
+          - insert_package_history_entry
+          - decrement_relay_point_package_count
+        triggers:
+          - verify_recipient_verification_completed
+          - record_package_collection
+          - update_relay_point_inventory
+          - notify_sender_package_collected
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+          - field: collectorName
+            rules: [required, string, min:2]
+          - field: collectorPhone
+            rules: [required, phone]
+          - field: collectorIdDocument
+            rules: [required, string, min:8]
+        permissions:
+          roles: [EMPLOYEE, FREELANCE]
+    - id: mark_package_as_delivered_directly_request
+      label: PUT /api/packages/{packageId}/status (DELIVERED)
+      from: package_found_with_history
+      to: package_collected
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        database_operations:
+          - update_package_status_DELIVERED
+          - update_actual_delivery_date
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_authorization
+          - record_direct_delivery
+          - notify_sender_delivery_completed
+        validation:
+          - field: status
+            rules: [required, equals:DELIVERED]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: tracking_number_not_found
+      label: Numéro de suivi invalide
+      from: package_unknown
+      to: package_not_found
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        triggers:
+          - return_404_not_found
+          - return_package_not_found_message
+        database_operations:
+          - select_package_by_tracking_number_returns_null
+    - id: recipient_verification_failed
+      label: Vérification échouée
+      from: recipient_notified
+      to: verification_failed
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/verify-recipient
+        triggers:
+          - return_400_bad_request
+          - return_verification_failed_message
+        database_operations:
+          - phone_number_mismatch_or_invalid_pickup_code
+    - id: create_support_ticket_request
+      label: POST /api/support/contact
+      from: package_not_found
+      to: package_not_found
+      backend:
+        route:
+          method: POST
+          path: /api/support/contact
+        handler:
+          service: SupportController
+          method: createSupportTicket
+          file: src/main/java/com/pickndrop/controller/SupportController.java
+          line: 25
+        database_operations:
+          - insert_support_ticket
+          - generate_ticket_number
+        triggers:
+          - create_support_case
+          - send_confirmation_email
+        validation:
+          - field: trackingNumber
+            rules: [required, string]
+          - field: issue
+            rules: [required, string, min:10]
+          - field: contactEmail
+            rules: [required, email]
+        permissions:
+          roles: []
+    - id: get_package_status_updates_request
+      label: GET /api/packages/{packageId}/status-updates
+      from: package_found_with_history
+      to: package_found_with_history
+      backend:
+        route:
+          method: GET
+          path: /api/packages/{packageId}/status-updates
+        handler:
+          service: PackageHistoryService
+          method: getPackageHistory
+          file: src/main/java/com/pickndrop/service/PackageHistoryService.java
+          line: 45
+        database_operations:
+          - select_package_history_ordered_by_date
+        triggers:
+          - return_chronological_status_updates
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+        permissions:
+          roles: []

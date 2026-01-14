@@ -1,0 +1,339 @@
+flow:
+  name: authentication_registration
+  version: 1.0.0
+  description: Flow complet d'authentification et d'enregistrement des utilisateurs Pick'n Drop
+  states:
+    - id: landing_page
+      label: Page d'accueil
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: login_form
+      label: Formulaire de connexion
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: registration_choice
+      label: Choix du type de compte
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 700
+        y: 100
+    - id: client_registration
+      label: Inscription Client
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1000
+        y: 50
+    - id: business_registration
+      label: Inscription Acteur Métier
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1000
+        y: 150
+    - id: authenticated_dashboard
+      label: Tableau de bord
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1300
+        y: 100
+    - id: login_failed
+      label: Échec de connexion
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 400
+        y: 300
+  transitions:
+    - id: go_to_login
+      label: Se connecter
+      from: landing_page
+      to: login_form
+      backend:
+        route:
+          method: GET
+          path: /api/auth/login
+        handler:
+          service: AuthController
+          method: login
+          file: src/main/java/com/pickndrop/controller/AuthController.java
+          line: 25
+        permissions:
+          roles: []
+        validation: []
+      frontend:
+        component: LoginForm
+        route: /login
+        state_management:
+          store: authStore
+          actions:
+            - showLoginForm
+        ui:
+          loading_state: isLoading
+          error_handling: showLoginError
+    - id: authenticate_user
+      label: Authentifier utilisateur
+      from: login_form
+      to: authenticated_dashboard
+      backend:
+        route:
+          method: POST
+          path: /api/auth/login
+        handler:
+          service: AuthService
+          method: login
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 45
+        permissions:
+          roles: []
+        validation:
+          - field: email
+            rules:
+              - required
+              - email
+          - field: password
+            rules:
+              - required
+              - min:6
+      frontend:
+        component: Dashboard
+        route: /dashboard
+        state_management:
+          store: authStore
+          actions:
+            - setAuthToken
+            - setUserData
+            - redirectToDashboard
+        ui:
+          loading_state: isAuthenticating
+          error_handling: showAuthError
+          success_redirect: /dashboard
+    - id: authentication_failed
+      label: Échec d'authentification
+      from: login_form
+      to: login_failed
+      backend:
+        route:
+          method: POST
+          path: /api/auth/login
+        handler:
+          service: AuthService
+          method: login
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 45
+        permissions:
+          roles: []
+      frontend:
+        component: LoginError
+        route: /login
+        state_management:
+          store: authStore
+          actions:
+            - setAuthError
+            - clearPassword
+        ui:
+          error_handling: showInvalidCredentials
+    - id: go_to_registration
+      label: S'inscrire
+      from: landing_page
+      to: registration_choice
+      backend:
+        route:
+          method: GET
+          path: /register
+        handler:
+          service: AuthController
+          method: registerClient
+          file: src/main/java/com/pickndrop/controller/AuthController.java
+          line: 35
+        permissions:
+          roles: []
+      frontend:
+        component: RegistrationChoice
+        route: /register
+        state_management:
+          store: registrationStore
+          actions:
+            - showRegistrationOptions
+        ui:
+          loading_state: isLoading
+    - id: register_as_client
+      label: S'inscrire comme Client
+      from: registration_choice
+      to: client_registration
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/client
+        handler:
+          service: AuthService
+          method: registerClient
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 78
+        permissions:
+          roles: []
+        validation:
+          - field: name
+            rules:
+              - required
+              - min:2
+          - field: email
+            rules:
+              - required
+              - email
+              - unique:users,email
+          - field: password
+            rules:
+              - required
+              - min:8
+          - field: phoneNumber
+            rules:
+              - required
+              - phone
+          - field: city
+            rules:
+              - required
+      frontend:
+        component: ClientRegistrationForm
+        route: /register/client
+        state_management:
+          store: registrationStore
+          actions:
+            - registerClient
+            - setUserType
+        ui:
+          loading_state: isRegistering
+          error_handling: showRegistrationError
+          success_redirect: /login
+    - id: register_as_business
+      label: S'inscrire comme Acteur Métier
+      from: registration_choice
+      to: business_registration
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/freelance
+        handler:
+          service: AuthService
+          method: registerBusinessActor
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 95
+        permissions:
+          roles: []
+        validation:
+          - field: name
+            rules:
+              - required
+              - min:2
+          - field: email
+            rules:
+              - required
+              - email
+              - unique:users,email
+          - field: businessActorType
+            rules:
+              - required
+              - in:FREELANCE,DELIVERER,AGENCY_OWNER,EMPLOYEE
+          - field: businessName
+            rules:
+              - required
+              - min:3
+      frontend:
+        component: BusinessRegistrationForm
+        route: /register/business
+        state_management:
+          store: registrationStore
+          actions:
+            - registerBusinessActor
+            - setBusinessType
+        ui:
+          loading_state: isRegistering
+          error_handling: showBusinessRegistrationError
+          success_redirect: /login
+    - id: retry_login
+      label: Réessayer la connexion
+      from: login_failed
+      to: login_form
+      backend:
+        route:
+          method: GET
+          path: /login
+        handler:
+          service: AuthController
+          method: login
+          file: src/main/java/com/pickndrop/controller/AuthController.java
+          line: 25
+        permissions:
+          roles: []
+      frontend:
+        component: LoginForm
+        route: /login
+        state_management:
+          store: authStore
+          actions:
+            - clearAuthError
+            - resetLoginForm
+        ui:
+          loading_state: isLoading
+    - id: complete_client_registration
+      label: Finaliser inscription Client
+      from: client_registration
+      to: authenticated_dashboard
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/client
+        handler:
+          service: AuthService
+          method: registerClient
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 78
+        permissions:
+          roles: []
+      frontend:
+        component: Dashboard
+        route: /dashboard
+        state_management:
+          store: authStore
+          actions:
+            - setAuthToken
+            - setUserData
+            - setAccountType
+        ui:
+          loading_state: isCompletingRegistration
+          success_redirect: /dashboard
+    - id: complete_business_registration
+      label: Finaliser inscription Acteur Métier
+      from: business_registration
+      to: authenticated_dashboard
+      backend:
+        route:
+          method: POST
+          path: /api/auth/register/freelance
+        handler:
+          service: AuthService
+          method: registerBusinessActor
+          file: src/main/java/com/pickndrop/service/AuthService.java
+          line: 95
+        permissions:
+          roles: []
+      frontend:
+        component: BusinessDashboard
+        route: /dashboard
+        state_management:
+          store: authStore
+          actions:
+            - setAuthToken
+            - setUserData
+            - setBusinessData
+        ui:
+          loading_state: isCompletingRegistration
+          success_redirect: /dashboard

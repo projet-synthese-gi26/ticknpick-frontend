@@ -9,6 +9,8 @@ interface User {
   email: string;
   accountType: string;
   name?: string; 
+  relayPointId?: string; // <--- AJOUT CRUCIAL
+  businessActorType?: string; // <--- AJOUT CRUCIAL
 }
 
 interface AuthContextType {

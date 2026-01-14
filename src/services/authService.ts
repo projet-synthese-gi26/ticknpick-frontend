@@ -24,7 +24,7 @@ const registerBusinessActor = (userData: BusinessActorRegistrationRequest): Prom
 
     switch (type) {
       case 'FREELANCE': // Pour les propriétaires de point relais individuels
-        endpoint = '/api/auth/register/freelance';
+        endpoint = '/api/auth/register/relay-owner';
         break;
       case 'DELIVERER': // Pour les livreurs
         endpoint = '/api/auth/register/deliverer';

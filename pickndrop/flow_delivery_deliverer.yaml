@@ -1,0 +1,559 @@
+flow:
+  name: delivery_flow_deliverer
+  version: 1.0.0
+  description: Flow complet de livraison pour les livreurs Pick'n Drop
+  states:
+    - id: deliverer_dashboard
+      label: Tableau de bord Livreur
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: available_packages_list
+      label: Liste des colis disponibles
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: nearby_packages_map
+      label: Carte des colis à proximité
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 700
+        y: 100
+    - id: package_assigned
+      label: Colis assigné au livreur
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1000
+        y: 100
+    - id: package_pickup_location
+      label: Localisation pour récupération
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1300
+        y: 100
+    - id: package_in_transit
+      label: Colis en transit
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 1600
+        y: 100
+    - id: delivery_destination
+      label: Destination de livraison
+      type: intermediate
+      color: '#e0f2f1'
+      position:
+        x: 1900
+        y: 100
+    - id: package_delivered
+      label: Colis livré
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 2200
+        y: 100
+    - id: my_deliveries
+      label: Mes livraisons en cours
+      type: intermediate
+      color: '#e1f5fe'
+      position:
+        x: 400
+        y: 300
+    - id: delivery_to_relay_point
+      label: Livraison au point relais
+      type: intermediate
+      color: '#fce4ec'
+      position:
+        x: 1900
+        y: 300
+    - id: assignment_failed
+      label: Échec d'assignation
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 1000
+        y: 300
+  transitions:
+    - id: view_available_packages
+      label: Voir colis disponibles
+      from: deliverer_dashboard
+      to: available_packages_list
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/available
+        handler:
+          service: DelivererController
+          method: getAvailablePackages
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 30
+        permissions:
+          roles:
+            - DELIVERER
+        validation: []
+      frontend:
+        component: AvailablePackagesList
+        route: /deliverer/packages/available
+        state_management:
+          store: delivererStore
+          actions:
+            - loadAvailablePackages
+            - refreshPackageList
+        ui:
+          loading_state: isLoadingPackages
+          error_handling: showPackageLoadError
+    - id: view_nearby_packages
+      label: Voir colis à proximité
+      from: deliverer_dashboard
+      to: nearby_packages_map
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/nearby
+        handler:
+          service: DelivererController
+          method: getNearbyPackages
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 50
+        permissions:
+          roles:
+            - DELIVERER
+        validation:
+          - field: latitude
+            rules:
+              - required
+              - numeric
+              - between:-90,90
+          - field: longitude
+            rules:
+              - required
+              - numeric
+              - between:-180,180
+          - field: radiusKm
+            rules:
+              - numeric
+              - min:1
+              - max:50
+      frontend:
+        component: NearbyPackagesMap
+        route: /deliverer/packages/nearby
+        state_management:
+          store: delivererStore
+          actions:
+            - loadNearbyPackages
+            - updateDelivererLocation
+        ui:
+          loading_state: isLoadingNearbyPackages
+          error_handling: showLocationError
+    - id: assign_package_to_self
+      label: S'assigner un colis
+      from: available_packages_list
+      to: package_assigned
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        handler:
+          service: DelivererController
+          method: assignPackageToSelf
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 110
+        permissions:
+          roles:
+            - DELIVERER
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: package_status
+            rules:
+              - equals:FOR_PICKUP
+      frontend:
+        component: PackageAssigned
+        route: /deliverer/packages/{packageId}/assigned
+        state_management:
+          store: delivererStore
+          actions:
+            - assignPackage
+            - updateMyDeliveries
+        ui:
+          loading_state: isAssigningPackage
+          error_handling: showAssignmentError
+          success_redirect: /deliverer/packages/{packageId}/assigned
+    - id: assign_nearby_package
+      label: S'assigner un colis proche
+      from: nearby_packages_map
+      to: package_assigned
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        handler:
+          service: DelivererController
+          method: assignPackageToSelf
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 110
+        permissions:
+          roles:
+            - DELIVERER
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+      frontend:
+        component: PackageAssigned
+        route: /deliverer/packages/{packageId}/assigned
+        state_management:
+          store: delivererStore
+          actions:
+            - assignNearbyPackage
+            - updateMyDeliveries
+        ui:
+          loading_state: isAssigningPackage
+          error_handling: showAssignmentError
+          success_redirect: /deliverer/packages/{packageId}/assigned
+    - id: assignment_failed_action
+      label: Échec d'assignation
+      from: available_packages_list
+      to: assignment_failed
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        handler:
+          service: DelivererController
+          method: assignPackageToSelf
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 110
+        permissions:
+          roles:
+            - DELIVERER
+      frontend:
+        component: AssignmentError
+        route: /deliverer/packages/available
+        state_management:
+          store: delivererStore
+          actions:
+            - setAssignmentError
+            - refreshAvailablePackages
+        ui:
+          error_handling: showPackageUnavailableError
+    - id: navigate_to_pickup
+      label: Aller récupérer le colis
+      from: package_assigned
+      to: package_pickup_location
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/{packageId}/details
+        handler:
+          service: DelivererController
+          method: getPackageDetails
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 220
+        permissions:
+          roles:
+            - DELIVERER
+          conditions: assigned_to_deliverer
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+      frontend:
+        component: PickupNavigation
+        route: /deliverer/packages/{packageId}/pickup
+        state_management:
+          store: delivererStore
+          actions:
+            - loadPackageDetails
+            - startNavigation
+        ui:
+          loading_state: isLoadingNavigation
+          error_handling: showNavigationError
+    - id: pickup_package_at_relay
+      label: Récupérer le colis au point relais
+      from: package_pickup_location
+      to: package_in_transit
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/pickup
+        handler:
+          service: DelivererController
+          method: pickupPackage
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 140
+        permissions:
+          roles:
+            - DELIVERER
+          conditions: assigned_to_deliverer AND package_status_ASSIGNED_TO_DELIVERER
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: PackageInTransit
+        route: /deliverer/packages/{packageId}/in-transit
+        state_management:
+          store: delivererStore
+          actions:
+            - pickupPackage
+            - updatePackageStatus
+            - startDeliveryTracking
+        ui:
+          loading_state: isPickingUpPackage
+          error_handling: showPickupError
+          success_redirect: /deliverer/packages/{packageId}/in-transit
+    - id: navigate_to_destination
+      label: Naviguer vers la destination
+      from: package_in_transit
+      to: delivery_destination
+      backend:
+        route:
+          method: PUT
+          path: /api/deliverer/packages/{packageId}/location
+        handler:
+          service: DelivererController
+          method: updatePackageLocation
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 260
+        permissions:
+          roles:
+            - DELIVERER
+          conditions: assigned_to_deliverer
+        validation:
+          - field: latitude
+            rules:
+              - required
+              - numeric
+              - between:-90,90
+          - field: longitude
+            rules:
+              - required
+              - numeric
+              - between:-180,180
+      frontend:
+        component: DeliveryNavigation
+        route: /deliverer/packages/{packageId}/delivery
+        state_management:
+          store: delivererStore
+          actions:
+            - updatePackageLocation
+            - trackDeliveryProgress
+        ui:
+          loading_state: isUpdatingLocation
+          error_handling: showLocationUpdateError
+    - id: deliver_to_client_directly
+      label: Livrer directement au client
+      from: delivery_destination
+      to: package_delivered
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-client
+        handler:
+          service: DelivererController
+          method: deliverToClient
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 190
+        permissions:
+          roles:
+            - DELIVERER
+          conditions: assigned_to_deliverer AND package_status_IN_TRANSIT
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: recipientPhone
+            rules:
+              - phone
+              - matches_package_recipient
+          - field: confirmationCode
+            rules:
+              - string
+              - min:3
+      frontend:
+        component: DeliveryCompleted
+        route: /deliverer/packages/{packageId}/delivered
+        state_management:
+          store: delivererStore
+          actions:
+            - deliverToClient
+            - completeDelivery
+            - updateEarnings
+        ui:
+          loading_state: isDeliveringPackage
+          error_handling: showDeliveryError
+          success_redirect: /deliverer/packages/{packageId}/delivered
+    - id: deliver_to_relay_point
+      label: Livrer au point relais
+      from: delivery_destination
+      to: delivery_to_relay_point
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-relay
+        handler:
+          service: DelivererController
+          method: deliverToRelayPoint
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 165
+        permissions:
+          roles:
+            - DELIVERER
+          conditions: assigned_to_deliverer AND package_status_IN_TRANSIT
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: RelayPointDelivery
+        route: /deliverer/packages/{packageId}/relay-delivered
+        state_management:
+          store: delivererStore
+          actions:
+            - deliverToRelayPoint
+            - updatePackageStatus
+        ui:
+          loading_state: isDeliveringToRelay
+          error_handling: showRelayDeliveryError
+          success_redirect: /deliverer/packages/{packageId}/relay-delivered
+    - id: complete_relay_delivery
+      label: Finaliser livraison au point relais
+      from: delivery_to_relay_point
+      to: package_delivered
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - DELIVERER
+        validation:
+          - field: status
+            rules:
+              - required
+              - equals:AT_ARRIVAL_RELAY_POINT
+      frontend:
+        component: DeliveryCompleted
+        route: /deliverer/packages/{packageId}/delivered
+        state_management:
+          store: delivererStore
+          actions:
+            - completeRelayDelivery
+            - updateEarnings
+        ui:
+          loading_state: isCompletingDelivery
+          success_redirect: /deliverer/dashboard
+    - id: view_my_deliveries
+      label: Voir mes livraisons
+      from: deliverer_dashboard
+      to: my_deliveries
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/my-deliveries
+        handler:
+          service: DelivererController
+          method: getMyDeliveries
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 85
+        permissions:
+          roles:
+            - DELIVERER
+        validation: []
+      frontend:
+        component: MyDeliveries
+        route: /deliverer/my-deliveries
+        state_management:
+          store: delivererStore
+          actions:
+            - loadMyDeliveries
+            - refreshDeliveryStatus
+        ui:
+          loading_state: isLoadingDeliveries
+          error_handling: showDeliveriesError
+    - id: continue_delivery_from_list
+      label: Continuer une livraison
+      from: my_deliveries
+      to: package_in_transit
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/{packageId}/details
+        handler:
+          service: DelivererController
+          method: getPackageDetails
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 220
+        permissions:
+          roles:
+            - DELIVERER
+          conditions: assigned_to_deliverer
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+      frontend:
+        component: PackageInTransit
+        route: /deliverer/packages/{packageId}/in-transit
+        state_management:
+          store: delivererStore
+          actions:
+            - resumeDelivery
+            - loadPackageDetails
+        ui:
+          loading_state: isResumingDelivery
+    - id: retry_assignment
+      label: Réessayer l'assignation
+      from: assignment_failed
+      to: available_packages_list
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/available
+        handler:
+          service: DelivererController
+          method: getAvailablePackages
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 30
+        permissions:
+          roles:
+            - DELIVERER
+      frontend:
+        component: AvailablePackagesList
+        route: /deliverer/packages/available
+        state_management:
+          store: delivererStore
+          actions:
+            - clearAssignmentError
+            - refreshAvailablePackages
+        ui:
+          loading_state: isRefreshingPackages

@@ -1,0 +1,313 @@
+flow:
+  name: relay_point_management_backend
+  version: 1.0.0
+  description: Flow backend de gestion des points relais - Requêtes HTTP et déclenchements BD
+  states:
+    - id: no_relay_point
+      label: Aucun point relais
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: relay_point_created_inactive
+      label: Point relais créé (inactif)
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: relay_point_active
+      label: Point relais actif
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 700
+        y: 100
+    - id: relay_points_loaded
+      label: Points relais chargés
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 400
+        y: 200
+    - id: relay_point_updated
+      label: Point relais modifié
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 700
+        y: 200
+    - id: packages_inventory_loaded
+      label: Inventaire des colis chargé
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1000
+        y: 150
+    - id: creation_failed
+      label: Échec de création
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 400
+        y: 300
+  transitions:
+    - id: create_relay_point_request
+      label: POST /api/relay-points/management/create
+      from: no_relay_point
+      to: relay_point_created_inactive
+      backend:
+        route:
+          method: POST
+          path: /api/relay-points/management/create
+        handler:
+          service: RelayPointManagementService
+          method: createRelayPoint
+          file: src/main/java/com/pickndrop/service/RelayPointManagementService.java
+          line: 45
+        database_operations:
+          - insert_relay_point_with_is_active_false
+          - insert_relay_point_history_entry
+        triggers:
+          - generate_relay_point_id
+          - extract_owner_id_from_jwt
+          - verify_business_actor_is_verified
+          - set_is_active_false
+          - calculate_max_capacity_from_storage_capacity
+          - create_timestamps
+        validation:
+          - field: relayPointName
+            rules: [required, min:3, max:100]
+          - field: relayPointAddress
+            rules: [required, min:10]
+          - field: relayPointLocality
+            rules: [required, min:3]
+          - field: openingHours
+            rules: [required]
+          - field: storageCapacity
+            rules: [required, in:SMALL,MEDIUM,LARGE,EXTRA_LARGE]
+          - field: latitude
+            rules: [required, numeric, between:-90,90]
+          - field: longitude
+            rules: [required, numeric, between:-180,180]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [is_verified_business_actor]
+    - id: activate_relay_point_request
+      label: PUT /api/relay-points/{relayPointId}/activate
+      from: relay_point_created_inactive
+      to: relay_point_active
+      backend:
+        route:
+          method: PUT
+          path: /api/relay-points/{relayPointId}/activate
+        handler:
+          service: RelayPointService
+          method: activate
+          file: src/main/java/com/pickndrop/service/RelayPointService.java
+          line: 120
+        database_operations:
+          - update_relay_point_set_is_active_true
+          - insert_relay_point_history_entry
+        triggers:
+          - verify_relay_point_ownership
+          - set_is_active_true
+          - record_activation_timestamp
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [owns_relay_point]
+    - id: get_all_relay_points_request
+      label: GET /api/relay-points
+      from: relay_point_active
+      to: relay_points_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points
+        handler:
+          service: RelayPointController
+          method: getAll
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 40
+        database_operations:
+          - select_all_relay_points
+        triggers:
+          - return_relay_points_list
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+    - id: get_relay_point_by_id_request
+      label: GET /api/relay-points/{relayPointId}
+      from: relay_points_loaded
+      to: relay_points_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/relay-points/{relayPointId}
+        handler:
+          service: RelayPointController
+          method: getById
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 35
+        database_operations:
+          - select_relay_point_by_id
+        triggers:
+          - verify_relay_point_exists
+          - return_relay_point_details
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [owns_relay_point]
+    - id: update_relay_point_request
+      label: PUT /api/relay-points/management/{relayPointId}
+      from: relay_points_loaded
+      to: relay_point_updated
+      backend:
+        route:
+          method: PUT
+          path: /api/relay-points/management/{relayPointId}
+        handler:
+          service: RelayPointManagementController
+          method: updateRelayPoint
+          file: src/main/java/com/pickndrop/controller/RelayPointManagementController.java
+          line: 45
+        database_operations:
+          - update_relay_point_fields
+          - update_relay_point_updated_at
+          - insert_relay_point_history_entry
+        triggers:
+          - verify_relay_point_ownership
+          - update_relay_point_data
+          - record_modification_timestamp
+        validation:
+          - field: relayPointName
+            rules: [required, min:3, max:100]
+          - field: relayPointAddress
+            rules: [required, min:10]
+          - field: openingHours
+            rules: [required]
+          - field: storageCapacity
+            rules: [required, in:SMALL,MEDIUM,LARGE,EXTRA_LARGE]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [owns_relay_point]
+    - id: get_relay_point_packages_request
+      label: GET /api/packages/relay-point/{relayPointId}
+      from: relay_point_active
+      to: packages_inventory_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/packages/relay-point/{relayPointId}
+        handler:
+          service: PackageController
+          method: getPackagesByRelayPoint
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 320
+        database_operations:
+          - select_packages_by_current_relay_point_id
+        triggers:
+          - verify_relay_point_ownership
+          - return_packages_in_relay_point
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [owns_relay_point]
+    - id: get_pre_registered_packages_request
+      label: GET /api/packages/relay-point/{relayPointId}/pre-registered
+      from: relay_point_active
+      to: packages_inventory_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/packages/relay-point/{relayPointId}/pre-registered
+        handler:
+          service: PackageController
+          method: getPreRegisteredPackagesByRelayPoint
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 290
+        database_operations:
+          - select_packages_with_status_PRE_REGISTERED
+          - filter_by_departure_or_arrival_relay_point_id
+        triggers:
+          - verify_relay_point_ownership
+          - return_pre_registered_packages_for_relay_point
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [owns_relay_point]
+    - id: update_package_status_in_relay_request
+      label: PUT /api/packages/{packageId}/status
+      from: packages_inventory_loaded
+      to: packages_inventory_loaded
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        database_operations:
+          - update_package_current_status
+          - update_package_updated_at
+          - insert_package_history_entry
+        triggers:
+          - verify_package_in_owned_relay_point
+          - update_package_status_and_history
+        validation:
+          - field: packageId
+            rules: [required, exists:packages,id]
+          - field: status
+            rules: [required, in:FOR_PICKUP,READY_FOR_PICKUP,WITHDRAWN]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [package_in_owned_relay_point]
+    - id: delete_relay_point_request
+      label: DELETE /api/relay-points/{relayPointId}
+      from: relay_point_active
+      to: no_relay_point
+      backend:
+        route:
+          method: DELETE
+          path: /api/relay-points/{relayPointId}
+        handler:
+          service: RelayPointController
+          method: delete
+          file: src/main/java/com/pickndrop/controller/RelayPointController.java
+          line: 50
+        database_operations:
+          - delete_relay_point_by_id
+          - insert_relay_point_history_entry
+        triggers:
+          - verify_relay_point_ownership
+          - verify_no_packages_in_relay_point
+          - soft_delete_relay_point
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [FREELANCE, AGENCY_OWNER, EMPLOYEE]
+          conditions: [owns_relay_point, no_packages_in_relay_point]
+    - id: creation_validation_failed
+      label: Validation échouée
+      from: no_relay_point
+      to: creation_failed
+      backend:
+        route:
+          method: POST
+          path: /api/relay-points/management/create
+        triggers:
+          - return_400_bad_request
+          - return_validation_errors
+        database_operations: []

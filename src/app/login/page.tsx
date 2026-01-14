@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -22,51 +22,67 @@ export default function LoginPage() {
 
     try {
       console.log('Tentative de connexion pour:', email);
-      // On type la réponse en 'any' ici pour accéder aux champs dynamiques sans erreur TS bloquante
-      // si votre interface AuthResponse n'est pas encore mise à jour
-      const authResponse: any = await authService.login({ email: email.trim().toLowerCase(), password });
+      
+      // 1. Appel API
+      const authResponse: any = await authService.login({ 
+        email: email.trim().toLowerCase(), 
+        password 
+      });
       
       console.log('Réponse complète du backend:', authResponse);
 
       if (authResponse && authResponse.token) {
         
-        // --- CORRECTION ICI ---
-        // Récupération des données spécifiques Business
-        const businessType = authResponse.businessActorType || null; 
-        const userName = authResponse.name || authResponse.businessName || 'Utilisateur';
+        // --- RECUPERATION PRÉCISE DES DONNÉES ---
+        // Le log montre que businessActorType est à la racine de la réponse JSON
+        const accountType = authResponse.accountType; // ex: "BUSINESS_ACTOR"
+        const specificRole = authResponse.businessActorType; // ex: "AGENCY_OWNER" (À la racine !)
+        const userId = authResponse.userId;
+        const userEmail = authResponse.email;
+        const userName = authResponse.name;
+        const relayId = authResponse.relayPointId; // <--- C'est ici qu'on récupère l'ID
 
-        // On passe l'objet complet au contexte
-        // Le contexte stockera : { id, email, accountType, businessActorType, name }
+        // 2. Mise à jour du Context Auth
+        // On stocke 'specificRole' dans le champ 'businessActorType' de l'utilisateur stocké
+        // pour que la page /home sache quoi afficher (Agence vs Point Relais)
         login(authResponse.token, {
-          id: authResponse.userId,
-          email: authResponse.email,
-          accountType: authResponse.accountType,
-          // @ts-ignore : On ignore l'erreur si l'interface User du contexte n'a pas encore ce champ
-          businessActorType: businessType, 
-          name: userName
+          id: userId,
+          email: userEmail,
+          accountType: accountType,
+          name: userName,
+          // @ts-ignore : On ajoute dynamiquement le champ pour l'utiliser dans /home
+          businessActorType: specificRole,
+          relayPointId: relayId // <--- Stockage dans le context/localstorage
         });
         
-        console.log(`Connexion réussie ! Rôle: ${authResponse.accountType} (${businessType || 'N/A'})`);
+        console.log(`✅ Connexion OK. Type: ${accountType}, Sous-rôle: ${specificRole}`);
 
-        // --- LOGIQUE DE REDIRECTION ---
-        const userRole = authResponse.accountType.toLowerCase();
+        // 3. Logique de Redirection
+        const normalizedRole = accountType ? accountType.toUpperCase() : '';
 
-        if (userRole === 'admin' || userRole === 'superadmin') {
-          console.log('Redirection vers /superadmin...');
+        if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPERADMIN') {
+          console.log('👑 Admin détecté -> /superadmin');
           router.push('/superadmin');
         } else {
-          // Le dashboard '/home' lira businessActorType pour afficher la bonne UI (Agency vs Point)
-          console.log('Redirection vers /home...');
+          // Client, Freelance, Agence, Livreur -> Tous vont vers le Dashboard unifié
+          // Le Dashboard /home triera l'affichage selon le 'businessActorType' stocké ci-dessus
+          console.log('🚀 Utilisateur Standard/Pro -> /home');
           router.push('/home');
         }
 
       } else {
-        throw new Error("La réponse du serveur est invalide.");
+        throw new Error("Token manquant dans la réponse serveur.");
       }
 
     } catch (err: any) {
-      console.error('Erreur de connexion:', err);
-      setError(err.message || 'Email ou mot de passe incorrect.');
+      console.error('❌ Erreur de connexion:', err);
+      // Affichage d'un message convivial si le backend renvoie 401
+      const msg = err.message || '';
+      if (msg.includes('401') || msg.toLowerCase().includes('credential') || msg.toLowerCase().includes('password')) {
+         setError('Email ou mot de passe incorrect.');
+      } else {
+         setError(msg || 'Une erreur est survenue lors de la connexion.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +90,7 @@ export default function LoginPage() {
 
 
   return (
-    <div className="min-h-screen bg-amber-50 dark:bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-amber-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-12 items-center">
         {/* Section gauche - Illustration */}
         <div className="hidden lg:flex flex-col justify-center space-y-12 p-12 relative">
@@ -133,7 +149,7 @@ export default function LoginPage() {
 
         {/* Section droite - Formulaire de connexion */}
         <div className="w-full max-w-md mx-auto">
-          <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/20 dark:border-slate-700/50 p-8 space-y-8">
+          <div className="bg-white/90 dark:bg-gray-900 opacity-80 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 dark:border-slate-700/50 p-8 space-y-8">
             <div className="text-center space-y-2">
               <h2 className="text-3xl font-bold text-gray-800 dark:text-slate-50">Connexion PRO</h2>
               <p className="text-gray-600 dark:text-slate-300">Accédez à votre espace de gestion</p>
@@ -165,7 +181,7 @@ export default function LoginPage() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-slate-700"></div></div>
-              <div className="relative flex justify-center text-sm"><span className="px-4 bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-400">Pas encore de compte ?</span></div>
+              <div className="relative flex justify-center text-sm"><span className="px-4 bg-white dark:bg-gray-900 text-gray-500 dark:text-slate-400">Pas encore de compte ?</span></div>
             </div>
 
             <button

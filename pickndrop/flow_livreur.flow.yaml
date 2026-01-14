@@ -1,0 +1,1261 @@
+flow:
+  name: delivery_backend_improved
+  version: 2.0.0
+  description: Flow backend de livraison amélioré avec gestion complète des erreurs et optimisations
+  states:
+    - id: deliverer_idle
+      label: Livreur inactif
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 1090
+        'y': 150
+    - id: packages_loaded
+      label: Colis disponibles chargés
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 1197
+        'y': 385
+    - id: package_self_assigned
+      label: Colis assigné au livreur
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 930
+        'y': 710
+    - id: package_picked_up
+      label: Colis récupéré
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1090
+        'y': 990
+    - id: package_in_delivery
+      label: En cours de livraison
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1090
+        'y': 1270
+    - id: package_delivered_to_relay
+      label: Livré au point relais
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 770
+        'y': 1550
+    - id: package_delivered_to_client
+      label: Livré au destinataire
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1090
+        'y': 1550
+    - id: assignment_cancelled
+      label: Assignation annulée
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 770
+        'y': 990
+    - id: assignment_failed
+      label: Échec d'assignation
+      type: error
+      color: '#f44336'
+      position:
+        x: 1344
+        'y': 693
+    - id: delivery_failed_first_attempt
+      label: Échec 1ère tentative
+      type: intermediate
+      color: '#ffeb3b'
+      position:
+        x: 1410
+        'y': 1550
+    - id: delivery_failed_second_attempt
+      label: Échec 2ème tentative
+      type: intermediate
+      color: '#ffc107'
+      position:
+        x: 930
+        'y': 1830
+    - id: delivery_failed_final
+      label: Échec définitif
+      type: error
+      color: '#ff5722'
+      position:
+        x: 1090
+        'y': 2110
+    - id: package_damaged_reported
+      label: Colis endommagé signalé
+      type: error
+      color: '#e91e63'
+      position:
+        x: 1410
+        'y': 990
+    - id: returned_to_relay
+      label: Retourné au point relais
+      type: intermediate
+      color: '#9e9e9e'
+      position:
+        x: 1090
+        'y': 2390
+    - id: awaiting_customer_reschedule
+      label: En attente reprogrammation
+      type: intermediate
+      color: '#03a9f4'
+      position:
+        x: 1250
+        'y': 1830
+  transitions:
+    - id: get_available_packages_request
+      label: GET /api/deliverer/packages/available
+      from: deliverer_idle
+      to: packages_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/available
+          query_params:
+            - name: limit
+              type: integer
+              default: 50
+            - name: sortBy
+              type: string
+              default: created_at
+        handler:
+          service: DelivererController
+          method: getAvailablePackages
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 30
+        database_operations:
+          - select_packages_with_status_FOR_PICKUP
+          - filter_unassigned_packages
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - check_deliverer_active_status
+          - return_available_packages_list
+          - cache_result_for_2_minutes
+        permissions:
+          roles:
+            - DELIVERER
+    - id: get_nearby_packages_request
+      label: GET /api/deliverer/packages/nearby
+      from: deliverer_idle
+      to: packages_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/nearby
+          query_params:
+            - name: latitude
+              type: number
+              required: true
+            - name: longitude
+              type: number
+              required: true
+            - name: radiusKm
+              type: number
+              default: 5
+        handler:
+          service: DelivererController
+          method: getNearbyPackagesOptimized
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 50
+        database_operations:
+          - select_packages_with_status_FOR_PICKUP
+          - filter_by_postgis_distance
+          - order_by_distance_asc
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - calculate_distance_from_deliverer_location
+          - estimate_delivery_times
+          - cache_result_for_2_minutes
+          - return_nearby_packages_with_distance
+        validation:
+          - field: latitude
+            rules:
+              - required
+              - numeric
+              - between:-90,90
+          - field: longitude
+            rules:
+              - required
+              - numeric
+              - between:-180,180
+          - field: radiusKm
+            rules:
+              - numeric
+              - min:1
+              - max:50
+        permissions:
+          roles:
+            - DELIVERER
+    - id: assign_package_to_self_request
+      label: POST /api/deliverer/packages/{packageId}/assign
+      from: packages_loaded
+      to: package_self_assigned
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        handler:
+          service: DelivererController
+          method: assignPackageToSelf
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 110
+        database_operations:
+          - verify_package_available_for_update
+          - check_deliverer_capacity
+          - update_package_status_ASSIGNED_TO_DELIVERER
+          - update_assigned_deliverer_id
+          - update_assigned_delivery_at
+          - set_auto_release_timestamp
+          - insert_package_history_entry
+        triggers:
+          - verify_package_status_FOR_PICKUP
+          - verify_package_not_already_assigned
+          - extract_deliverer_id_from_jwt
+          - verify_deliverer_capacity_limit
+          - verify_deliverer_vehicle_capacity
+          - verify_package_weight_compatible
+          - record_assignment_timestamp
+          - set_auto_release_timer_4_hours
+          - notify_other_nearby_deliverers_package_taken
+          - update_deliverer_stats
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - uuid
+              - exists:packages,id
+          - field: deliverer_current_assignments
+            rules:
+              - max:10
+          - field: deliverer_vehicle_capacity
+            rules:
+              - sufficient_for_package_size
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - deliverer_account_active
+            - deliverer_verified
+            - not_blacklisted
+    - id: cancel_assignment_request
+      label: POST /api/deliverer/packages/{packageId}/cancel-assignment
+      from: package_self_assigned
+      to: assignment_cancelled
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/cancel-assignment
+        handler:
+          service: DelivererController
+          method: cancelAssignment
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 280
+        database_operations:
+          - verify_not_picked_up
+          - release_package_to_available
+          - record_cancellation_reason
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_not_yet_picked_up
+          - calculate_cancellation_penalty
+          - update_deliverer_reliability_score
+          - notify_available_deliverers_nearby
+          - log_cancellation_reason
+        validation:
+          - field: cancellationReason
+            rules:
+              - required
+              - in:VEHICLE_ISSUE,PERSONAL_EMERGENCY,TOO_FAR,PACKAGE_TOO_HEAVY,OTHER
+          - field: notes
+            rules:
+              - string
+              - max:500
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - assigned_to_deliverer
+            - not_picked_up
+    - id: assignment_failed_already_taken
+      label: Colis déjà pris par un autre livreur
+      from: packages_loaded
+      to: assignment_failed
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        triggers:
+          - return_409_conflict
+          - return_package_already_assigned_error
+          - suggest_alternative_packages
+        database_operations:
+          - verify_package_status_not_FOR_PICKUP
+    - id: assignment_failed_capacity_exceeded
+      label: Capacité du livreur dépassée
+      from: packages_loaded
+      to: assignment_failed
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/assign
+        triggers:
+          - return_400_bad_request
+          - return_capacity_exceeded_error
+        database_operations:
+          - check_deliverer_current_assignments_count
+    - id: retry_assignment_from_failed
+      label: Retour à la liste des colis
+      from: assignment_failed
+      to: packages_loaded
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/available
+        triggers:
+          - refresh_available_packages_list
+    - id: return_to_idle_from_cancelled
+      label: Retour au repos
+      from: assignment_cancelled
+      to: deliverer_idle
+      backend:
+        triggers:
+          - clear_cancelled_package_from_session
+          - update_deliverer_availability
+    - id: pickup_package_request
+      label: POST /api/deliverer/packages/{packageId}/pickup
+      from: package_self_assigned
+      to: package_picked_up
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/pickup
+        handler:
+          service: DelivererController
+          method: pickupPackage
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 140
+        database_operations:
+          - verify_assignment
+          - update_package_status_IN_TRANSIT
+          - update_pickup_coordinates
+          - update_pickup_at
+          - update_relay_point_inventory
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_package_status_ASSIGNED_TO_DELIVERER
+          - verify_physical_proximity_to_relay_point
+          - upload_pickup_photo_to_storage
+          - record_pickup_location_and_time
+          - notify_sender_package_picked_up
+          - start_delivery_tracking
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - uuid
+              - exists:relay_points,id
+          - field: deliverer_gps_proximity
+            rules:
+              - within_200_meters_of_relay_point
+          - field: pickupPhoto
+            rules:
+              - required
+              - image
+              - max:5MB
+          - field: packageCondition
+            rules:
+              - required
+              - in:GOOD,SLIGHTLY_DAMAGED,DAMAGED
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - assigned_to_deliverer
+            - at_pickup_location
+    - id: report_damage_at_pickup
+      label: POST /api/deliverer/packages/{packageId}/report-damage
+      from: package_self_assigned
+      to: package_damaged_reported
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/report-damage
+        handler:
+          service: DelivererController
+          method: reportDamageAtPickup
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 320
+        database_operations:
+          - update_package_status_DAMAGED
+          - create_damage_report
+          - insert_package_history_entry
+        triggers:
+          - upload_damage_photos_to_storage
+          - notify_sender_damage_report
+          - notify_insurance_team
+          - create_investigation_ticket
+          - release_deliverer_assignment
+        validation:
+          - field: damageType
+            rules:
+              - required
+              - in:TORN_PACKAGING,CRUSHED,WET,OPENED,BROKEN_SEAL,OTHER
+          - field: severity
+            rules:
+              - required
+              - in:MINOR,MODERATE,SEVERE
+          - field: photos
+            rules:
+              - required
+              - array
+              - min:2
+              - max:5
+          - field: description
+            rules:
+              - required
+              - string
+              - max:1000
+        permissions:
+          roles:
+            - DELIVERER
+    - id: update_location_request
+      label: PUT /api/deliverer/packages/{packageId}/location
+      from: package_picked_up
+      to: package_in_delivery
+      backend:
+        route:
+          method: PUT
+          path: /api/deliverer/packages/{packageId}/location
+        handler:
+          service: DelivererController
+          method: updatePackageLocationThrottled
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 260
+        database_operations:
+          - conditional_update_if_moved_100m_or_5min
+          - update_package_current_latitude
+          - update_package_current_longitude
+          - update_estimated_arrival
+          - update_package_updated_at
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - check_throttle_conditions
+          - calculate_distance_from_last_position
+          - record_real_time_location
+          - update_eta_calculation
+          - notify_recipient_if_approaching
+        validation:
+          - field: latitude
+            rules:
+              - required
+              - numeric
+              - between:-90,90
+          - field: longitude
+            rules:
+              - required
+              - numeric
+              - between:-180,180
+          - field: speed
+            rules:
+              - numeric
+              - min:0
+              - max:200
+          - field: heading
+            rules:
+              - numeric
+              - min:0
+              - max:360
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - assigned_to_deliverer
+    - id: get_optimized_route
+      label: GET /api/deliverer/packages/optimized-route
+      from: package_self_assigned
+      to: package_self_assigned
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/optimized-route
+        handler:
+          service: DelivererController
+          method: getOptimizedRoute
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 340
+        database_operations:
+          - select_assigned_packages
+          - calculate_optimal_route
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - calculate_optimal_route_traveling_salesman
+          - estimate_delivery_times_for_each_stop
+          - calculate_total_distance_and_duration
+          - cache_route_for_1_hour
+        permissions:
+          roles:
+            - DELIVERER
+    - id: deliver_to_relay_point_request
+      label: POST /api/deliverer/packages/{packageId}/deliver-to-relay
+      from: package_in_delivery
+      to: package_delivered_to_relay
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-relay
+        handler:
+          service: DelivererController
+          method: deliverToRelayPoint
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 165
+        database_operations:
+          - update_package_status_AT_ARRIVAL_RELAY_POINT
+          - update_current_relay_point_id
+          - update_delivery_coordinates
+          - update_delivery_at
+          - update_relay_point_inventory
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_package_status_IN_TRANSIT
+          - verify_physical_proximity_to_destination_relay
+          - upload_delivery_photo_to_storage
+          - verify_relay_manager_signature_if_required
+          - record_delivery_to_relay_point
+          - notify_recipient_package_arrived_at_relay
+          - calculate_deliverer_commission
+          - update_deliverer_stats
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - uuid
+              - exists:relay_points,id
+          - field: deliveryPhoto
+            rules:
+              - required
+              - image
+              - max:5MB
+          - field: deliverer_gps_proximity
+            rules:
+              - within_200_meters_of_relay_point
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - assigned_to_deliverer
+            - package_in_transit
+    - id: deliver_to_client_request
+      label: POST /api/deliverer/packages/{packageId}/deliver-to-client
+      from: package_in_delivery
+      to: package_delivered_to_client
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-client
+        handler:
+          service: DelivererController
+          method: deliverToClient
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 190
+        database_operations:
+          - update_package_status_DELIVERED
+          - update_actual_delivery_date
+          - update_delivery_coordinates
+          - insert_delivery_proof
+          - update_deliverer_stats
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_package_status_IN_TRANSIT
+          - verify_physical_proximity_to_destination
+          - verify_recipient_phone_if_provided
+          - verify_confirmation_code_if_required
+          - upload_delivery_photo_to_storage
+          - upload_recipient_signature_if_provided
+          - record_direct_delivery
+          - calculate_deliverer_commission
+          - notify_sender_delivery_completed
+          - notify_recipient_delivery_confirmed
+          - trigger_satisfaction_survey_in_24h
+          - release_deliverer_from_package
+        validation:
+          - field: deliveryPhoto
+            rules:
+              - required
+              - image
+              - max:5MB
+          - field: recipientPhone
+            rules:
+              - phone
+              - matches_package_recipient
+          - field: confirmationCode
+            rules:
+              - string
+              - min:4
+              - max:10
+          - field: deliverer_gps_proximity
+            rules:
+              - within_500_meters_of_destination
+          - field: leftAtDoor
+            rules:
+              - boolean
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - assigned_to_deliverer
+            - package_in_transit
+    - id: report_delivery_attempt_failed
+      label: POST /api/deliverer/packages/{packageId}/delivery-failed
+      from: package_in_delivery
+      to: delivery_failed_first_attempt
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/delivery-failed
+        handler:
+          service: DelivererController
+          method: reportDeliveryAttemptFailed
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 400
+        database_operations:
+          - check_attempt_count
+          - insert_failed_attempt
+          - update_package_status_DELIVERY_ATTEMPT_FAILED
+          - increment_attempt_count
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assigned_to_package
+          - verify_physical_proximity_to_destination
+          - upload_failure_photo_to_storage
+          - determine_next_attempt_strategy
+          - notify_recipient_delivery_failed
+          - notify_sender_delivery_issue
+          - schedule_next_attempt_if_applicable
+          - check_if_final_attempt_reached
+        validation:
+          - field: failureReason
+            rules:
+              - required
+              - >-
+                in:RECIPIENT_ABSENT,WRONG_ADDRESS,ACCESS_DENIED,RECIPIENT_REFUSED,SECURITY_CONCERN,WEATHER_CONDITIONS,OTHER
+          - field: failurePhoto
+            rules:
+              - image
+              - max:5MB
+          - field: notes
+            rules:
+              - string
+              - max:1000
+          - field: nextAttemptPreference
+            rules:
+              - in:SAME_DAY,NEXT_DAY,CUSTOMER_RESCHEDULE,RELAY_POINT
+        permissions:
+          roles:
+            - DELIVERER
+    - id: second_delivery_attempt_failed
+      label: Deuxième tentative échouée
+      from: delivery_failed_first_attempt
+      to: delivery_failed_second_attempt
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/delivery-failed
+        database_operations:
+          - insert_failed_attempt
+          - update_attempt_count
+          - insert_package_history_entry
+        triggers:
+          - same_as_first_attempt
+          - increase_urgency_notifications
+          - offer_relay_point_alternative
+          - notify_customer_service
+    - id: final_delivery_attempt_failed
+      label: Toutes tentatives épuisées
+      from: delivery_failed_second_attempt
+      to: delivery_failed_final
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/delivery-failed
+        database_operations:
+          - update_package_status_DELIVERY_FAILED
+          - set_requires_return_true
+          - insert_package_history_entry
+        triggers:
+          - mark_package_for_return
+          - notify_sender_delivery_permanently_failed
+          - create_return_shipment_order
+          - refund_partial_delivery_fee
+          - update_deliverer_failure_stats
+    - id: customer_reschedule_delivery
+      label: POST /api/packages/{packageId}/reschedule
+      from: delivery_failed_first_attempt
+      to: awaiting_customer_reschedule
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/reschedule
+        handler:
+          service: PackageController
+          method: rescheduleDelivery
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 450
+        database_operations:
+          - update_package_status_RESCHEDULED
+          - update_scheduled_delivery_date
+          - update_delivery_time_slot
+          - update_delivery_address_if_changed
+          - insert_package_history_entry
+        triggers:
+          - verify_recipient_owns_package
+          - validate_new_delivery_date
+          - update_delivery_schedule
+          - reassign_to_available_deliverer
+          - notify_sender_reschedule
+          - notify_deliverer_new_schedule
+        validation:
+          - field: newDeliveryDate
+            rules:
+              - required
+              - date
+              - after:today
+              - before:+14days
+          - field: timeSlot
+            rules:
+              - required
+              - in:MORNING_8_12,AFTERNOON_12_18,EVENING_18_21
+          - field: alternativeAddress
+            rules:
+              - object
+        permissions:
+          roles:
+            - CLIENT
+          conditions:
+            - is_recipient_of_package
+    - id: rescheduled_back_to_delivery
+      label: Reprogrammation vers livraison
+      from: awaiting_customer_reschedule
+      to: package_self_assigned
+      backend:
+        triggers:
+          - assign_to_available_deliverer
+          - notify_deliverer_new_assignment
+    - id: customer_choose_relay_instead
+      label: POST /api/packages/{packageId}/redirect-to-relay
+      from: delivery_failed_first_attempt
+      to: package_delivered_to_relay
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/redirect-to-relay
+        handler:
+          service: PackageController
+          method: redirectToRelay
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 490
+        database_operations:
+          - update_delivery_mode_RELAY_POINT
+          - update_destination_relay_point_id
+          - update_package_status_REDIRECTED_TO_RELAY
+          - insert_package_history_entry
+        triggers:
+          - verify_recipient_owns_package
+          - verify_relay_point_available
+          - notify_deliverer_new_destination
+          - notify_sender_redirect
+        permissions:
+          roles:
+            - CLIENT
+          conditions:
+            - is_recipient_of_package
+    - id: initiate_return_to_sender
+      label: POST /api/packages/{packageId}/return
+      from: delivery_failed_final
+      to: returned_to_relay
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/return
+        handler:
+          service: PackageController
+          method: initiateReturn
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 520
+        database_operations:
+          - create_return_order
+          - update_package_status_RETURN_IN_PROGRESS
+          - insert_package_history_entry
+        triggers:
+          - create_return_shipment
+          - calculate_return_fees
+          - notify_sender_return_initiated
+          - assign_return_to_deliverer
+        validation:
+          - field: returnReason
+            rules:
+              - required
+              - in:DELIVERY_FAILED,RECIPIENT_REFUSED,DAMAGED,WRONG_ADDRESS,CUSTOMER_REQUEST
+          - field: returnTo
+            rules:
+              - required
+              - in:SENDER_ADDRESS,ORIGIN_RELAY_POINT
+        permissions:
+          roles:
+            - ADMIN
+            - CUSTOMER_SERVICE
+    - id: complete_return_to_relay
+      label: POST /api/deliverer/returns/{returnId}/complete
+      from: returned_to_relay
+      to: deliverer_idle
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/returns/{returnId}/complete
+        handler:
+          service: DelivererController
+          method: completeReturn
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 550
+        database_operations:
+          - update_return_order_completed
+          - update_package_status_RETURNED_TO_SENDER
+          - update_relay_inventory
+          - insert_package_history_entry
+        triggers:
+          - verify_return_at_correct_relay
+          - upload_return_photo
+          - notify_sender_package_returned
+          - update_relay_inventory
+          - release_deliverer
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - uuid
+          - field: returnPhoto
+            rules:
+              - required
+              - image
+        permissions:
+          roles:
+            - DELIVERER
+    - id: get_my_deliveries_request
+      label: GET /api/deliverer/packages/my-deliveries
+      from: package_self_assigned
+      to: package_self_assigned
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/my-deliveries
+          query_params:
+            - name: status
+              type: string
+              default: ALL
+            - name: dateFrom
+              type: date
+            - name: dateTo
+              type: date
+            - name: page
+              type: integer
+              default: 0
+            - name: size
+              type: integer
+              default: 20
+        handler:
+          service: DelivererController
+          method: getMyDeliveries
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 85
+        database_operations:
+          - select_packages_by_assigned_deliverer_id
+          - apply_status_filter
+          - apply_date_filter
+          - paginate_results
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - apply_filters
+          - calculate_earnings_summary
+          - return_paginated_packages_list
+        permissions:
+          roles:
+            - DELIVERER
+    - id: get_deliverer_stats
+      label: GET /api/deliverer/stats
+      from: deliverer_idle
+      to: deliverer_idle
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/stats
+          query_params:
+            - name: period
+              type: string
+              default: MONTH
+        handler:
+          service: DelivererController
+          method: getDelivererStats
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 600
+        database_operations:
+          - select_deliverer_statistics
+          - calculate_success_rate
+          - calculate_average_delivery_time
+          - sum_earnings
+        triggers:
+          - extract_deliverer_id_from_jwt
+          - calculate_performance_score
+          - compare_to_previous_period
+        permissions:
+          roles:
+            - DELIVERER
+    - id: get_package_details_request
+      label: GET /api/deliverer/packages/{packageId}/details
+      from: package_self_assigned
+      to: package_self_assigned
+      backend:
+        route:
+          method: GET
+          path: /api/deliverer/packages/{packageId}/details
+        handler:
+          service: DelivererController
+          method: getPackageDetails
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 220
+        database_operations:
+          - select_package_by_id
+          - select_sender_info
+          - select_recipient_info
+          - select_relay_points_info
+          - select_package_history
+          - verify_deliverer_access_rights
+        triggers:
+          - verify_deliverer_assigned_or_package_available
+          - mask_sensitive_data_if_not_assigned
+          - calculate_optimal_route_to_destination
+          - return_package_details_with_navigation
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - uuid
+              - exists:packages,id
+        permissions:
+          roles:
+            - DELIVERER
+          conditions:
+            - assigned_to_deliverer_or_package_available
+    - id: upload_delivery_proof
+      label: POST /api/deliverer/packages/{packageId}/proof
+      from: package_delivered_to_client
+      to: package_delivered_to_client
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/proof
+        handler:
+          service: DeliveryProofController
+          method: uploadProof
+          file: src/main/java/com/pickndrop/controller/DeliveryProofController.java
+          line: 50
+        database_operations:
+          - insert_delivery_proof
+        triggers:
+          - validate_file_format
+          - upload_to_secure_storage
+          - extract_exif_metadata
+          - verify_gps_matches_delivery_location
+          - queue_for_verification_if_disputed
+        validation:
+          - field: proofType
+            rules:
+              - required
+              - in:PHOTO,SIGNATURE,VIDEO,GPS_CONFIRMATION
+          - field: file
+            rules:
+              - required
+              - max:10MB
+        permissions:
+          roles:
+            - DELIVERER
+    - id: verify_delivery_proof
+      label: POST /api/admin/proofs/{proofId}/verify
+      from: package_delivered_to_client
+      to: package_delivered_to_client
+      backend:
+        route:
+          method: POST
+          path: /api/admin/proofs/{proofId}/verify
+        handler:
+          service: AdminController
+          method: verifyDeliveryProof
+          file: src/main/java/com/pickndrop/controller/AdminController.java
+          line: 200
+        database_operations:
+          - update_proof_verification_status
+          - update_verified_by
+          - update_verified_at
+        triggers:
+          - record_verification_decision
+          - notify_deliverer_verification_result
+          - update_dispute_if_applicable
+        validation:
+          - field: verificationStatus
+            rules:
+              - required
+              - in:APPROVED,REJECTED,NEEDS_MORE_INFO
+          - field: notes
+            rules:
+              - string
+              - max:1000
+        permissions:
+          roles:
+            - ADMIN
+            - CUSTOMER_SERVICE
+    - id: return_to_idle_after_delivery
+      label: Retour au repos après livraison
+      from: package_delivered_to_client
+      to: deliverer_idle
+      backend:
+        triggers:
+          - clear_completed_delivery_from_session
+          - update_deliverer_availability
+          - check_for_pending_assignments
+    - id: return_to_idle_after_relay_delivery
+      label: Retour au repos après dépôt relais
+      from: package_delivered_to_relay
+      to: deliverer_idle
+      backend:
+        triggers:
+          - clear_completed_delivery_from_session
+          - update_deliverer_availability
+          - check_for_pending_assignments
+    - id: damage_report_to_idle
+      label: Retour au repos après signalement dommage
+      from: package_damaged_reported
+      to: deliverer_idle
+      backend:
+        triggers:
+          - release_deliverer_from_damaged_package
+          - update_deliverer_availability
+  events:
+    - name: package_assigned
+      payload:
+        - package_id
+        - deliverer_id
+        - assigned_at
+      subscribers:
+        - notification_service
+        - analytics_service
+        - sender_email_notification
+    - name: package_picked_up
+      payload:
+        - package_id
+        - deliverer_id
+        - relay_point_id
+        - picked_up_at
+      subscribers:
+        - notification_service
+        - tracking_service
+        - sender_push_notification
+    - name: package_in_transit
+      payload:
+        - package_id
+        - current_location
+        - eta_minutes
+      subscribers:
+        - tracking_service
+        - recipient_notification_when_close
+    - name: package_delivered
+      payload:
+        - package_id
+        - deliverer_id
+        - delivered_at
+        - proof_url
+      subscribers:
+        - notification_service
+        - billing_service
+        - satisfaction_survey_scheduler
+        - analytics_service
+    - name: delivery_failed
+      payload:
+        - package_id
+        - attempt_number
+        - failure_reason
+        - next_attempt_at
+      subscribers:
+        - notification_service
+        - customer_service_alert
+        - analytics_service
+    - name: package_returned
+      payload:
+        - package_id
+        - return_reason
+        - returned_at
+      subscribers:
+        - sender_notification
+        - billing_service
+        - analytics_service
+    - name: package_damaged
+      payload:
+        - package_id
+        - damage_type
+        - severity
+        - reported_by
+      subscribers:
+        - insurance_service
+        - customer_service
+        - sender_notification
+  notifications:
+    templates:
+      - id: package_assigned_deliverer
+        channel:
+          - PUSH
+          - EMAIL
+        recipient: deliverer
+        title: Nouveau colis assigné
+        body: Vous avez un nouveau colis à récupérer {{tracking_number}}
+      - id: package_picked_up_sender
+        channel:
+          - PUSH
+          - SMS
+        recipient: sender
+        title: Colis récupéré
+        body: Votre colis {{tracking_number}} a été récupéré par le livreur
+      - id: package_arriving_soon_recipient
+        channel:
+          - PUSH
+          - SMS
+        recipient: recipient
+        title: Livraison imminente
+        body: Votre colis arrive dans environ {{eta_minutes}} minutes
+        trigger_condition: eta_minutes_less_than_15
+      - id: package_delivered_recipient
+        channel:
+          - PUSH
+          - SMS
+          - EMAIL
+        recipient: recipient
+        title: Colis livré
+        body: Votre colis {{tracking_number}} a été livré avec succès
+      - id: delivery_failed_recipient
+        channel:
+          - PUSH
+          - SMS
+        recipient: recipient
+        title: Tentative de livraison échouée
+        body: Nous n avons pas pu vous livrer Tentative {{attempt_number}} sur 3
+      - id: package_at_relay_recipient
+        channel:
+          - PUSH
+          - SMS
+          - EMAIL
+        recipient: recipient
+        title: Colis disponible au point relais
+        body: Votre colis est disponible au point relais {{relay_name}} jusqu au {{expiry_date}}
+      - id: package_damaged_sender
+        channel:
+          - PUSH
+          - EMAIL
+        recipient: sender
+        title: Colis endommagé signalé
+        body: Un dommage a été signalé sur votre colis {{tracking_number}}
+      - id: package_returned_sender
+        channel:
+          - PUSH
+          - EMAIL
+        recipient: sender
+        title: Colis retourné
+        body: Votre colis {{tracking_number}} a été retourné
+  metrics:
+    kpis:
+      - name: delivery_success_rate
+        formula: successful_deliveries_divided_by_total_attempts_times_100
+        target: 95_percent
+        alert_threshold: 90_percent
+      - name: average_delivery_time
+        formula: avg_delivered_at_minus_picked_up_at
+        target: less_than_2_hours
+        alert_threshold: more_than_4_hours
+      - name: first_attempt_success_rate
+        formula: first_attempt_success_divided_by_total_deliveries_times_100
+        target: 85_percent
+      - name: deliverer_utilization
+        formula: active_delivery_time_divided_by_total_online_time_times_100
+        target: 70_percent
+      - name: customer_satisfaction
+        formula: avg_satisfaction_score
+        target: 4_5_out_of_5
+      - name: cancellation_rate
+        formula: cancelled_assignments_divided_by_total_assignments_times_100
+        target: less_than_5_percent
+      - name: damage_report_rate
+        formula: damaged_packages_divided_by_total_packages_times_100
+        target: less_than_1_percent
+    dashboards:
+      - name: deliverer_performance
+        widgets:
+          - deliveries_today
+          - success_rate_trend
+          - earnings_chart
+          - ranking_position
+      - name: operations_overview
+        widgets:
+          - packages_in_transit
+          - failed_deliveries_requiring_action
+          - deliverer_availability_map
+          - sla_compliance
+  business_rules:
+    assignment:
+      max_simultaneous_packages: 10
+      auto_release_timeout_hours: 4
+      cancellation_penalty_after: 3
+      suspension_after_cancellations: 10
+    delivery:
+      max_attempts: 3
+      min_hours_between_attempts: 24
+      proximity_verification_meters: 500
+      photo_proof_required: true
+      signature_required_above_value: 100
+    returns:
+      auto_return_after_failed_attempts: true
+      return_fee_percentage: 50
+      max_days_at_relay_before_return: 14
+    ratings:
+      min_deliveries_for_rating: 10
+      reliability_score_factors:
+        on_time_delivery: 40
+        success_rate: 30
+        customer_ratings: 20
+        cancellation_rate: 10
+  security:
+    rate_limiting:
+      get_packages: 30_per_minute
+      assign_package: 10_per_minute
+      update_location: 60_per_minute
+      upload_proof: 5_per_minute
+    data_masking:
+      - field: recipient_phone
+        condition: deliverer_not_assigned
+        mask: hidden
+      - field: sender_phone
+        condition: deliverer_not_assigned
+        mask: hidden
+    audit_logging:
+      enabled: true
+      events:
+        - package_status_change
+        - assignment_change
+        - delivery_proof_upload
+        - failed_delivery_attempt
+        - damage_report
+        - return_initiated

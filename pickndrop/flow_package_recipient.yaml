@@ -1,0 +1,535 @@
+flow:
+  name: package_tracking_recipient
+  version: 1.0.0
+  description: Flow complet de suivi et réception des colis pour les destinataires Pick'n Drop
+  states:
+    - id: tracking_search
+      label: Recherche de suivi
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: package_found
+      label: Colis trouvé
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: package_history_view
+      label: Historique du colis
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 700
+        y: 100
+    - id: package_in_transit_tracking
+      label: Suivi en temps réel
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1000
+        y: 100
+    - id: package_at_destination
+      label: Colis arrivé à destination
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1300
+        y: 100
+    - id: notification_received
+      label: Notification reçue
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 1600
+        y: 100
+    - id: ready_for_pickup
+      label: Prêt pour récupération
+      type: intermediate
+      color: '#e0f2f1'
+      position:
+        x: 1900
+        y: 100
+    - id: package_collected
+      label: Colis récupéré
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 2200
+        y: 100
+    - id: direct_delivery_received
+      label: Livraison directe reçue
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1300
+        y: 300
+    - id: package_not_found
+      label: Colis non trouvé
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 400
+        y: 300
+    - id: pickup_verification
+      label: Vérification pour récupération
+      type: intermediate
+      color: '#fce4ec'
+      position:
+        x: 1900
+        y: 300
+  transitions:
+    - id: search_package_by_tracking
+      label: Rechercher par numéro de suivi
+      from: tracking_search
+      to: package_found
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        handler:
+          service: PackageController
+          method: trackPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 155
+        permissions:
+          roles: []
+        validation:
+          - field: trackingNumber
+            rules:
+              - required
+              - string
+              - min:8
+              - max:20
+      frontend:
+        component: PackageFound
+        route: /tracking/{trackingNumber}
+        state_management:
+          store: trackingStore
+          actions:
+            - searchPackage
+            - setPackageData
+        ui:
+          loading_state: isSearchingPackage
+          error_handling: showSearchError
+          success_redirect: /tracking/{trackingNumber}
+    - id: package_search_failed
+      label: Recherche échouée
+      from: tracking_search
+      to: package_not_found
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        handler:
+          service: PackageController
+          method: trackPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 155
+        permissions:
+          roles: []
+      frontend:
+        component: PackageNotFound
+        route: /tracking/not-found
+        state_management:
+          store: trackingStore
+          actions:
+            - setSearchError
+            - clearTrackingData
+        ui:
+          error_handling: showPackageNotFoundError
+    - id: view_package_history
+      label: Voir l'historique complet
+      from: package_found
+      to: package_history_view
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        handler:
+          service: PackageHistoryService
+          method: getPackageHistory
+          file: src/main/java/com/pickndrop/service/PackageHistoryService.java
+          line: 45
+        permissions:
+          roles: []
+        validation:
+          - field: trackingNumber
+            rules:
+              - required
+              - exists:packages,tracking_number
+      frontend:
+        component: PackageHistory
+        route: /tracking/{trackingNumber}/history
+        state_management:
+          store: trackingStore
+          actions:
+            - loadPackageHistory
+            - setHistoryData
+        ui:
+          loading_state: isLoadingHistory
+          error_handling: showHistoryError
+    - id: track_package_in_transit
+      label: Suivre en temps réel
+      from: package_found
+      to: package_in_transit_tracking
+      backend:
+        route:
+          method: GET
+          path: /api/packages/{packageId}
+        handler:
+          service: PackageController
+          method: getPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 145
+        permissions:
+          roles: []
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+      frontend:
+        component: RealTimeTracking
+        route: /tracking/{trackingNumber}/live
+        state_management:
+          store: trackingStore
+          actions:
+            - startRealTimeTracking
+            - updatePackageLocation
+        ui:
+          loading_state: isLoadingTracking
+          error_handling: showTrackingError
+    - id: package_arrives_at_destination
+      label: Arrivée à destination
+      from: package_in_transit_tracking
+      to: package_at_destination
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - DELIVERER
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: status
+            rules:
+              - required
+              - in:AT_ARRIVAL_RELAY_POINT,DELIVERED
+      frontend:
+        component: PackageAtDestination
+        route: /tracking/{trackingNumber}/arrived
+        state_management:
+          store: trackingStore
+          actions:
+            - updatePackageStatus
+            - notifyArrival
+        ui:
+          loading_state: isUpdatingStatus
+          success_redirect: /tracking/{trackingNumber}/arrived
+    - id: direct_delivery_to_recipient
+      label: Livraison directe au destinataire
+      from: package_in_transit_tracking
+      to: direct_delivery_received
+      backend:
+        route:
+          method: POST
+          path: /api/deliverer/packages/{packageId}/deliver-to-client
+        handler:
+          service: DelivererController
+          method: deliverToClient
+          file: src/main/java/com/pickndrop/controller/DelivererController.java
+          line: 190
+        permissions:
+          roles:
+            - DELIVERER
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: recipientPhone
+            rules:
+              - required
+              - phone
+              - matches_package_recipient
+      frontend:
+        component: DirectDeliveryReceived
+        route: /tracking/{trackingNumber}/delivered
+        state_management:
+          store: trackingStore
+          actions:
+            - confirmDirectDelivery
+            - markAsDelivered
+        ui:
+          loading_state: isConfirmingDelivery
+          success_redirect: /tracking/{trackingNumber}/delivered
+    - id: receive_arrival_notification
+      label: Recevoir notification d'arrivée
+      from: package_at_destination
+      to: notification_received
+      backend:
+        route:
+          method: POST
+          path: /api/notifications/send
+        handler:
+          service: NotificationService
+          method: sendArrivalNotification
+          file: src/main/java/com/pickndrop/service/NotificationService.java
+          line: 78
+        permissions:
+          roles:
+            - SYSTEM
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: recipientPhone
+            rules:
+              - required
+              - phone
+      frontend:
+        component: NotificationReceived
+        route: /tracking/{trackingNumber}/notification
+        state_management:
+          store: trackingStore
+          actions:
+            - receiveNotification
+            - setNotificationData
+        ui:
+          loading_state: isProcessingNotification
+          success_redirect: /tracking/{trackingNumber}/ready
+    - id: package_ready_for_collection
+      label: Colis prêt pour récupération
+      from: notification_received
+      to: ready_for_pickup
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: status
+            rules:
+              - required
+              - equals:READY_FOR_PICKUP
+      frontend:
+        component: ReadyForPickup
+        route: /tracking/{trackingNumber}/ready
+        state_management:
+          store: trackingStore
+          actions:
+            - markReadyForPickup
+            - generatePickupCode
+        ui:
+          loading_state: isMarkingReady
+          success_redirect: /tracking/{trackingNumber}/ready
+    - id: verify_recipient_identity
+      label: Vérifier identité du destinataire
+      from: ready_for_pickup
+      to: pickup_verification
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/verify-recipient
+        handler:
+          service: PackageReceptionService
+          method: verifyRecipient
+          file: src/main/java/com/pickndrop/service/PackageReceptionService.java
+          line: 45
+        permissions:
+          roles:
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: recipientPhone
+            rules:
+              - required
+              - phone
+              - matches_package_recipient
+          - field: pickupCode
+            rules:
+              - required
+              - string
+              - min:4
+          - field: idDocument
+            rules:
+              - string
+              - min:8
+      frontend:
+        component: PickupVerification
+        route: /tracking/{trackingNumber}/verify
+        state_management:
+          store: trackingStore
+          actions:
+            - verifyRecipientIdentity
+            - validatePickupCode
+        ui:
+          loading_state: isVerifyingRecipient
+          error_handling: showVerificationError
+    - id: complete_package_collection
+      label: Finaliser la récupération
+      from: pickup_verification
+      to: package_collected
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/collect
+        handler:
+          service: PackageReceptionService
+          method: collectPackage
+          file: src/main/java/com/pickndrop/service/PackageReceptionService.java
+          line: 78
+        permissions:
+          roles:
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+          - field: collectorName
+            rules:
+              - required
+              - string
+              - min:2
+          - field: collectorPhone
+            rules:
+              - required
+              - phone
+          - field: collectorIdDocument
+            rules:
+              - required
+              - string
+              - min:8
+      frontend:
+        component: PackageCollected
+        route: /tracking/{trackingNumber}/collected
+        state_management:
+          store: trackingStore
+          actions:
+            - collectPackage
+            - completeDeliveryFlow
+        ui:
+          loading_state: isCollectingPackage
+          error_handling: showCollectionError
+          success_redirect: /tracking/{trackingNumber}/collected
+    - id: retry_package_search
+      label: Réessayer la recherche
+      from: package_not_found
+      to: tracking_search
+      backend:
+        route:
+          method: GET
+          path: /tracking
+        handler:
+          service: PackageController
+          method: trackPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 155
+        permissions:
+          roles: []
+      frontend:
+        component: TrackingSearch
+        route: /tracking
+        state_management:
+          store: trackingStore
+          actions:
+            - clearSearchError
+            - resetTrackingForm
+        ui:
+          loading_state: isResetting
+    - id: refresh_package_status
+      label: Actualiser le statut
+      from: package_history_view
+      to: package_found
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        handler:
+          service: PackageController
+          method: trackPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 155
+        permissions:
+          roles: []
+        validation:
+          - field: trackingNumber
+            rules:
+              - required
+              - exists:packages,tracking_number
+      frontend:
+        component: PackageFound
+        route: /tracking/{trackingNumber}
+        state_management:
+          store: trackingStore
+          actions:
+            - refreshPackageStatus
+            - updatePackageData
+        ui:
+          loading_state: isRefreshingStatus
+    - id: contact_support
+      label: Contacter le support
+      from: package_not_found
+      to: package_not_found
+      backend:
+        route:
+          method: POST
+          path: /api/support/contact
+        handler:
+          service: SupportController
+          method: createSupportTicket
+          file: src/main/java/com/pickndrop/controller/SupportController.java
+          line: 25
+        permissions:
+          roles: []
+        validation:
+          - field: trackingNumber
+            rules:
+              - required
+              - string
+          - field: issue
+            rules:
+              - required
+              - string
+              - min:10
+          - field: contactEmail
+            rules:
+              - required
+              - email
+      frontend:
+        component: SupportContact
+        route: /support/contact
+        state_management:
+          store: supportStore
+          actions:
+            - createSupportTicket
+            - setSupportData
+        ui:
+          loading_state: isContactingSupport
+          error_handling: showSupportError
+          success_redirect: /support/ticket-created

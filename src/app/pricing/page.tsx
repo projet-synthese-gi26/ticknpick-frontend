@@ -119,30 +119,30 @@ const PlanCard = ({ plan, index }: { plan: Plan; index: number }) => {
         hidden: { opacity: 0, y: 50 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } }
       }}
-      className={`relative flex flex-col h-full bg-white rounded-2xl shadow-lg ring-2 ${plan.highlightClass} p-8`}
+      className={`relative flex flex-col h-full bg-white dark:bg-slate-900 rounded-2xl dark:ring-slate-700 shadow-lg ring-2 ${plan.highlightClass} p-8`}
     >
       {plan.isPopular && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white px-4 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow-md">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 dark:bg-orange-800 text-white px-4 py-1 rounded-full text-xs font-semibold flex items-center gap-1 shadow-md">
           <Sparkles className="w-4 h-4" />
           POPULAIRE
         </div>
       )}
 
       <div className="flex-grow">
-        <h3 className="text-xl font-bold text-slate-800">{plan.name}</h3>
-        <p className="text-slate-500 mt-2 text-sm">{plan.description}</p>
+        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{plan.name}</h3>
+        <p className="text-slate-500 dark:text-slate-300 mt-2 text-sm">{plan.description}</p>
 
         <div className="mt-6">
-          <span className="text-4xl font-extrabold text-slate-900">{plan.price}</span>
-          {plan.currency && <span className="text-xl font-semibold text-slate-700 ml-1">{plan.currency}</span>}
-          <span className="text-sm text-slate-500 ml-1">{plan.frequency}</span>
+          <span className="text-4xl font-extrabold text-slate-900 dark:text-slate-300">{plan.price}</span>
+          {plan.currency && <span className="text-xl font-semibold text-slate-700 dark:text-slate-300 ml-1">{plan.currency}</span>}
+          <span className="text-sm text-slate-500 dark:text-slate-300 ml-1">{plan.frequency}</span>
         </div>
 
         <ul className="mt-8 space-y-4 text-sm">
           {plan.features.map((feature, i) => (
             <li key={i} className="flex items-start">
-              <Check className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5 mr-3" />
-              <span className="text-slate-600">{feature}</span>
+              <Check className="w-5 h-5 text-orange-500 dark:text-orange-800 flex-shrink-0 mt-0.5 mr-3" />
+              <span className="text-slate-600 dark:text-slate-400">{feature}</span>
             </li>
           ))}
         </ul>
@@ -154,8 +154,8 @@ const PlanCard = ({ plan, index }: { plan: Plan; index: number }) => {
         whileTap={{ scale: 0.98 }}
         className={`mt-10 block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all duration-300
           ${plan.isPopular 
-            ? 'bg-orange-500 text-white shadow-lg hover:bg-orange-600' 
-            : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}
+            ? 'bg-orange-500 dark:bg-orange-800 text-white shadow-lg hover:bg-orange-600' 
+            : 'bg-orange-100 dark:bg-zinc-800 dark:hover:bg-zinc-900 dark:text-orange-800 text-orange-700 hover:bg-orange-200'}
         `}
       >
         {plan.ctaText}
@@ -168,7 +168,7 @@ const PlanCard = ({ plan, index }: { plan: Plan; index: number }) => {
 export default function PricingPage() {
 
   return (
-    <div className="min-h-screen bg-orange-50 font-sans text-slate-800">
+    <div className="min-h-screen bg-orange-50 dark:bg-gray-900 font-sans text-slate-800">
       <Navbar />
 
       <main className="pt-24 pb-16">
@@ -181,10 +181,10 @@ export default function PricingPage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
               Un plan pour chaque ambition
             </h1>
-            <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-600">
+            <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-600 dark:text-slate-300">
               Choisissez l'offre qui correspond à la taille de votre activité et à vos objectifs de croissance.
             </p>
           </motion.div>

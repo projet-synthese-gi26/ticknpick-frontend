@@ -161,7 +161,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
         
         // STATUTS AUTORISÉS POUR RETRAIT
         // ARRIVE_AU_RELAIS, AT_ARRIVAL_RELAY_POINT, STOCK
-        const allowed = ['ARRIVE', 'ARRIVAL', 'STOCK', 'RELAY_POINT'];
+        const allowed = ['ARRIVE', 'FOR_PICKUP', 'ARRIVAL', 'STOCK', 'RELAY_POINT'];
         const isAvailable = allowed.some(s => status.includes(s));
 
         // Si déjà retiré -> on affiche juste l'info mais on bloque le processus

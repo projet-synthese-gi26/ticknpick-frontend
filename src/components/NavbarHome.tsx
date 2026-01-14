@@ -55,7 +55,7 @@ export default function NavbarHome() {
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled || isOpen 
           ? 'bg-white/95 dark:bg-gray-900/95 shadow-lg backdrop-blur-md' 
-          : 'bg-transparent'
+          : 'bg-transparent backdrop-blur-xl'
       }`}>
         <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex justify-between items-center">

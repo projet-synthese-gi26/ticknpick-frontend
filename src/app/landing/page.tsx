@@ -46,14 +46,14 @@ const LINK_DATA: ContentData = {
     heroSubtitle: "La réponse aux défis du dernier kilomètre africain. Pré-enregistrement, dépôt en micro-hubs et transit sécurisé pour digitaliser la chaîne logistique urbaine.",
     benefits: [
         { value: "QR Code", label: "Sécurité" },
-        { value: "24/7", label: "Micro-Hubs" },
-        { value: "Low-Data", label: "Optimisé" }
+        { value: "24/7", label: "Disponibilité" },
+        { value: "Decentralisé", label: "Prise en charge rapide" }
     ],
     featuresTitle: "Expédition Simplifiée",
     featuresDescription: "Conçu pour surmonter l'absence d'adresses et la fragmentation des services.",
     features: [
         { icon: MapPin, title: "Zones Sans Adresse", desc: "Technologie de géolocalisation relative permettant de livrer là où le système d'adressage est incomplet ou absent.", tag: "Innovation" },
-        { icon: Store, title: "Réseau Micro-Hubs", desc: "Transformation des petites boutiques et call-box en points de relais logistiques officiels pour le dépôt et retrait.", tag: "Proximité" },
+        { icon: Store, title: "Réseau de Points relais", desc: "Transformation des petites boutiques et call-box en points de relais logistiques officiels pour le dépôt et retrait.", tag: "Proximité" },
         { icon: Smartphone, title: "Optimisé Android", desc: "Architecture légère conçue pour fonctionner fluide sur les smartphones d'entrée de gamme largement utilisés.", tag: "Tech" },
         { icon: Search, title: "Tracking Hybride", desc: "Historique complet et retransmission des données même lors de transits complexes (multi-legs, multi-transporteurs).", tag: "Trace" }
     ],
@@ -94,8 +94,8 @@ const GO_DATA: ContentData = {
         { icon: MessageCircle, title: "3. Négociation", desc: "Validation des termes via messagerie intégrée et blocage des fonds (Escrow)." },
         { icon: Star, title: "4. Exécution", desc: "Transport suivi par GPS, preuve de livraison et notation mutuelle." }
     ],
-    ctaPrimary: { text: "Voir les annonces", link: "/marketplace" },
-    ctaSecondary: { text: "Publier un Trajet", link: "/freelance/publish" }
+    ctaPrimary: { text: "Voir les annonces", link: "/announce" },
+    ctaSecondary: { text: "Marketplace", link: "/marketplace" }
 };
 
 // 3. PicknDrop Agency -> AGENCES DE TRANSPORT (ERP)
@@ -132,10 +132,10 @@ const AGENCY_DATA: ContentData = {
 const POINT_DATA: ContentData = {
     themeColor: "red",
     heroImage: "/images/point.jpeg",
-    heroTitle: <>Convertissez votre espace<br /><span className="text-red-600">en Hub Rentable.</span></>,
+    heroTitle: <>Convertissez votre espace<br /><span className="text-red-600">en Point Relais Rentable.</span></>,
     heroSubtitle: "Solution clé-en-main pour boutiques, stations et cybercafés. Devenez un micro-hub logistique et augmentez vos revenus.",
     benefits: [
-        { value: "+$$", label: "Commissions" },
+        { value: "+10 000 FCFA", label: "Commissions" },
         { value: "Trafic", label: "Visibilité" },
         { value: "Auto", label: "Gestion" }
     ],
@@ -155,7 +155,7 @@ const POINT_DATA: ContentData = {
         { icon: HandCoins, title: "4. Paiement", desc: "Reversement périodique des commissions sur votre mobile money/compte." }
     ],
     ctaPrimary: { text: "Devenir Point Relais", link: "/register?type=point" },
-    ctaSecondary: { text: "Conditions & Gains", link: "/about-points" }
+    ctaSecondary: { text: "Conditions & Gains", link: "/pricing" }
 };
 
 // 5. PicknDrop Freelancer -> LIVREURS INDÉPENDANTS
@@ -185,7 +185,7 @@ const FREELANCE_DATA: ContentData = {
         { icon: Coins, title: "4. Cash-out", desc: "Accès immédiat à votre portefeuille virtuel." }
     ],
     ctaPrimary: { text: "Télécharger l'App", link: "/download" },
-    ctaSecondary: { text: "Inscription Chauffeur", link: "/register?type=driver" }
+    ctaSecondary: { text: "Inscription Chauffeur", link: "/register" }
 };
 
 // 6. PicknDrop Market -> RECHERCHE & DÉCOUVERTE
@@ -219,8 +219,8 @@ const MARKET_DATA: ContentData = {
 };
 
 const CONTENT_MAP: Record<string, ContentData> = {
-    'LINK': LINK_DATA, 'GO': GO_DATA, 'AGENCY': AGENCY_DATA, 
-    'POINT': POINT_DATA, 'FREELANCER': FREELANCE_DATA, 'MARKET': MARKET_DATA
+    'LINK': LINK_DATA, 'GO': GO_DATA, 'AGENCY': AGENCY_DATA,
+    'FREELANCE': POINT_DATA, 'LIVREUR': FREELANCE_DATA, 'MARKET': MARKET_DATA
 };
 
 // --- HELPERS STYLES ---
@@ -322,7 +322,7 @@ const LandingContent = () => {
             <NavbarHome />
 
             {/* --- HERO SECTION : Compact & Split --- */}
-            <section className="relative pt-24 pb-16 lg:pt-36 lg:pb-24 px-4 overflow-visible">
+            <section className="relative pt-4 pb-16 lg:pt-20 lg:pb-24 px-4 overflow-visible">
                 {/* Background Ambient Lights */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] pointer-events-none opacity-40 dark:opacity-20">
                     <motion.div 
@@ -341,10 +341,6 @@ const LandingContent = () => {
                             initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}
                             className="text-left flex flex-col items-start"
                         >
-                            <div className={`mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-white/5 backdrop-blur-md shadow-sm`}>
-                                <div className={`w-2 h-2 rounded-full ${theme.bg} animate-pulse`}></div>
-                                <span className="text-xs font-bold uppercase tracking-widest opacity-80">Solution PicknDrop System</span>
-                            </div>
 
                             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[0.95] tracking-tight mb-6 text-slate-900 dark:text-white">
                                 {data.heroTitle}
@@ -363,7 +359,7 @@ const LandingContent = () => {
                                 </Link>
                                 <Link 
                                     href={data.ctaSecondary.link} 
-                                    className="px-8 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-white/5 font-bold hover:bg-white hover:border-slate-300 transition-all backdrop-blur-md"
+                                    className="px-8 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-white/5 font-bold hover:bg-white dark:hover:bg-slate-900 hover:border-slate-300 transition-all backdrop-blur-md"
                                 >
                                     {data.ctaSecondary.text}
                                 </Link>
@@ -403,18 +399,7 @@ const LandingContent = () => {
                                         <div className={`p-3 rounded-xl ${theme.bg}`}>
                                             <PackageOpen className="text-white w-6 h-6"/>
                                         </div>
-                                        <div className="flex-1">
-                                            <div className="h-2 bg-gray-200 dark:bg-gray-800 rounded-full w-3/4 mb-2 overflow-hidden">
-                                                <motion.div 
-                                                   initial={{ width: 0 }} whileInView={{ width: '75%' }} transition={{ duration: 1.5 }}
-                                                   className={`h-full ${theme.bg}`}
-                                                />
-                                            </div>
-                                            <div className="flex justify-between text-xs font-bold opacity-60">
-                                                <span>Traitement...</span>
-                                                <span>75%</span>
-                                            </div>
-                                        </div>
+                                        <span className="font-bold text-slate-900 dark:text-white text-2xl">Bienvenue sur TiiBnTick 🤗</span>
                                     </div>
                                 </motion.div>
                              </div>
@@ -492,7 +477,7 @@ const LandingContent = () => {
 
                         <div className="relative z-10 max-w-2xl mx-auto">
                             <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-6">Prêt à transformer votre logistique ?</h2>
-                            <p className="text-lg opacity-90 mb-8 font-medium">Rejoignez la plateforme et accédez immédiatement aux outils.</p>
+                            <p className="text-lg opacity-90 mb-8 font-medium">Rejoignez la plateforme business et accédez immédiatement aux outils pour rémunerer votre local, votre personnel ou mieux : votre disponibilité.</p>
                             
                             <div className="flex justify-center gap-4">
                                 <Link 

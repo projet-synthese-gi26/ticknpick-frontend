@@ -1,0 +1,453 @@
+flow:
+  name: package_management_sender
+  version: 1.0.0
+  description: Flow complet de gestion des colis pour les expéditeurs (clients)
+  states:
+    - id: dashboard_sender
+      label: Tableau de bord Expéditeur
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: package_creation_form
+      label: Formulaire de création de colis
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: package_details_review
+      label: Révision des détails
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 700
+        y: 100
+    - id: media_attachment
+      label: Ajout de média (photo)
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1000
+        y: 100
+    - id: package_pre_registered
+      label: Colis pré-enregistré
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1300
+        y: 100
+    - id: relay_point_deposit
+      label: Dépôt au point relais
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 1600
+        y: 100
+    - id: package_ready_pickup
+      label: Colis prêt pour récupération
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1900
+        y: 100
+    - id: package_tracking
+      label: Suivi du colis
+      type: intermediate
+      color: '#e1f5fe'
+      position:
+        x: 400
+        y: 300
+    - id: creation_error
+      label: Erreur de création
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 700
+        y: 300
+  transitions:
+    - id: start_package_creation
+      label: Créer un nouveau colis
+      from: dashboard_sender
+      to: package_creation_form
+      backend:
+        route:
+          method: GET
+          path: /api/packages/create
+        handler:
+          service: PackageController
+          method: createPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 85
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+        validation: []
+      frontend:
+        component: PackageCreationForm
+        route: /packages/create
+        state_management:
+          store: packageStore
+          actions:
+            - initPackageCreation
+            - loadRelayPoints
+        ui:
+          loading_state: isLoadingForm
+          error_handling: showFormError
+    - id: submit_package_details
+      label: Soumettre les détails du colis
+      from: package_creation_form
+      to: package_details_review
+      backend:
+        route:
+          method: POST
+          path: /api/packages
+        handler:
+          service: PackageService
+          method: createPackage
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 28
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: recipientName
+            rules:
+              - required
+              - min:2
+          - field: recipientPhone
+            rules:
+              - required
+              - phone
+          - field: recipientAddress
+            rules:
+              - required
+              - min:10
+          - field: packageType
+            rules:
+              - required
+              - in:STANDARD,FRAGILE,PERISHABLE,BULKY,URGENT
+          - field: weight
+            rules:
+              - required
+              - numeric
+              - min:0.1
+          - field: departureRelayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+          - field: arrivalRelayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+      frontend:
+        component: PackageReview
+        route: /packages/review
+        state_management:
+          store: packageStore
+          actions:
+            - createPackage
+            - setPackageData
+        ui:
+          loading_state: isCreatingPackage
+          error_handling: showCreationError
+          success_redirect: /packages/review
+    - id: package_creation_failed
+      label: Échec de création
+      from: package_creation_form
+      to: creation_error
+      backend:
+        route:
+          method: POST
+          path: /api/packages
+        handler:
+          service: PackageService
+          method: createPackage
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 28
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+      frontend:
+        component: CreationError
+        route: /packages/create
+        state_management:
+          store: packageStore
+          actions:
+            - setCreationError
+            - resetPackageForm
+        ui:
+          error_handling: showValidationErrors
+    - id: confirm_package_details
+      label: Confirmer les détails
+      from: package_details_review
+      to: package_pre_registered
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+      frontend:
+        component: PackageConfirmation
+        route: /packages/{packageId}/confirmed
+        state_management:
+          store: packageStore
+          actions:
+            - confirmPackage
+            - updatePackageStatus
+        ui:
+          loading_state: isConfirming
+          success_redirect: /packages/{packageId}/confirmed
+    - id: attach_media_optional
+      label: Ajouter une photo (optionnel)
+      from: package_details_review
+      to: media_attachment
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/attach-media
+        handler:
+          service: PackageController
+          method: attachMediaToPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 115
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+          conditions: owns_package
+        validation:
+          - field: mediaId
+            rules:
+              - required
+              - exists:media_files,id
+      frontend:
+        component: MediaAttachment
+        route: /packages/{packageId}/media
+        state_management:
+          store: packageStore
+          actions:
+            - attachMedia
+            - uploadPhoto
+        ui:
+          loading_state: isUploadingMedia
+          error_handling: showUploadError
+    - id: complete_media_attachment
+      label: Finaliser ajout média
+      from: media_attachment
+      to: package_pre_registered
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+      frontend:
+        component: PackageConfirmation
+        route: /packages/{packageId}/confirmed
+        state_management:
+          store: packageStore
+          actions:
+            - finalizePackage
+            - updatePackageStatus
+        ui:
+          loading_state: isFinalizing
+          success_redirect: /packages/{packageId}/confirmed
+    - id: deposit_at_relay_point
+      label: Déposer au point relais
+      from: package_pre_registered
+      to: relay_point_deposit
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/deposit
+        handler:
+          service: PackageController
+          method: depositPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 245
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: relayPointId
+            rules:
+              - required
+              - exists:relay_points,id
+          - field: latitude
+            rules:
+              - numeric
+              - between:-90,90
+          - field: longitude
+            rules:
+              - numeric
+              - between:-180,180
+      frontend:
+        component: RelayPointDeposit
+        route: /packages/{packageId}/deposit
+        state_management:
+          store: packageStore
+          actions:
+            - depositPackage
+            - updateLocation
+        ui:
+          loading_state: isDepositing
+          error_handling: showDepositError
+          success_redirect: /packages/{packageId}/ready
+    - id: package_ready_for_delivery
+      label: Colis prêt pour livraison
+      from: relay_point_deposit
+      to: package_ready_pickup
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        permissions:
+          roles:
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: status
+            rules:
+              - required
+              - equals:FOR_PICKUP
+      frontend:
+        component: PackageReady
+        route: /packages/{packageId}/ready
+        state_management:
+          store: packageStore
+          actions:
+            - markAsReady
+            - notifyDeliverers
+        ui:
+          loading_state: isMarkingReady
+          success_redirect: /packages/{packageId}/tracking
+    - id: track_my_packages
+      label: Suivre mes colis
+      from: dashboard_sender
+      to: package_tracking
+      backend:
+        route:
+          method: GET
+          path: /api/packages/my-packages
+        handler:
+          service: PackageController
+          method: getMyPackages
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 175
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+        validation: []
+      frontend:
+        component: PackageTracking
+        route: /packages/my-packages
+        state_management:
+          store: packageStore
+          actions:
+            - loadMyPackages
+            - refreshPackageStatus
+        ui:
+          loading_state: isLoadingPackages
+          error_handling: showTrackingError
+    - id: view_package_details
+      label: Voir détails du colis
+      from: package_tracking
+      to: package_tracking
+      backend:
+        route:
+          method: GET
+          path: /api/packages/{packageId}
+        handler:
+          service: PackageController
+          method: getPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 145
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+        validation:
+          - field: packageId
+            rules:
+              - required
+              - exists:packages,id
+      frontend:
+        component: PackageDetails
+        route: /packages/{packageId}
+        state_management:
+          store: packageStore
+          actions:
+            - loadPackageDetails
+            - loadPackageHistory
+        ui:
+          loading_state: isLoadingDetails
+          error_handling: showDetailsError
+    - id: retry_package_creation
+      label: Réessayer la création
+      from: creation_error
+      to: package_creation_form
+      backend:
+        route:
+          method: GET
+          path: /api/packages/create
+        handler:
+          service: PackageController
+          method: createPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 85
+        permissions:
+          roles:
+            - CLIENT
+            - EMPLOYEE
+            - FREELANCE
+      frontend:
+        component: PackageCreationForm
+        route: /packages/create
+        state_management:
+          store: packageStore
+          actions:
+            - clearCreationError
+            - resetPackageForm
+        ui:
+          loading_state: isResetting

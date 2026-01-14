@@ -9,7 +9,9 @@ import {
   Home, Package, User, LogOut, Menu, X, Users, Settings, Briefcase, Truck,
   ArrowRightLeft, DollarSign, Bell, Search, Sun, Moon,
   CreditCard,
-  HandCoins
+  HandCoins,
+  MapPin,
+  Send
 } from 'lucide-react';
 
 // --- Import des composants pour chaque onglet ---
@@ -17,7 +19,7 @@ import OverviewDashboard from './Overview';
 import ClientPackagesPage from './ClientPackages';
 import DeliveryPage from './Deliveries';
 import InventoryPage from './Inventaire';
-import PersonnelPage from './Personnel';
+import PersonnelPage from './agence/Personnel';
 import ProfilePage from './Profil';
 import ServiceCardPage from './ServiceCard';
 import SettingsPage from './Settings';
@@ -28,8 +30,13 @@ import LivreurOverview from './LivreurOverview';
 import LivreurServiceCardPage from './LivreurServiceCard'; 
 import { useAuth } from '@/context/AuthContext';
 import { userService } from '@/services/userservice';
+import AgencyOverview from './agence/AgencyOverview'; // Nouvelle vue
+import AgencyRelayPoints from './agence/AgencyRelayPoints'; // Nouvelle vue
+import AgencyVehicles from './agence/AgencyVehicles'; // Nouvelle vue
+import AgencyInventory from './agence/AgencyInventory';
+import FindDelivery from './FindDelivery';
 
-export type UIAccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'ADMIN';
+export type UIAccountType = 'CLIENT' | 'LIVREUR' | 'FREELANCE' | 'AGENCY' | 'ADMIN' | 'AGENCE_OWNER';
 
 export interface UserProfile {
   id: string;
@@ -46,7 +53,7 @@ export interface UserProfile {
   id_card_number?: string | null;
   
   // -- Champs Business --
-  businessActorType?: 'FREELANCE' | 'AGENCY' | 'DELIVERER' | 'EMPLOYEE';
+  businessActorType?: 'FREELANCE' | 'AGENCY' | 'DELIVERER' | 'EMPLOYEE' | 'AGENCY_OWNER';
   businessName?: string;
   businessAddress?: string;
   businessLocality?: string;
@@ -100,53 +107,100 @@ export interface Shipment {
 }
 
 // === FONCTION CRUCIALE : NORMALISATION DES DONNÉES ===
-// Cette fonction transforme la réponse de l'API (qui peut varier) en un format standard pour ton UI.
 const normalizeProfile = (apiData: any): UserProfile => {
-  console.log(">>> Données brutes reçues de /api/users/me :", apiData); 
+  console.log(">>> [Dashboard] Raw API Data:", apiData);
 
+  // 1. STRATÉGIE DE FUSION : 
+  // On prend apiData comme base. Si une propriété 'user' existe (cas /users/me), 
+  // on fusionne son contenu par-dessus la racine, mais on GARDE les champs racine existants 
+  // (comme businessActorType qui est souvent à la racine et pas dans 'user').
+  const baseData = apiData || {};
+  const nestedUser = apiData.user || {};
+  
+  // L'ordre est important : nestedUser écrase baseData pour les infos perso (nom, email...), 
+  // MAIS on force la ré-application des champs critiques de la racine s'ils manquent dans nestedUser.
+  const flatUser = {
+      ...baseData,       // 1. Données racine (contient token, userId, businessActorType)
+      ...nestedUser,     // 2. Données user (contient id, name, email)
+  };
+
+  // Restauration explicite des champs critiques s'ils ont été écrasés par 'undefined'
+  if (!flatUser.businessActorType && baseData.businessActorType) {
+      flatUser.businessActorType = baseData.businessActorType;
+  }
+  if (!flatUser.accountType && baseData.accountType) {
+      flatUser.accountType = baseData.accountType;
+  }
+  
+  // 3. EXTRACTION ROBUSTE DES CHAMPS (CamelCase ET SnakeCase)
+  const rawType = flatUser.accountType || flatUser.account_type || 'CLIENT';
+  const rawSubType = flatUser.businessActorType || flatUser.business_actor_type || '';
+    // RECUPERATION DU RELAY POINT ID
+  const linkedRelayId = flatUser.relayPointId || flatUser.relay_point_id || flatUser.assigned_relay_point_id;
+  // Nettoyage pour comparaison
+  const typeUpper = String(rawType).toUpperCase().trim();
+  const subTypeUpper = String(rawSubType).toUpperCase().trim();
+
+  // Nom d'affichage
+  const displayName = flatUser.name || flatUser.businessName || flatUser.business_name || flatUser.email;
+  
+  // ID : Gérer 'id' (de l'objet user) et 'userId' (de la réponse login)
+  const realId = flatUser.id || flatUser.userId;
+
+  console.log(`>>> [Dashboard] Analyzed: Type=[${typeUpper}] SubType=[${subTypeUpper}] ID=[${realId}]`);
+
+  // 4. LOGIQUE D'ATTRIBUTION DU RÔLE UI
   let finalAccountType: UIAccountType = 'CLIENT';
-  const rawType = apiData.account_type || 'CLIENT';
 
-  // LOGIQUE INTELLIGENTE POUR DÉTECTER LE RÔLE RÉEL
-  // Si l'API dit "BUSINESS_ACTOR", on doit regarder "business_actor_type" pour savoir si c'est un Freelance, un Livreur, etc.
-  if (rawType === 'BUSINESS_ACTOR') {
-      const subType = (apiData.business_actor_type || '').toUpperCase();
-      
-      if (subType === 'DELIVERER') finalAccountType = 'LIVREUR';
-      else if (subType === 'AGENCY_OWNER') finalAccountType = 'AGENCY';
-      else if (subType === 'FREELANCE') finalAccountType = 'FREELANCE';
-      else if (subType === 'EMPLOYEE') finalAccountType = 'AGENCY'; 
-      else {
-          console.warn("Business Actor sans sous-type clair, fallback sur FREELANCE");
+  // SCÉNARIO CLÉ : C'est un EMPLOYÉ connecté avec un RELAIS ID
+  if (subTypeUpper === 'EMPLOYEE' && linkedRelayId) {
+      console.log(`⚡ Employé avec Point Relais assigné détecté (ID: ${linkedRelayId})`);
+      finalAccountType = 'FREELANCE'; // On utilise la vue 'FreelanceOverview' qui gère l'inventaire
+  } 
+
+  if (typeUpper === 'ADMIN' || typeUpper === 'SUPERADMIN') {
+      finalAccountType = 'ADMIN';
+  } 
+  else if (typeUpper.includes('BUSINESS')) {
+      // Détection spécifique pour AGENCY_OWNER
+      if (subTypeUpper === 'AGENCY_OWNER' || subTypeUpper === 'AGENCY') {
+          finalAccountType = 'AGENCY';
+      } 
+      else if (subTypeUpper === 'DELIVERER' || subTypeUpper === 'LIVREUR') {
+          finalAccountType = 'LIVREUR';
+      } 
+      else if (subTypeUpper === 'RELAY_OWNER') {
           finalAccountType = 'FREELANCE';
       }
-  } else if (rawType === 'ADMIN' || rawType === 'SUPERADMIN') {
-      finalAccountType = 'ADMIN';
-  } else {
-      finalAccountType = 'CLIENT';
+      else if (subTypeUpper === 'EMPLOYEE') {
+          // Un employé d'agence doit voir la vue Agence (souvent)
+          finalAccountType = 'FREELANCE'; 
+      } 
+      else {
+          console.warn(`⚠️ Business Type inconnu: ${subTypeUpper}, fallback sur LIVREUR`);
+          finalAccountType = 'LIVREUR'; // Choix par défaut pour les business non identifiés
+      }
   }
 
-  console.log(`>>> Rôle détecté : ${finalAccountType}`);
+  console.log(`>>> [Dashboard] Rôle détecté : ${finalAccountType}`);
 
+  // 5. OBJET FINAL NORMALISÉ
   return {
-    // On garde toutes les données brutes au cas où
-    ...apiData,
-    
-    // Champs standardisés
-    id: apiData.id,
-    account_type: finalAccountType, 
-    email: apiData.email,
-    
-    // Gestion des Noms : On privilégie le nom business, sinon le nom, sinon l'email
-    manager_name: apiData.business_name || apiData.name || apiData.manager_name || apiData.email?.split('@')[0],
-    name: apiData.name || apiData.manager_name || 'Utilisateur',
-    
-    // Champs clés pour les formulaires
-    businessActorType: apiData.business_actor_type,
-    phone_number: apiData.phone_number || apiData.phoneNumber, // Gestion Snake/Camel case selon backend
-    home_address: apiData.home_address || apiData.homeAddress,
-    businessName: apiData.business_name,
-    businessAddress: apiData.business_address
+    ...flatUser,        // Conserve toutes les props brutes
+    id: realId,
+    account_type: finalAccountType, // La clé standardisée pour l'UI switch
+    relayPointId: linkedRelayId, 
+    assigned_relay_point_id: linkedRelayId, 
+    role: finalAccountType,         // Redondance utile
+    email: flatUser.email,
+    manager_name: displayName,
+    name: displayName,
+    // On conserve le type business original pour référence
+    businessActorType: rawSubType,
+    phone_number: flatUser.phone_number || flatUser.phoneNumber,
+    home_address: flatUser.home_address || flatUser.homeAddress,
+    businessName: flatUser.business_name || flatUser.businessName,
+    businessAddress: flatUser.business_address || flatUser.businessAddress
   };
 };
 
@@ -195,9 +249,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const getAccountTypeColor = (type: string) => {
     switch(type?.toLowerCase()) {
       case 'client': return 'bg-gradient-to-r from-orange-500 to-amber-500';
-      case 'livreur': return 'bg-gradient-to-r from-green-500 to-emerald-500';
-      case 'agence': return 'bg-gradient-to-r from-purple-500 to-indigo-500';
-      case 'freelance': return 'bg-gradient-to-r from-blue-500 to-cyan-500';
+      case 'livreur': return 'bg-gradient-to-r from-purple-800 to-violet-800';
+      case 'agency': return 'bg-gradient-to-r from-blue-800 to-sky-800';
+      case 'freelance': return 'bg-gradient-to-r from-red-500 to-red-500';
       default: return 'bg-gradient-to-r from-gray-500 to-slate-500';
     }
   };
@@ -433,7 +487,7 @@ const DashboardSwitcher: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
   const { isAuthenticated, isLoading: isAuthLoading, logout, user: authUser } = useAuth();
-  
+  const [selectedRelayForInventory, setSelectedRelayForInventory] = useState<string|null>(null);
 
   useEffect(() => {
     if (isAuthLoading) return;
@@ -447,18 +501,26 @@ const DashboardSwitcher: React.FC = () => {
     const fetchUserData = async () => {
       setIsLoading(true);
       try {
-        // RÉCUPÉRATION DE L'ID DEPUIS LE CONTEXTE D'AUTHENTIFICATION
-        // Le AuthContext stocke déjà l'ID utilisateur lors du login
-        const userId = authUser.id; 
+        console.log(`🔍 Session valide pour l'utilisateur ID: ${authUser.id}`);
         
-        if (!userId) {
-             throw new Error("ID Utilisateur introuvable dans la session locale");
-        }
+        // 1. Vérifier d'abord si authUser contient déjà toutes les infos nécessaires (cas du login)
+        if (authUser.accountType && authUser.name) {
+            console.log('✅ Utilisation des données de session (login)');
+            const profile = normalizeProfile(authUser);
+            
+            if (profile.account_type === 'ADMIN') {
+                router.push('/superadmin');
+                return;
+            }
 
-        console.log(`Chargement profil pour ID: ${userId} via /api/users/{id}...`);
+            setUserProfile(profile);
+            setIsLoading(false);
+            return;
+        }
         
-        // APPEL DE LA ROUTE PAR ID AU LIEU DE /ME
-        const apiProfile = await userService.getProfileById(userId);
+        // 2. Sinon, appel API pour récupérer les infos
+        console.log(`Chargement profil pour ID: ${authUser.id} via /api/users/{id}...`);
+        const apiProfile = await userService.getProfileById(authUser.id);
         
         if (!apiProfile) {
             throw new Error("Profil vide reçu de l'API");
@@ -472,7 +534,7 @@ const DashboardSwitcher: React.FC = () => {
         }
 
       } catch (error: any) {
-        console.error("Erreur Dashboard:", error);
+        console.error("💥 Erreur Dashboard:", error);
         // Si l'erreur est critique (ex: token invalide), on déconnecte
         if (error.message?.includes('401') || error.message?.includes('403')) {
              logout();
@@ -503,20 +565,22 @@ const DashboardSwitcher: React.FC = () => {
       case 'livreur':
         return [
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
-          { id: 'deliveries', label: 'Mes Livraisons', icon: Truck, badge: 7 },
+          { id: 'deliveries', label: 'Mes Livraisons', icon: Send, badge: 7 },
           { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
           { id: 'service-card', label: 'Carte de Service', icon: User },
           { id: 'profile', label: 'Mon Profil', icon: User },
           { id: 'settings', label: 'Paramètres', icon: Settings },
         ];
-      case 'agence':
+      case 'agency':
         return [
           { id: 'overview', label: "Vue d'ensemble", icon: Home },
+          { id: 'my-relays', label: 'Mes Points Relais', icon: MapPin }, // NOUVEAU
+          { id: 'my-vehicles', label: 'Mes Véhicules', icon: Truck },   // NOUVEAU
           { id: 'inventory', label: 'Inventaire Agence', icon: Package },
+          { id: 'deliveries', label: 'Mes Livraisons', icon: Send, badge: 7 },
           { id: 'staff', label: 'Personnel', icon: Users },
-          { id: 'credit', label: 'Compte de Crédit', icon: HandCoins },
-          { id: 'service-card', label: 'Carte de Service', icon: User },
-          { id: 'profile', label: 'Profil Agence', icon: Briefcase },
+          { id: 'profile', label: 'Mon Profil', icon: User },
+          { id: 'service-card', label: 'Carte de Service', icon: Briefcase },
           { id: 'settings', label: 'Paramètres', icon: Settings },
         ];
       case 'freelance':
@@ -542,7 +606,7 @@ const DashboardSwitcher: React.FC = () => {
   const handleProfileUpdate = async () => {
     // Fonction simple pour recharger les données après une modif dans l'onglet Profil
     try {
-        const apiProfile = await userService.getMyProfile();
+        const apiProfile = await userService.getProfileById(authUser.id);
         setUserProfile(normalizeProfile(apiProfile));
     } catch (e) { console.error(e); }
   };
@@ -559,6 +623,8 @@ const DashboardSwitcher: React.FC = () => {
         if (userProfile.account_type === 'FREELANCE') {
           return <FreelanceOverview profile={userProfile} setActiveTab={setActiveTab} />;
         }
+        // Ajout condition Agence
+        if (userProfile.account_type === 'AGENCY') return <AgencyOverview profile={userProfile} setActiveTab={setActiveTab}/>;
 
         if (userProfile.account_type === 'LIVREUR') {
           return <LivreurOverview profile={userProfile} setActiveTab={setActiveTab} />;
@@ -571,9 +637,12 @@ const DashboardSwitcher: React.FC = () => {
       case 'deliveries': 
         return accountType === 'livreur' ? <DeliveryPage profile={userProfile as any} /> : null;
       case 'inventory': 
-        return ['freelance', 'agence'].includes(accountType) ?  <InventoryPage profile={userProfile} /> : null;
+      if (accountType === 'agency') {
+        return <AgencyInventory profile={userProfile} />;
+    }
+        return ['freelance', 'agency'].includes(accountType) ?  <InventoryPage profile={userProfile} /> : null;
       case 'staff': 
-        return accountType === 'agence' ? <PersonnelPage /> : null;
+        return accountType === 'agency' ? <PersonnelPage /> : null;
       case 'service-card':
         if (userProfile.account_type === 'LIVREUR') {
           return <LivreurServiceCardPage profile={userProfile} />;
@@ -582,8 +651,22 @@ const DashboardSwitcher: React.FC = () => {
           ? <ServiceCardPage profile={userProfile as ProProfile} />
           : null;
 
+      case 'my-relays':
+              return (
+         <AgencyRelayPoints 
+            profile={userProfile}
+            onNavigateToInventory={(id) => {
+               setSelectedRelayForInventory(id); // Set l'ID
+               setActiveTab('inventory');        // Change l'onglet
+            }}
+         />
+      );
+
+      case 'my-vehicles':
+        return <AgencyVehicles profile={userProfile} />;
+
       case 'credit':
-      return ['freelance', 'agence', 'livreur'].includes(accountType) 
+      return ['freelance', 'agency', 'livreur'].includes(accountType) 
         ? <CreditPage profile={userProfile as any} onUpdate={handleProfileUpdate} /> 
         : null;
 

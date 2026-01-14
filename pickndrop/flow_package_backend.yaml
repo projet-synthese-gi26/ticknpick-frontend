@@ -1,0 +1,301 @@
+flow:
+  name: package_management_backend
+  version: 1.0.0
+  description: Flow backend de gestion des colis - Requêtes HTTP et déclenchements BD
+  states:
+    - id: no_package
+      label: Aucun colis
+      type: initial
+      color: '#e3f2fd'
+      position:
+        x: 100
+        y: 100
+    - id: package_pre_registered
+      label: Colis pré-enregistré en BD
+      type: intermediate
+      color: '#fff9c4'
+      position:
+        x: 400
+        y: 100
+    - id: package_with_media
+      label: Colis avec média attaché
+      type: intermediate
+      color: '#f3e5f5'
+      position:
+        x: 700
+        y: 100
+    - id: package_for_pickup
+      label: Colis prêt pour récupération
+      type: intermediate
+      color: '#e8f5e8'
+      position:
+        x: 1000
+        y: 100
+    - id: package_assigned_to_deliverer
+      label: Colis assigné au livreur
+      type: intermediate
+      color: '#fff3e0'
+      position:
+        x: 1300
+        y: 100
+    - id: package_in_transit
+      label: Colis en transit
+      type: intermediate
+      color: '#f1f8e9'
+      position:
+        x: 1600
+        y: 100
+    - id: package_delivered
+      label: Colis livré
+      type: final
+      color: '#c8e6c9'
+      position:
+        x: 1900
+        y: 100
+    - id: creation_failed
+      label: Échec de création
+      type: intermediate
+      color: '#ffcdd2'
+      position:
+        x: 400
+        y: 300
+  transitions:
+    - id: create_package_request
+      label: POST /api/packages
+      from: no_package
+      to: package_pre_registered
+      backend:
+        route:
+          method: POST
+          path: /api/packages
+        handler:
+          service: PackageService
+          method: createPackage
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 28
+        database_operations:
+          - insert_package_with_status_PRE_REGISTERED
+          - insert_package_history_entry
+        triggers:
+          - generate_tracking_number
+          - set_sender_id_from_jwt
+          - set_current_status_PRE_REGISTERED
+          - set_payment_status_PENDING
+          - create_timestamps
+        validation:
+          - field: recipientName
+            rules: [required, min:2]
+          - field: recipientPhone
+            rules: [required, phone]
+          - field: departureRelayPointId
+            rules: [required, exists:relay_points,id]
+          - field: arrivalRelayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [CLIENT, EMPLOYEE, FREELANCE]
+    - id: attach_media_request
+      label: POST /api/packages/{packageId}/attach-media
+      from: package_pre_registered
+      to: package_with_media
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/attach-media
+        handler:
+          service: PackageController
+          method: attachMediaToPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 115
+        database_operations:
+          - update_package_set_media_file_id
+          - update_package_updated_at
+        triggers:
+          - verify_package_ownership
+          - link_media_to_package
+        validation:
+          - field: mediaId
+            rules: [required, exists:media_files,id]
+        permissions:
+          roles: [CLIENT, EMPLOYEE, FREELANCE]
+          conditions: [owns_package]
+    - id: deposit_package_request
+      label: POST /api/packages/{packageId}/deposit
+      from: package_pre_registered
+      to: package_for_pickup
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/deposit
+        handler:
+          service: PackageController
+          method: depositPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 245
+        database_operations:
+          - update_package_status_FOR_PICKUP
+          - update_current_relay_point_id
+          - update_coordinates
+          - insert_package_history_entry
+        triggers:
+          - set_status_FOR_PICKUP
+          - record_deposit_location
+          - notify_available_deliverers
+        validation:
+          - field: relayPointId
+            rules: [required, exists:relay_points,id]
+        permissions:
+          roles: [CLIENT, EMPLOYEE, FREELANCE]
+    - id: deposit_with_media_request
+      label: POST /api/packages/{packageId}/deposit
+      from: package_with_media
+      to: package_for_pickup
+      backend:
+        route:
+          method: POST
+          path: /api/packages/{packageId}/deposit
+        handler:
+          service: PackageController
+          method: depositPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 245
+        database_operations:
+          - update_package_status_FOR_PICKUP
+          - update_current_relay_point_id
+          - keep_media_file_id
+        triggers:
+          - set_status_FOR_PICKUP
+          - record_deposit_location
+    - id: assign_deliverer_request
+      label: PUT /api/packages/{packageId}/assign-deliverer
+      from: package_for_pickup
+      to: package_assigned_to_deliverer
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/assign-deliverer
+        handler:
+          service: PackageService
+          method: assignDeliverer
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 150
+        database_operations:
+          - update_package_status_ASSIGNED_TO_DELIVERER
+          - update_assigned_deliverer_id
+          - update_assigned_delivery_at
+          - insert_package_history_entry
+        triggers:
+          - verify_package_status_FOR_PICKUP
+          - assign_deliverer_to_package
+          - notify_deliverer
+        validation:
+          - field: delivererId
+            rules: [required, exists:deliverers,id]
+        permissions:
+          roles: [EMPLOYEE, FREELANCE, ADMIN]
+    - id: pickup_package_request
+      label: PUT /api/packages/{packageId}/status (IN_TRANSIT)
+      from: package_assigned_to_deliverer
+      to: package_in_transit
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/status
+        handler:
+          service: PackageService
+          method: updatePackageStatus
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 58
+        database_operations:
+          - update_package_status_IN_TRANSIT
+          - update_pickup_date
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assignment
+          - record_pickup_time
+          - start_transit_tracking
+        validation:
+          - field: status
+            rules: [required, equals:IN_TRANSIT]
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: deliver_package_request
+      label: PUT /api/packages/{packageId}/deliver
+      from: package_in_transit
+      to: package_delivered
+      backend:
+        route:
+          method: PUT
+          path: /api/packages/{packageId}/deliver
+        handler:
+          service: PackageService
+          method: markAsDelivered
+          file: src/main/java/com/pickndrop/service/PackageService.java
+          line: 155
+        database_operations:
+          - update_package_status_DELIVERED
+          - update_actual_delivery_date
+          - insert_package_history_entry
+        triggers:
+          - verify_deliverer_assignment
+          - record_delivery_time
+          - notify_sender_and_recipient
+          - calculate_deliverer_earnings
+        permissions:
+          roles: [DELIVERER]
+          conditions: [assigned_to_deliverer]
+    - id: get_my_packages_request
+      label: GET /api/packages/my-packages
+      from: package_pre_registered
+      to: package_pre_registered
+      backend:
+        route:
+          method: GET
+          path: /api/packages/my-packages
+        handler:
+          service: PackageController
+          method: getMyPackages
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 175
+        database_operations:
+          - select_packages_by_sender_id
+        triggers:
+          - extract_user_id_from_jwt
+          - return_user_packages_list
+        permissions:
+          roles: [CLIENT, EMPLOYEE, FREELANCE]
+    - id: track_package_request
+      label: GET /api/packages/tracking/{trackingNumber}
+      from: package_pre_registered
+      to: package_pre_registered
+      backend:
+        route:
+          method: GET
+          path: /api/packages/tracking/{trackingNumber}
+        handler:
+          service: PackageController
+          method: trackPackage
+          file: src/main/java/com/pickndrop/controller/PackageController.java
+          line: 155
+        database_operations:
+          - select_package_by_tracking_number
+          - select_package_history
+        triggers:
+          - return_package_with_history
+        permissions:
+          roles: []
+        validation:
+          - field: trackingNumber
+            rules: [required, exists:packages,tracking_number]
+    - id: creation_validation_failed
+      label: Validation échouée
+      from: no_package
+      to: creation_failed
+      backend:
+        route:
+          method: POST
+          path: /api/packages
+        triggers:
+          - return_400_bad_request
+          - return_validation_errors
+        database_operations: []

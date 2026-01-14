@@ -6,7 +6,9 @@ import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { 
   Search, Package, Truck, MapPin, CheckCircle, Clock, 
   AlertTriangle, ArrowLeft, Loader2, QrCode, X, AlertCircle,
-  CalendarDays, Weight, FileText, User, Coins
+  CalendarDays, Weight, FileText, User, Coins,
+  Star,
+  Globe
 } from 'lucide-react';
 
 // Service API
@@ -270,12 +272,84 @@ export default function TrackPackageContent() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300 flex flex-col font-sans">
-      <main className="flex-grow pt-24 px-4 sm:px-6 relative z-10 pb-20">
-        
-        {/* Decoration BG */}
-        <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-orange-100/50 to-transparent dark:from-orange-950/20 pointer-events-none -z-10" />
+        <NavbarHome />
+        {/* Décorations d'arrière-plan animées */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {/* Cercles flottants */}
+            <motion.div
+            animate={{ 
+                x: [0, 100, 0],
+                y: [0, -50, 0],
+                scale: [1, 1.2, 1],
+                rotate: [0, 180, 360]
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="absolute top-32 left-10 w-64 h-64 bg-orange-200/20 dark:bg-orange-500/10 rounded-full blur-3xl"
+            />
+            <motion.div
+            animate={{ 
+                x: [0, -80, 0],
+                y: [0, 100, 0],
+                scale: [1, 1.3, 1],
+                rotate: [360, 180, 0]
+            }}
+            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+            className="absolute bottom-20 right-10 w-96 h-96 bg-blue-200/20 dark:bg-blue-500/10 rounded-full blur-3xl"
+            />
+            
+            {/* Icônes décoratives flottantes */}
+            <motion.div
+            animate={{ 
+                y: [0, -20, 0],
+                rotate: [0, 10, 0]
+            }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-32 right-1/4 text-orange-300/30 dark:text-orange-500/20"
+            >
+            <Package className="w-16 h-16" />
+            </motion.div>
+            
+            <motion.div
+            animate={{ 
+                y: [0, 15, 0],
+                x: [0, 10, 0],
+                rotate: [0, -15, 0]
+            }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            className="absolute bottom-40 left-1/4 text-blue-300/30 dark:text-blue-500/20"
+            >
+            <Truck className="w-20 h-20" />
+            </motion.div>
 
+            <motion.div
+            animate={{ 
+                y: [0, -25, 0],
+                rotate: [0, 360, 0]
+            }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            className="absolute top-1/2 right-20 text-purple-300/20 dark:text-purple-500/10"
+            >
+            <Globe className="w-24 h-24" />
+            </motion.div>
+
+            <motion.div
+            animate={{ 
+                scale: [1, 1.2, 1],
+                opacity: [0.3, 0.6, 0.3]
+            }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-1/3 left-1/3 text-yellow-300/30 dark:text-yellow-500/20"
+            >
+            <Star className="w-12 h-12" />
+            </motion.div>
+
+            {/* Lignes de grille subtiles */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#8882_1px,transparent_1px),linear-gradient(to_bottom,#8882_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)] dark:bg-[linear-gradient(to_right,#fff1_1px,transparent_1px),linear-gradient(to_bottom,#fff1_1px,transparent_1px)]" />
+        </div>
+
+      <main className="relative z-10 pt-24 px-4 sm:px-6 pb-20">
         <div className="max-w-4xl mx-auto space-y-8">
+          
           
           {/* ZONE RECHERCHE */}
           <div className="text-center space-y-6">

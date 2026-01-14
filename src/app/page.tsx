@@ -175,7 +175,7 @@ const TECH_FEATURES = [
 
 const TransversalSection = () => {
   return (
-    <section className="py-24 bg-slate-900 text-white relative overflow-hidden">
+    <section className="py-8 bg-slate-900 text-white relative overflow-hidden">
         {/* Background Patterns */}
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-orange-500/10 rounded-full blur-[120px] pointer-events-none"/>
         <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none"/>
@@ -240,7 +240,7 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({ item, index }) => {
   const Icon = item.icon;
 
   return (
-    <section className="py-12 md:py-20 lg:py-24 overflow-hidden border-b border-gray-100 dark:border-slate-800 last:border-0">
+    <section className="py-4 md:py-8 lg:py-10 overflow-hidden border-b border-gray-100 dark:border-slate-800 last:border-0">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className={`flex flex-col ${isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'} items-center gap-8 lg:gap-16`}>
           
@@ -382,9 +382,6 @@ export default function PortalPage() {
             transition={{ duration: 0.8 }}
             className="max-w-4xl mx-auto"
           >
-            <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-4 sm:mb-6 animate-pulse">
-              <span>🎁</span> Offre Spéciale Fêtes
-            </div>
 
             <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight mb-4 sm:mb-6 drop-shadow-2xl px-4">
               Envoyez. Recevez. <br/>
@@ -411,9 +408,9 @@ export default function PortalPage() {
       </section>
 
       {/* MODULES */}
-      <div id="modules" className="bg-slate-50 dark:bg-[#0b0c15] pb-12 sm:pb-16 lg:pb-24">
+      <div id="modules" className="bg-slate-50 dark:bg-[#0b0c15] pb-4 sm:pb-6 lg:pb-8">
         
-        <div className="container mx-auto text-center pt-6 sm:pt-10 pb-8 sm:pb-12 lg:pb-16 px-4">
+        <div className="container mx-auto text-center pt-6 sm:pt-10 pb-1 sm:pb-2 lg:pb-1 px-4">
           <h2 className="text-xs sm:text-sm font-black text-orange-600 dark:text-orange-500 uppercase tracking-[0.2em] mb-2 sm:mb-3">La Suite TiiBnTick</h2>
           <h3 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white">Découvrez nos solutions</h3>
         </div>
@@ -430,22 +427,34 @@ export default function PortalPage() {
       </div>
 
               {/* CTA Final */}
-        <section className="py-12 sm:py-16 lg:py-20 px-4 sm:px-6">
+        <section className="py-4 sm:py-8 lg:py-8 px-4 sm:px-6">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20"></div>
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
-            className="max-w-5xl mx-auto rounded-2xl sm:rounded-3xl lg:rounded-[3rem] p-8 sm:p-12 lg:p-20 relative overflow-hidden bg-gradient-to-r from-red-600 via-orange-600 to-yellow-600 shadow-2xl text-center"
+            className="max-w-5xl mx-auto rounded-2xl sm:rounded-3xl lg:rounded-[3rem] p-4 sm:p-8 lg:p-8 relative overflow-hidden text-center"
           >
-            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-            
-            <div className="relative z-10">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-black text-white mb-4 sm:mb-6">Prêt à connecter l'Afrique ?</h2>
-              <p className="text-base sm:text-lg lg:text-xl text-white/90 mb-6 sm:mb-10 max-w-2xl mx-auto">Rejoignez une communauté de milliers d'utilisateurs et transformez la façon dont nous échangeons des biens.</p>
-              
-              <a href="/register" className="inline-flex items-center gap-2 sm:gap-3 bg-white text-orange-700 px-6 sm:px-8 lg:px-10 py-3 sm:py-4 lg:py-5 rounded-full font-bold text-base sm:text-lg lg:text-xl shadow-xl hover:bg-orange-50 hover:scale-105 transition-all">
-                Commencer maintenant <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6"/>
-              </a>
-            </div>
+          <div className="bg-[#111] dark:bg-zinc-900 rounded-[2rem] p-8 md:p-12 text-center relative overflow-hidden shadow-2xl">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20"></div>
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-900 via-amber-700 to-yellow-500"></div>          
+                    <div className="relative z-10 max-w-lg mx-auto space-y-6">
+                        <h3 className="text-2xl md:text-3xl font-black text-white">
+                        Prêt à connecter l'Afrique ?
+                        </h3>
+                        <p className="text-gray-400 text-sm md:text-base">
+                        Rejoignez une communauté de milliers d'utilisateurs et transformez la façon dont nous échangeons des biens.</p>
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                        <input 
+                            type="email" 
+                            placeholder="Email professionnel" 
+                            className="h-11 px-6 rounded-full bg-white/10 border border-white/20 text-white placeholder:text-gray-500 outline-none focus:border-[#13EC13] focus:bg-white/20 w-full text-sm transition-all"
+                        />
+                        <button className="h-11 px-8 rounded-full bg-orange-500 hover:bg-amber-500 text-black font-bold text-sm">
+                            S'inscrire
+                        </button>
+                        </div>
+                    </div>
+        </div>
           </motion.div>
         </section>
 
