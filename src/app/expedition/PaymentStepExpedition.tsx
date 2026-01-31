@@ -324,7 +324,8 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
           // 1. Appel Création API
           console.log("📤 POST /api/packages", payload);
           const response = await packageService.createPackage(payload);
-          
+          console.log("📥 Réponse API:", response);
+
           if (!response || !response.trackingNumber) throw new Error("Réponse API invalide (Pas de tracking)");
           
           const trackingNumber = response.trackingNumber;

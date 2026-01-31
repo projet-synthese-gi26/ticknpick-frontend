@@ -63,16 +63,24 @@ const RelayPointCard = ({ point, onManage, managerName }: { point: any, onManage
 
   return (
     <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-500 transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 overflow-hidden">
-      {/* Badge de statut flottant */}
+      {/* Badge de statut flottant - MODIFIÉ POUR SUPPORTER LE STATUT PENDING */}
       <div className="absolute top-24 right-4 z-10">
-        {point.is_active ? (
+        {point.status === 'PENDING_VERIFICATION' || point.status === 'PENDING_DOCUMENTS' ? (
+           <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1.5 shadow-sm">
+             <Loader2 className="w-3 h-3 animate-spin"/> En Attente
+           </span>
+        ) : point.status === 'VERIFICATION_FAILED' || point.status === 'REJECTED' ? (
+           <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200 flex items-center gap-1.5">
+             <X className="w-3 h-3"/> Refusé
+           </span>
+        ) : point.is_active || point.status === 'ACTIVE' ? (
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 shadow-sm">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
             Opérationnel
           </span>
         ) : (
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-            En pause
+            Inactif
           </span>
         )}
       </div>
@@ -293,50 +301,42 @@ export default function AgencyRelayPoints({
         (p.relay_point_locality && p.relay_point_locality.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    // 3. ACTION CREATE
+    // 3. ACTION CREATE (Mise à jour)
     const handleCreate = async () => {
-        if(!agencyId) {
-            toast.error("Impossible de créer: Agence ID manquant.");
-            return;
-        }
+        // Vérification basique
         if(!newPoint.relayPointName || !newPoint.address) return toast.error("Nom et Adresse requis");
 
-        const tId = toast.loading("Création du Point Relais...");
+        const tId = toast.loading("Soumission du Point Relais...");
 
         try {
-            // Mapping UI Form -> Backend Payload Struct
-            // Attention: 'address' devient 'relay_point_address', etc.
-            const payload: any = {
+            const payload = {
                 relayPointName: newPoint.relayPointName,
-                relay_point_address: newPoint.address,  // MAP CORRECT
-                relay_point_locality: newPoint.locality, // MAP CORRECT
-                
-                opening_hours: newPoint.openingHours,   // MAP CORRECT
-                storage_capacity: newPoint.storage_capacity,
-                
-                max_capacity: parseInt(newPoint.maxCapacity), // Int backend
-                current_package_count: 0,
-                
+                address: newPoint.address,         // Simplification noms de champs (Mapping auto par DTO backend)
+                locality: newPoint.locality,
+                openingHours: newPoint.openingHours,
+                storageCapacity: newPoint.storage_capacity,
+                maxCapacity: parseInt(newPoint.maxCapacity),
                 latitude: parseFloat(newPoint.latitude) || 0,
                 longitude: parseFloat(newPoint.longitude) || 0,
                 
-                is_active: true,
-                day_schedules: JSON.stringify({ default: newPoint.openingHours })
-                // createdAt / updatedAt sont gérés par le backend
+                // IMPORTANT: On ne met pas is_active à true. 
+                // C'est le backend qui doit le mettre à false/PENDING par défaut.
+                agencyId: agencyId // On lie à l'agence si présent
             };
 
-            // APPEL AVEC AGENCY ID
-            console.log(`📤 Envoi Création pour Agency ${agencyId}`, payload);
-            await relayPointService.createRelayPointForAgency(agencyId, payload);
+            console.log(`📤 Envoi pour validation:`, payload);
             
-            toast.success("Point Relais ajouté !", { id: tId });
+            // On appelle la méthode create du service mis à jour
+            await relayPointService.createRelayPoint(payload, profile.id);
+            
+            toast.success("Point soumis à validation !", { id: tId });
             setShowForm(false);
             
-            // Reload simple
-            const updatedList = await agencyService.getAgencyRelayPoints(agencyId);
+            // Reload list (Note: Le point ne s'affichera peut-être pas ou aura un badge 'En Attente')
+            const updatedList = await relayPointService.getAllRelayPoints(); // ou spécifique agence
             setPoints(updatedList);
             
-            // Reset
+            // Reset form...
             setNewPoint({ 
                 relayPointName: '', address: '', locality: '', 
                 openingHours: '08:00-18:00', maxCapacity: '100', 
@@ -345,7 +345,7 @@ export default function AgencyRelayPoints({
 
         } catch (e: any) {
             console.error(e);
-            toast.error(e.message || "Erreur lors de la création", { id: tId });
+            toast.error(e.message || "Erreur lors de la soumission", { id: tId });
         }
     };
 
@@ -469,7 +469,7 @@ export default function AgencyRelayPoints({
                     </div>
                 )}
 
-                                {/* MODAL CRÉATION */}
+                {/* MODAL CRÉATION */}
                 <AnimatePresence>
                     {showForm && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">

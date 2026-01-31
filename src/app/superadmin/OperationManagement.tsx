@@ -1,4 +1,3 @@
-// FICHIER : src/app/superadmin/OperationManagement.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -6,14 +5,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { 
     Package, Building, Search, Loader2, X, Eye, 
-    Map as MapIcon, List, ArrowRight, MapPin
+    Map as MapIcon, List, ArrowRight, MapPin,
+    CheckCircle,
+    Zap
 } from 'lucide-react';
 import { adminService, AdminPackage } from '@/services/adminService';
 import { relayPointService, RelayPoint } from '@/services/relayPointService';
 import 'leaflet/dist/leaflet.css';
+import { toast } from 'react-hot-toast';
 
 // --- CONFIGURATION LEAFLET SÉCURISÉE ---
-// On importe les composants Leaflet dynamiquement pour éviter le SSR
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
@@ -59,7 +60,6 @@ const StatusBadge = ({ status }: { status: string }) => {
 const RelayMap = ({ relays }: { relays: RelayPoint[] }) => {
     useEffect(() => {
         // Correctif pour les icônes Leaflet qui manquent en production
-        // On l'exécute uniquement côté client
         const fixLeafletIcons = async () => {
             const L = (await import('leaflet')).default;
             
@@ -79,9 +79,9 @@ const RelayMap = ({ relays }: { relays: RelayPoint[] }) => {
              <MapContainer center={[3.848, 11.502]} zoom={12} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
                 {relays.map(rp => (
-                    <Marker key={rp.id} position={[rp.latitude, rp.longitude]}>
+                    <Marker key={rp.id} position={[rp.latitude || 3.848, rp.longitude || 11.502]}>
                         <Popup>
-                            <strong>{rp.relayPointName}</strong><br/>
+                            <strong>{rp.relayPointName || "Point Relais"}</strong><br/>
                             {rp.relay_point_address || rp.address}
                         </Popup>
                     </Marker>
@@ -91,7 +91,7 @@ const RelayMap = ({ relays }: { relays: RelayPoint[] }) => {
     );
 };
 
-// GESTIONNAIRES DES COLIS ET POINTS RELAIS
+// GESTIONNAIRES DES COLIS
 const ShipmentsManager = () => {
     const [shipments, setShipments] = useState<AdminPackage[]>([]);
     const [filteredShipments, setFilteredShipments] = useState<AdminPackage[]>([]);
@@ -196,6 +196,111 @@ const ShipmentsManager = () => {
     );
 };
 
+// GESTIONNAIRE DE VALIDATION DES RELAIS
+const RelayValidationsManager = () => {
+    const [pendingPoints, setPendingPoints] = useState<RelayPoint[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const loadPending = async () => {
+        setLoading(true);
+        try {
+            const data = await relayPointService.getPendingRelayPoints();
+            setPendingPoints(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { loadPending(); }, []);
+
+    const handleApprove = async (id: string) => {
+        if(!confirm("Confirmer la validation de ce Point Relais ?")) return;
+        const tid = toast.loading("Validation en cours...");
+        try {
+            await relayPointService.approveRelayPoint(id);
+            toast.success("Point Relais activé !", {id: tid});
+            loadPending();
+        } catch(e) {
+            toast.error("Erreur technique", {id: tid});
+        }
+    };
+
+    const handleReject = async (id: string) => {
+        const reason = prompt("Motif du rejet :");
+        if(!reason) return;
+        
+        const tid = toast.loading("Rejet en cours...");
+        try {
+            await relayPointService.rejectRelayPoint(id, reason);
+            toast.error("Point Relais rejeté.", {id: tid});
+            loadPending();
+        } catch(e) {
+            toast.error("Erreur technique", {id: tid});
+        }
+    };
+
+    if(loading && pendingPoints.length === 0) return <div className="p-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500"/></div>;
+
+    if(pendingPoints.length === 0) return (
+        <div className="p-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+            <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3"/>
+            <h3 className="font-bold text-slate-700 dark:text-white">Aucune demande en attente</h3>
+            <p className="text-sm text-slate-500">Tout est à jour !</p>
+        </div>
+    );
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pendingPoints.map((rp) => (
+                <div key={rp.id} className="bg-white dark:bg-slate-800 rounded-xl border border-amber-200 dark:border-amber-900 shadow-lg overflow-hidden relative">
+                    <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">NOUVEAU</div>
+                    
+                    <div className="p-5">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
+                                <Building className="w-6 h-6 text-slate-500"/>
+                            </div>
+                            <div>
+                                {/* Sécurisation ici avec l'opérateur || "" */}
+                                <h4 className="font-bold text-lg text-slate-800 dark:text-white line-clamp-1">
+                                    {rp.relayPointName || "Nom non défini"}
+                                </h4>
+                                <p className="text-xs text-slate-500 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3"/> {rp.locality || 'Ville inconnue'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg mb-4">
+                            <p><strong>Adresse:</strong> {rp.address || rp.relay_point_address}</p>
+                            <p><strong>Capacité:</strong> {rp.maxCapacity} colis</p>
+                            <p><strong>Horaires:</strong> {rp.openingHours || "Non spécifié"}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <button 
+                                onClick={() => handleReject(rp.id)}
+                                className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-bold text-sm transition"
+                            >
+                                <X className="w-4 h-4"/> Rejeter
+                            </button>
+                            <button 
+                                onClick={() => handleApprove(rp.id)}
+                                className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-green-600 text-white hover:bg-green-700 font-bold text-sm shadow-md transition"
+                            >
+                                <CheckCircle className="w-4 h-4"/> Valider
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// GESTIONNAIRE POINTS RELAIS ACTIFS
 const RelayPointsManager = () => {
     const [relays, setRelays] = useState<RelayPoint[]>([]);
     const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
@@ -219,16 +324,20 @@ const RelayPointsManager = () => {
                      {relays.map(r => (
                          <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border dark:border-slate-700 shadow-sm hover:shadow-md transition">
                              <div className="flex justify-between mb-2">
-                                 <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white flex items-center justify-center font-bold text-xs">{r.relayPointName.charAt(0)}</div>
+                                 <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white flex items-center justify-center font-bold text-xs">
+                                     {/* Protection ici également contre la valeur null */}
+                                     {(r.relayPointName || "?").charAt(0).toUpperCase()}
+                                 </div>
                                  <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded font-bold uppercase">Actif</span>
                              </div>
-                             <h4 className="font-bold text-slate-900 dark:text-white truncate">{r.relayPointName}</h4>
+                             <h4 className="font-bold text-slate-900 dark:text-white truncate">
+                                 {r.relayPointName || "Sans Nom"}
+                             </h4>
                              <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><MapPin className="w-3 h-3"/> {r.address || r.relay_point_address}</p>
                          </div>
                      ))}
                 </div>
             ) : (
-                // On utilise ici notre composant wrapper pour la map qui contient le fix
                 <RelayMap relays={relays} />
             )}
         </div>
@@ -236,7 +345,7 @@ const RelayPointsManager = () => {
 };
 
 export default function OperationsManagement() {
-    const [activeTab, setActiveTab] = useState<'packages' | 'relays'>('packages');
+    const [activeTab, setActiveTab] = useState<'packages' | 'relays' | 'validations'>('packages');
 
     return (
         <div className="min-h-[600px] space-y-8 pb-20 animate-in fade-in duration-500">
@@ -245,13 +354,16 @@ export default function OperationsManagement() {
                  <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex">
                       <button onClick={() => setActiveTab('packages')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'packages' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}><Package className="w-4 h-4"/> Colis</button>
                       <button onClick={() => setActiveTab('relays')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'relays' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}><Building className="w-4 h-4"/> Relais</button>
+                      <button onClick={() => setActiveTab('validations')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'validations' ? 'bg-white shadow text-green-600' : 'text-gray-500'}`}><Zap className="w-4 h-4"/> Validations</button>
                  </div>
             </div>
-            <AnimatePresence mode="wait">
-                 <motion.div key={activeTab} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.2 }}>
-                    {activeTab === 'packages' ? <ShipmentsManager /> : <RelayPointsManager />}
-                 </motion.div>
-            </AnimatePresence>
+        <AnimatePresence mode="wait">
+            <motion.div key={activeTab} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.2 }}>
+                {activeTab === 'packages' && <ShipmentsManager />}
+                {activeTab === 'relays' && <RelayPointsManager />}
+                {activeTab === 'validations' && <RelayValidationsManager />}
+            </motion.div>
+        </AnimatePresence>
         </div>
     );
 }

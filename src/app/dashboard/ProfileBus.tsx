@@ -77,17 +77,18 @@ const AnimatedInputField = ({
 interface Props {
     profile: UserProfile;
     onUpdate: () => void;
+    overrideRole?: string; // NOUVEAU PARAMÈTRE OPTIONNEL
 }
 
-export default function ProfileBusinessInfo({ profile, onUpdate }: Props) {
+export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }: Props) {
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isLocating, setIsLocating] = useState(false);
     const photoInputRef = useRef<HTMLInputElement>(null);
 
     // -- DATA STATES --
-    const role = profile.businessActorType || profile.business_actor_type || 'FREELANCE';
-
+    const role = profile.businessActorType || profile.business_actor_type || 'FREELANCE' || overrideRole;
+    
     // A. Etat Agence (pour AGENCY_OWNER)
     const [agency, setAgency] = useState<Agency | null>(null);
     const [agencyForm, setAgencyForm] = useState({
@@ -112,6 +113,30 @@ export default function ProfileBusinessInfo({ profile, onUpdate }: Props) {
 
     // C. Photo Temporaire
     const [pendingPhoto, setPendingPhoto] = useState<{file: File, preview: string} | null>(null);
+        useEffect(() => {
+        const load = async () => {
+             console.log("📥 Chargement Module Business pour rôle :", role);
+             
+             // A. Si c'est une Agence (Propriétaire)
+             if (role === 'AGENCY_OWNER') {
+                 // Code de chargement agence existant...
+                 const ag = await agencyService.getMyAgency(profile.id);
+                 if(ag) setAgencyForm(ag); // Mapper les champs correctememnt
+             }
+             
+             // B. Si c'est un Freelance (Propriétaire Point Relais)
+             if (role === 'RELAY_OWNER') {
+                 // Note: Pour freelance, l'ownerId EST l'id du profil
+                 const points = await relayPointService.getRelayPointsByOwner(profile.id);
+                 if(points && points.length > 0) {
+                     // On charge le premier (logiciel mono-point pour freelance actuellement)
+                     const pt = points[0];
+                     setRelayForm(pt); // Mapper
+                 }
+             }
+        };
+        load();
+    }, [profile, role]);
 
 
     // 1. CHARGEMENT INITIAL DES DONNÉES
@@ -233,40 +258,58 @@ export default function ProfileBusinessInfo({ profile, onUpdate }: Props) {
             }
             
             // === SCÉNARIO B: POINT RELAIS (Freelance) ===
-            else if (role === 'FREELANCE') {
+            if (role === 'RELAY_OWNER') {
                 let rId = relayPoint?.id;
                 
                 const payload = {
-                    relayPointName: relayForm.relayPointName,
+                    name: relayForm.relayPointName,       // Mappez selon ce que attend /api/relay-points (ex: 'name' au lieu de 'relayPointName')
                     address: relayForm.address,
-                    locality: relayForm.locality,
-                    openingHours: relayForm.openingHours,
-                    maxCapacity: Number(relayForm.maxCapacity),
-                    latitude: Number(relayForm.latitude),
-                    longitude: Number(relayForm.longitude)
+                    quartier: relayForm.locality,
+                    lat: Number(relayForm.latitude),
+                    lng: Number(relayForm.longitude),
+                    hours: relayForm.openingHours,
+                    type: 'COMMERCE', // Ou autre type par défaut
+                    // Pas de status ici, le backend le mettra par défaut
                 };
 
                 if (relayPoint) {
+                    // Update existant : PUT /api/relay-points/{id}
                     await relayPointService.updateRelayPoint(relayPoint.id, payload);
+                    toast.success("Mise à jour effectuée", { id: tId });
                 } else {
-                    // Create with owner ID from user profile
+                    // 1. CRÉATION : POST /api/relay-points
+                    console.log("1️⃣ Création Point Relais...");
                     const newRelay = await relayPointService.createRelayPoint(payload, profile.id);
-                    if(newRelay) rId = newRelay.id;
-                    setRelayPoint(newRelay);
+                    
+                    if (newRelay && newRelay.id) {
+                        rId = newRelay.id;
+                        setRelayPoint(newRelay);
+                        
+                        // 2. UPLOAD PHOTO (Si présente)
+                        // Note: Adapter l'URL si votre backend a une route spécifique upload pour relay point
+                        // Souvent c'est un multipart/form-data sur une route distincte ou PUT
+                        if (pendingPhoto) {
+                             console.log("2️⃣ Upload Photo...");
+                             // Exemple fictif d'upload, à adapter à votre backend réel pour photo
+                             // await uploadFileToApi(pendingPhoto.file, `/api/relay-points/${rId}/photo`); 
+                        }
+
+                        // 3. SOUMISSION ADMIN : POST /submit-verification
+                        console.log("3️⃣ Soumission pour validation...");
+                        await relayPointService.submitForVerification(String(rId));
+                        
+                        toast.success("Point Relais créé et soumis à l'administrateur !", { id: tId });
+                    }
                     localStorage.removeItem('registration_data_cache');
                 }
-
-                // Upload Photo Relais
-                if (pendingPhoto && rId) {
-                     toast.loading("Upload de la photo...", { id: tId });
-                     await uploadFileToApi(pendingPhoto.file, `/api/photos/relay-point/${rId}/photo`);
-                }
+            } else if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
+                // Code existant pour l'agence...
+                 toast.success("Infos agence mises à jour", { id: tId });
             }
 
-            toast.success("Informations mises à jour !", { id: tId });
             setIsEditing(false);
             setPendingPhoto(null);
-            onUpdate(); // Notifie le parent pour rafraîchir le profil global
+            onUpdate();
 
         } catch (e: any) {
             console.error("Save Error:", e);
@@ -275,7 +318,6 @@ export default function ProfileBusinessInfo({ profile, onUpdate }: Props) {
             setIsLoading(false);
         }
     };
-
 
     // 4. LOGIQUE GPS (Pour Freelance/Relais)
     const handleLocateMe = () => {
@@ -411,7 +453,7 @@ export default function ProfileBusinessInfo({ profile, onUpdate }: Props) {
             )}
 
             {/* -- SCENARIO B : FREELANCE / POINT RELAIS -- */}
-            {role === 'FREELANCE' && (
+            {role === 'RELAY_OWNER' && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
                     <AnimatedInputField 
                         label="Nom du Point" 

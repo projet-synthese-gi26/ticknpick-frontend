@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import NotificationCenter from './ui/NotificationCenter';
 
 interface NavigationItem {
   href: string;
@@ -171,6 +172,7 @@ export default function NavbarHome() {
 
             {/* Desktop Navigation Dynamique */}
             <nav className="hidden lg:flex items-center gap-4 xl:gap-6">
+              <NotificationCenter />
               {navigationItems.slice(1, -1).map((item) => {
                 const IconComponent = item.icon;
                 return (

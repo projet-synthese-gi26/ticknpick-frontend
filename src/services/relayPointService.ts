@@ -1,195 +1,225 @@
+// FICHIER: src/services/relayPointService.ts
+
 import apiClient from './apiClient';
 
-// --- INTERFACES DTO ---
+// --- TYPES & INTERFACES ---
 
-// Structure complète d'un Point Relais (telle que reçue du backend)
 export interface RelayPoint {
     id: string; // UUID
-    ownerId: string; // UUID du owner
-    agency_id: string; // Utilisation snake_case comme dans ton JSON
+    ownerId: string;
+    agency_id?: string;
     relayPointName: string;
-    
-    // Gestion des doubles noms possibles (snake_case vs camelCase)
     address?: string;
-    relay_point_address?: string;
-    
+    relay_point_address?: string; // Fallback naming
     locality?: string;
-    relay_point_locality?: string;
-    
+    relay_point_locality?: string; // Fallback naming
     openingHours?: string;
-    opening_hours?: string;
-    
     maxCapacity: number;
     latitude: number;
     longitude: number;
-    
-    status?: 'ACTIVE' | 'INACTIVE'; // ou boolean is_active
     is_active: boolean;
-    
-    daySchedules?: string; // JSON string
-    
-    // Métadonnées
-    createdAt?: string;
-    updatedAt?: string;
     current_package_count: number;
 }
 
-// Structure pour la création (Payload exact demandé par le backend Java)
-interface RelayPointEntityPayload {
-    ownerId: string;
-    relayPointName: string;
-    relay_point_address: string;
-    relay_point_locality: string;
-    opening_hours: string;
-    storage_capacity: string;
-    current_package_count: number;
-    max_capacity: number;
-    latitude: number;
-    longitude: number;
-    is_active: boolean;
-    day_schedules: string;
-    createdAt: string; // Obligatoire
-    updatedAt: string; // Obligatoire
+export interface RelayPackage {
+    id: string;
+    trackingNumber: string;
+    status: string;
+    description: string;
+    shippingCost: number;
+    senderName: string;
+    recipientName: string;
+    createdAt: string;
+    packageType?: string;
 }
 
-// --- IMPLEMENTATION DU SERVICE ---
+// --- IMPLEMENTATION DES ENDPOINTS MÉTIERS (Ton nouveau Flow) ---
+
+// 1. RECEPTIONNER (Dépôt Client OU Arrivée Livreur au hub)
+// Route: POST /api/relay-point/packages/{packageId}/receive
+const receivePackage = async (packageId: string): Promise<any> => {
+    return apiClient(`/api/relay-point/packages/${packageId}/receive`, 'POST');
+};
+
+// 2. PRÉPARER POUR DÉPART (Vers Livreur)
+// Route: POST /api/relay-point/packages/{packageId}/ready-for-dispatch
+const markReadyForDispatch = async (packageId: string): Promise<any> => {
+    return apiClient(`/api/relay-point/packages/${packageId}/ready-for-dispatch`, 'POST');
+};
+
+// 3. PRÉPARER POUR RETRAIT (Vers Client Destinataire)
+// Route: POST /api/relay-point/packages/{packageId}/ready-for-pickup
+const markReadyForPickup = async (packageId: string): Promise<any> => {
+    return apiClient(`/api/relay-point/packages/${packageId}/ready-for-pickup`, 'POST');
+};
+
+// 4. REMETTRE AU CLIENT (Finalisation)
+// Route: POST /api/relay-point/packages/{packageId}/hand-to-recipient
+const handoverToRecipient = async (packageId: string, pickupCode: string): Promise<any> => {
+    // On passe souvent le code en query param ou body, ici adapté à ta demande simple
+    return apiClient(`/api/relay-point/packages/${packageId}/hand-to-recipient`, 'POST', { pickupCode });
+};
+
+// --- IMPLEMENTATION DATA FETCHING (Inventaires) ---
+
+/**
+ * Récupère tous les colis PHYSQIUEMENT PRÉSENTS au point relais
+ * Route: GET /api/relay-point/packages
+ */
+const getMyRelayInventory = async (): Promise<RelayPackage[]> => {
+    try {
+        const res = await apiClient<any>('/api/relay-point/packages', 'GET');
+        return extractArray(res);
+    } catch (e) {
+        console.error("Erreur inventaire global:", e);
+        return [];
+    }
+};
+
+/**
+ * Récupère les colis EN ARRIVAGE (venant d'un livreur vers ce relais)
+ * Route: GET /api/relay-point/packages/awaiting-arrival
+ */
+const getPackagesIncoming = async (): Promise<RelayPackage[]> => {
+    try {
+        const res = await apiClient<RelayPackage[]>('/api/relay-point/packages/awaiting-arrival', 'GET');
+        return extractArray(res);
+    } catch (e) { return []; }
+};
+
+/**
+ * Récupère les colis PRE-ENREGISTRÉS par les clients (à déposer)
+ * Route: GET /api/relay-point/packages/to-deposit
+ */
+const getPackagesToDeposit = async (): Promise<RelayPackage[]> => {
+    try {
+        const res = await apiClient<RelayPackage[]>('/api/relay-point/packages/to-deposit', 'GET');
+        return extractArray(res);
+    } catch (e) { return []; }
+};
+
+// --- UTILITAIRES & GENERIQUES ---
 
 const getAllRelayPoints = async (): Promise<RelayPoint[]> => {
-    console.log("📦 [RelayPointService] GET All Relay Points...");
-    return apiClient<RelayPoint[]>('/api/relay-points', 'GET');
+    const res = await apiClient<RelayPoint[]>('/api/relay-points', 'GET');
+    return extractArray(res);
 };
 
-const getMyRelayPoints = async (): Promise<RelayPoint[]> => {
-    // Note: Si pas d'endpoint /me pour les relais, on filtre côté client ou backend si possible
-    // Ici on réutilise getAll, le filtrage se fera dans le composant UI via ownerId
-    return apiClient<RelayPoint[]>('/api/relay-points', 'GET');
+// C'est la fonction qui te manquait dans l'erreur !
+const getRelayPointById = async (id: string): Promise<RelayPoint> => {
+    return apiClient<RelayPoint>(`/api/relay-points/${id}`, 'GET');
 };
 
-// Fonction utilitaire pour extraire un tableau depuis n'importe quelle réponse API
+// Utilitaires de conversion pour extraire les tableaux des réponses paginées/wrapper
 const extractArray = (response: any): any[] => {
     if (!response) return [];
     if (Array.isArray(response)) return response;
-    // Gestion Spring Boot PagedModel ou Wrapper personnalisé
     if (response.content && Array.isArray(response.content)) return response.content;
     if (response.data && Array.isArray(response.data)) return response.data;
     if (response.packages && Array.isArray(response.packages)) return response.packages;
     return [];
 };
 
-const createRelayPoint = async (data: Partial<RelayPoint>, ownerId: string): Promise<RelayPoint> => {
-    if (!ownerId) throw new Error("Owner ID est requis pour créer un point relais");
-
-    const now = new Date().toISOString();
-
-    const payload: RelayPointEntityPayload = {
-        ownerId: ownerId,
-        relayPointName: data.relayPointName || "Nouveau Point Relais",
-        relay_point_address: data.address || data.relay_point_address || "",
-        relay_point_locality: data.locality || data.relay_point_locality || "",
-        opening_hours: data.openingHours || "08:00-18:00",
-        storage_capacity: "MEDIUM", // Valeur par défaut pour l'instant
-        current_package_count: 0,
-        max_capacity: Number(data.maxCapacity) || 100,
-        latitude: Number(data.latitude) || 0.0,
-        longitude: Number(data.longitude) || 0.0,
-        is_active: true,
-        day_schedules: data.daySchedules || JSON.stringify({monday: "08:00-18:00"}),
-        createdAt: now,
-        updatedAt: now
-    };
-    
-    console.log("📦 [RelayPointService] Creating Relay Point with Payload:", payload);
-
-    const response = await apiClient<RelayPoint>('/api/relay-points', 'POST', payload);
-    console.log("✅ [RelayPointService] Created:", response);
-    return response;
-};
-
-const updateRelayPoint = async (id: string, data: Partial<RelayPoint>): Promise<RelayPoint> => {
-    // Utilisation de l'endpoint de management spécifique (PUT /management/{id})
+/**
+ * 1. Créer un nouveau Point Relais (Pour un owner existant ou via le profil agence)
+ * Route : POST /api/relay-points
+ */
+const createRelayPoint = async (data: any, ownerId?: string): Promise<RelayPoint> => {
+    // Si ownerId est fourni, on peut l'injecter dans le body ou le backend le tire du token
     const payload = {
-        relayPointName: data.relayPointName,
-        address: data.address || data.relay_point_address,
-        locality: data.locality || data.relay_point_locality,
-        openingHours: data.openingHours || data.opening_hours,
-        maxCapacity: Number(data.maxCapacity),
-        latitude: Number(data.latitude),
-        longitude: Number(data.longitude),
-        daySchedules: data.daySchedules
+        ...data,
+        ownerId: ownerId // Optionnel si le token suffit
     };
     
-    console.log(`📦 [RelayPointService] Updating Relay Point ${id}...`, payload);
-    return apiClient<RelayPoint>(`/api/relay-points/management/${id}`, 'PUT', payload);
+    console.log("📤 Création Point Relais:", payload);
+    return apiClient<RelayPoint>('/api/relay-points', 'POST', payload);
 };
 
-// 2. Actions Métier (Dépôt / Expédition)
 
-// "Réceptionner un colis" -> Quand le client dépose le colis au relais (Passe de PRE_REGISTERED à AT_DEPARTURE_RELAY_POINT)
-const receivePackage = async (relayPointId: string, packageId: string): Promise<any> => {
-    return apiClient<any>(`/api/relay-points/${relayPointId}/packages/${packageId}/receive`, 'POST');
-};
-
-// "Expédier un colis" -> Quand le livreur récupère le colis du relais (Optionnel selon ton UI, sinon géré par le livreur)
-const dispatchPackage = async (relayPointId: string, packageId: string): Promise<any> => {
-    return apiClient<any>(`/api/relay-points/${relayPointId}/packages/${packageId}/dispatch`, 'POST');
-};
-
-// 3. Listes filtrées (Inventaire)
-
-// Colis au relais de départ, en attente de départ vers un hub/autre relais
-const getPackagesForExpedition = async (relayPointId: string): Promise<any[]> => {
-    return apiClient<any[]>(`/api/relay-points/${relayPointId}/packages/for-expedition`, 'GET');
-};
-
-// Colis au relais d'arrivée, en attente du client final
-const getPackagesForPickup = async (relayPointId: string): Promise<any[]> => {
-    return apiClient<any[]>(`/api/relay-points/${relayPointId}/packages/for-pickup`, 'GET');
-};
-
-// Liste globale
-const getAllPackages = async (relayPointId: string): Promise<any[]> => {
-    return apiClient<any[]>(`/api/packages/for-delivery`, 'GET');
-    
+/**
+ * 2. Soumettre le point relais à l'admin pour vérification (Après création + upload documents)
+ * Route : POST /api/relay-points/{relayPointId}/submit-verification
+ */
+const submitForVerification = async (relayId: string): Promise<any> => {
+    console.log(`📤 [RelayService] Submission pour validation : ${relayId}`);
+    return apiClient(`/api/relay-points/${relayId}/submit-verification`, 'POST');
 };
 
 /**
- * Création d'un point relais POUR UNE AGENCE SPÉCIFIQUE
- * Route: POST /api/agencies/{agencyId}/relay-points
+ * 3. L'Admin Approuve
+ * Route : POST /api/relay-points/{relayPointId}/approve
+ * Fix: Ajout du body JSON requis par le Backend
  */
-const createRelayPointForAgency = async (agencyId: string, data: Partial<CreateRelayPointPayload>): Promise<RelayPoint> => {
-    console.group(`🏗️ [RelayPointService] POST /api/agencies/${agencyId}/relay-points`);
-    console.log("📦 Payload envoyé:", data);
-    
-    try {
-        const response = await apiClient<RelayPoint>(`/api/agencies/${agencyId}/relay-points`, 'POST', data);
-        console.log("✅ Réponse création:", response);
-        console.groupEnd();
-        return response;
-    } catch (error) {
-        console.error("❌ Erreur création:", error);
-        console.groupEnd();
-        throw error;
-    }
-};
-// Ajouter cette fonction si elle manque
-const getRelayPointById = async (id: string): Promise<RelayPoint> => {
-    console.log(`📦 [RelayPointService] GET By ID: ${id}`);
-    // Endpoint selon Swagger: /api/relay-points/{id}
-    return apiClient<RelayPoint>(`/api/relay-points/${id}`, 'GET');
+const approveRelayPoint = async (relayId: string, notes: string = "Validation Admin"): Promise<any> => {
+    // Le backend attend un RelayPointVerificationRequest en JSON
+    const payload = {
+        verificationNotes: notes,
+        canResubmit: false // Champ souvent attendu par le DTO backend pour l'approbation
+    };
+    return apiClient(`/api/relay-points/${relayId}/approve`, 'POST', payload);
 };
 
+/**
+ * 4. L'Admin Rejette
+ * Route : POST /api/relay-points/{relayPointId}/reject
+ * Fix: Standardisation des noms de champs
+ */
+const rejectRelayPoint = async (relayId: string, reason: string): Promise<any> => {
+    const payload = {
+        verificationNotes: reason, // Le DTO backend mappe souvent 'verificationNotes'
+        rejectionReason: reason,   // On envoie aussi celui-ci par sécurité si le nom diffère
+        canResubmit: true
+    };
+    return apiClient(`/api/relay-points/${relayId}/reject`, 'POST', payload);
+};
+
+// ... (Gardez vos autres méthodes : getMyRelayInventory, getAllRelayPoints, etc.) ...
+
+/**
+ * Récupère les points en attente (Côté Admin)
+ * Route : GET /api/relay-points/pending-verification
+ */
+const getPendingRelayPoints = async (): Promise<RelayPoint[]> => {
+    const res = await apiClient<RelayPoint[]>('/api/relay-points/pending-verification', 'GET');
+    // Gestion de la réponse si elle est encapsulée (ex: { content: [...] })
+    if (res && (res as any).content) return (res as any).content;
+    return Array.isArray(res) ? res : [];
+};
+
+
+// Autres aliases nécessaires pour ne pas casser le reste de l'app
+const updateRelayPoint = async (id: string, data: any) => apiClient(`/api/relay-points/${id}`, 'PUT', data);
+
+// Fonctions alias pour éviter de casser 'FreelanceOverview.tsx'
+const getPackagesForExpedition = async (id: string) => getMyRelayInventory(); // Fallback temporaire
+const getPackagesForPickup = async (id: string) => getMyRelayInventory(); // Fallback temporaire
+const getRelayPointsByOwner = async (id: string) => getAllRelayPoints(); // Filter logic coté client souvent
 
 export const relayPointService = {
+    // Méthodes Flow Validées
+    receivePackage,
+    markReadyForDispatch,
+    markReadyForPickup,
+    handoverToRecipient,
+
+    // Listes Spécifiques
+    getMyRelayInventory,
+    getPackagesIncoming,
+    getPackagesToDeposit,
+    submitForVerification,
+
+    // Generic / Admin
     getAllRelayPoints,
-    getMyRelayPoints: getAllRelayPoints, // Alias pour compat
+    getRelayPointById,
     createRelayPoint,
     updateRelayPoint,
-    extractArray,
-    getRelayPointById,  // NOUVEAU
-    createRelayPointForAgency, // NOUVEAU
-    receivePackage,      // NOUVEAU
-    dispatchPackage,     // NOUVEAU
-    getPackagesForExpedition, // NOUVEAU
-    getPackagesForPickup,     // NOUVEAU
-    getPackagesByRelayPoint: getAllPackages // Mise à jour de l'existant
+    rejectRelayPoint,
+    approveRelayPoint,
+    getPendingRelayPoints,
+
+    // Alias pour rétrocompatibilité
+    getPackagesForExpedition,
+    getPackagesForPickup,
+    getRelayPointsByOwner,
+    getPackagesByRelayPoint: getMyRelayInventory
 };

@@ -147,8 +147,8 @@ export default function PackageSidebar({
                             {actionLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/> : (
                                 <>
                                    {isAvailable && <span className="flex items-center gap-2">ACCEPTER LA COURSE <ArrowRight className="w-5 h-5"/></span>}
-                                   {isAssigned && <span className="flex items-center gap-2">VALIDER LE RETRAIT <Box className="w-5 h-5"/></span>}
-                                   {isTransit && <span className="flex items-center gap-2">CONFIRMER LIVRAISON <Check className="w-5 h-5"/></span>}
+                                   {isAssigned && <span className="flex items-center gap-2">Récupérer le colis <Box className="w-5 h-5"/></span>}
+                                   {isTransit && <span className="flex items-center gap-2">Déposer le colis <Check className="w-5 h-5"/></span>}
                                 </>
                             )}
                          </button>

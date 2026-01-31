@@ -3,11 +3,16 @@
 
 import React, { useState, useRef, useEffect, Dispatch, SetStateAction  } from 'react';
 import { 
-  User, Mail, Phone, Home, CreditCard, FileText, IdCard, Save, Loader2, Camera, Upload, CheckCircle, Edit, X, CheckSquare
+  User, Mail, Phone, Home, CreditCard, FileText, IdCard, Save, Loader2, Camera, Upload, CheckCircle, Edit, X, CheckSquare,
+  UserCheck,
+  Shield,
+  Building
 } from 'lucide-react';
 import { UserProfile } from './page';
 import toast from 'react-hot-toast'; 
 import { userService } from '@/services/userservice'; 
+import { EmployerInfo } from './Profil';
+import { motion } from 'framer-motion';
 
 // --- Styles communs ---
 // Note : Utilisation des classes Tailwind pour Light/Dark mode
@@ -119,15 +124,18 @@ interface Props {
     onUpdate: () => void;
     isEditing: boolean;
     setIsEditing: (val: boolean) => void;
+    employerInfo?: EmployerInfo | null; // NOUVEAU
+    isLoadingExtras?: boolean; // NOUVEAU
 }
 
-export default function ProfilePersonalInfo({ formData, setFormData, onUpdate, isEditing, setIsEditing }: Props) {
+export default function ProfilePersonalInfo({ formData, setFormData, onUpdate, isEditing, setIsEditing, employerInfo, isLoadingExtras }: Props) {
     const [isLoading, setIsLoading] = useState(false);
     
     // Stockage temporaire des fichiers (File objects) avant envoi. 
     // La clé correspond à un identifiant logique qu'on mappera vers l'URL de l'API.
     const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
-
+        // Gestion édition locale pour être autonome
+    const [isEditingLocal, setIsEditingLocal] = useState(false); 
     // --- 1. Gestion des champs Texte ---
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -280,7 +288,7 @@ export default function ProfilePersonalInfo({ formData, setFormData, onUpdate, i
     const isPro = ['FREELANCE', 'AGENCY', 'LIVREUR', 'BUSINESS'].includes(formData.account_type);
 
     return (
-        <div className="bg-white/90 dark:bg-gray-800/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 overflow-hidden transition-colors duration-300">
+        <div className="bg-transparent backdrop-blur-md rounded-3xl shadow-xl border border-white/20 dark:border-gray-700 overflow-hidden transition-colors duration-300">
              
              {/* Header Coloré avec Avatar Flottant */}
              <div className="h-40 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 relative">
@@ -337,54 +345,74 @@ export default function ProfilePersonalInfo({ formData, setFormData, onUpdate, i
 
                   {/* Grille du Formulaire */}
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-12 gap-y-10">
-                       {/* COLONNE 1: INFOS TEXTE */}
+                       {/* COL 1: INFOS & (Nouveau) INFOS EMPLOYEUR */}
                        <div className="space-y-8">
+                           {/* Info Identité */}
                            <div>
                                <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-gray-700 mb-5">
                                    <User className="w-5 h-5 text-orange-500"/>
-                                   <h3 className="text-lg font-bold text-gray-800 dark:text-white uppercase tracking-wide text-sm">Identité</h3>
+                                   <h3 className="text-lg font-bold text-gray-800 dark:text-white uppercase">Identité</h3>
                                </div>
                                <div className="space-y-4">
-                                   <AnimatedInputField 
-                                       label="Nom Complet" name="manager_name" icon={User} 
-                                       value={formData.manager_name || formData.name} onChange={handleChange} readOnly={!isEditing} 
-                                   />
-                                   <AnimatedInputField 
-                                       label="Email" name="email" icon={Mail} 
-                                       value={formData.email} onChange={handleChange} readOnly={true} 
-                                   />
+                                   <AnimatedInputField label="Nom Complet" name="manager_name" icon={User} value={formData.manager_name || formData.name} onChange={handleChange} readOnly={!isEditingLocal} />
+                                   <AnimatedInputField label="Email" name="email" icon={Mail} value={formData.email} onChange={handleChange} readOnly={true} />
                                </div>
                            </div>
 
+                           {/* COORDONNÉES */}
                            <div>
-                               <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-gray-700 mb-5">
-                                   <Phone className="w-5 h-5 text-orange-500"/>
-                                   <h3 className="text-lg font-bold text-gray-800 dark:text-white uppercase tracking-wide text-sm">Coordonnées</h3>
-                               </div>
                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                   <AnimatedInputField 
-                                       label="Téléphone" name="phone_number" icon={Phone}
-                                       value={formData.phone_number} onChange={handleChange} readOnly={!isEditing} 
-                                   />
-                                   <AnimatedInputField 
-                                       label="Adresse" name="home_address" icon={Home}
-                                       value={formData.home_address} onChange={handleChange} readOnly={!isEditing} 
-                                   />
+                                   <AnimatedInputField label="Téléphone" name="phone_number" icon={Phone} value={formData.phone_number} onChange={handleChange} readOnly={!isEditingLocal} />
+                                   <AnimatedInputField label="Adresse" name="home_address" icon={Home} value={formData.home_address} onChange={handleChange} readOnly={!isEditingLocal} />
                                </div>
-                               
                            </div>
+                            
                             <div className="grid grid-cols-2 gap-4">
-                                   <AnimatedInputField 
-                                       label="Numéro CNI" name="id_card_number" icon={CreditCard}
-                                       value={formData.id_card_number} onChange={handleChange} readOnly={!isEditing} 
-                                   />
-                                   {isPro && (
-                                       <AnimatedInputField 
-                                           label="Numéro NIU" name="niu" icon={FileText}
-                                           value={formData.niu} onChange={handleChange} readOnly={!isEditing} 
-                                       />
-                                   )}
-                               </div>
+                                   <AnimatedInputField label="Numéro CNI" name="id_card_number" icon={CreditCard} value={formData.id_card_number} onChange={handleChange} readOnly={!isEditingLocal} />
+                                   {isPro && <AnimatedInputField label="NIU" name="niu" icon={FileText} value={formData.niu} onChange={handleChange} readOnly={!isEditingLocal} />}
+                            </div>
+
+                           {/* === SECTION SPÉCIFIQUE EMPLOYEUR (Lecture Seule) === */}
+                           {/* Affiché uniquement si les données sont fournies par le parent */}
+                           {employerInfo && (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6">
+                                     <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-gray-700 mb-5">
+                                         <Building className="w-5 h-5 text-blue-500"/>
+                                         <h3 className="text-lg font-bold text-slate-800 dark:text-white uppercase">Affiliation Professionnelle</h3>
+                                     </div>
+                                     
+                                     <div className="bg-blue-50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-100 dark:border-blue-900/50">
+                                         {isLoadingExtras ? (
+                                              <div className="flex items-center gap-2 text-blue-600"><Loader2 className="w-4 h-4 animate-spin"/> Chargement des données agence...</div>
+                                         ) : (
+                                              <div className="space-y-4">
+                                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                       <div>
+                                                           <label className="text-xs font-bold text-blue-400 uppercase">Agence Employeur</label>
+                                                           <p className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                                               <Building className="w-4 h-4"/> {employerInfo.agencyName}
+                                                           </p>
+                                                           <p className="text-xs text-slate-500">{employerInfo.agencyAddress}</p>
+                                                       </div>
+                                                       <div>
+                                                           <label className="text-xs font-bold text-blue-400 uppercase">Propriétaire / Manager</label>
+                                                           <p className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                                               <Shield className="w-4 h-4"/> {employerInfo.ownerName}
+                                                           </p>
+                                                           <p className="text-xs text-slate-500">{employerInfo.ownerPhone || 'Numéro masqué'}</p>
+                                                       </div>
+                                                   </div>
+                                                   
+                                                   <div className="flex items-center gap-2 text-xs text-blue-600 bg-white/50 p-2 rounded-lg">
+                                                       <UserCheck className="w-4 h-4"/>
+                                                       Compte vérifié et lié à cette agence.
+                                                   </div>
+                                              </div>
+                                         )}
+                                     </div>
+                                </motion.div>
+                           )}
+
                        </div>
 
                        {/* COLONNE 2: DOCUMENTS */}

@@ -365,7 +365,7 @@ const Header: React.FC<HeaderProps> = ({ user, setIsSidebarOpen }: any) => {
 
   return (
     <>
-      <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/95 dark:bg-gray-900/95 border-b border-orange-100 dark:border-gray-800 z-30 h-20 shadow-sm backdrop-blur-md">
+      <header className="fixed top-0 right-0 left-0 lg:left-72 bg-white/95 dark:bg-gray-900/95 border-b border-orange-100 dark:border-gray-800 z-30 h-24 shadow-sm backdrop-blur-md">
         <div className="px-6 h-full">
           <div className="flex justify-between items-center h-full">
             {/* Left Section - Greeting & Menu */}
