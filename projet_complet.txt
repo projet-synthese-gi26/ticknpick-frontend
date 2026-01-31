@@ -238,12 +238,6 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
          alert("Merci de renseigner le Nom, CNI et Signature du retirant.");
          return;
     }
-
-    // Validation Paiement
-    if (!packageInfo.is_paid_at_departure && Number(amountPaid) < packageInfo.shippingCost) {
-         alert(`Le paiement est incomplet. Montant dû : ${packageInfo.shippingCost} FCFA.`);
-         return;
-    }
     
     setIsConfirming(true);
     
@@ -251,7 +245,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
         console.log(`📤 [Retrait] Envoi validation pour ${packageInfo.trackingNumber}...`);
         
         // Endpoint: PUT /api/packages/{id}/deliver
-        await packageService.markAsDelivered(packageInfo.id);
+        await packageService.handToRecipient(packageInfo.id);
         
         // Génération Bordereau PDF
         await generateWithdrawalPDF(packageInfo, retirantInfo);
@@ -13467,6 +13461,28 @@ export default function DeliveriesPage() {
     const countTransit = packages.filter(p => p.currentStatus === 'IN_TRANSIT').length;
     const countDone = packages.filter(p => p.currentStatus.includes('DELIVERED')).length;
 
+    // Dans le composant DeliveriesPage ou le composant parent du Sidebar
+    const handleDeliverRelay = async (pkg: any) => {
+        try {
+            console.log(`🚚 [ÉTAPE 6] Livreur dépose au relais : ${pkg.id}`);
+            await delivererService.deliverToRelay(pkg.id);
+            toast.success("Colis déposé au relais destination !");
+            reloadData();
+        } catch(e:any) {
+            toast.error("Erreur dépot relais");
+        }
+    };
+
+    const handlePickupRelay = async (pkg: any) => {
+        try {
+            console.log(`🚚 [ÉTAPE 5] Livreur récupère : ${pkg.id}`);
+            await delivererService.pickupFromRelay(pkg.id);
+            toast.success("Colis récupéré !");
+            reloadData();
+        } catch(e:any) {
+            toast.error("Erreur récupération");
+        }
+    };
 
     // --- RENDU PRINCIPAL ---
     
@@ -15547,6 +15563,12 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
     const [isLoading, setIsLoading] = useState(false);
     const [isLocating, setIsLocating] = useState(false);
     const photoInputRef = useRef<HTMLInputElement>(null);
+        // Etats Relais
+    const [form, setForm] = useState({
+        relayPointName: '', address: '', locality: '', 
+        openingHours: '08:00-18:00', maxCapacity: 100, 
+        latitude: 0, longitude: 0
+    });
 
     // -- DATA STATES --
     const role = profile.businessActorType || profile.business_actor_type || 'FREELANCE' || overrideRole;
@@ -15572,6 +15594,8 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
         latitude: 0,
         longitude: 0
     });
+
+    const [photo, setPhoto] = useState<{file: File, preview: string} | null>(null);
 
     // C. Photo Temporaire
     const [pendingPhoto, setPendingPhoto] = useState<{file: File, preview: string} | null>(null);
@@ -15600,75 +15624,126 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
         load();
     }, [profile, role]);
 
-
-    // 1. CHARGEMENT INITIAL DES DONNÉES
+    
+    // 1. CHARGEMENT
     useEffect(() => {
-        const fetchBusinessData = async () => {
-            console.log("📥 Loading Business Profile for:", role);
-            
-            // CAS 1: AGENCY
-            if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
-                try {
-                    const ag = await agencyService.getMyAgency(profile.id);
-                    if (ag) {
-                        setAgency(ag);
-                        setAgencyForm({
-                            commercialName: ag.commercial_name || '',
-                            address: ag.address || '',
-                            addressLocality: ag.address_locality || '',
-                            registration: ag.business_registration || '',
-                            openingHours: ag.opening_hours || '08:00-18:00'
-                        });
-                        
-                        // Récupération du cache inscription si existe (et pas encore d'agence en DB)
-                        // N/A ici car l'agence existe
-                    } else {
-                        // Check localstorage si inscription récente
-                        const cached = localStorage.getItem('pending_agency_creation');
-                        if (cached) {
-                            const c = JSON.parse(cached);
-                            setAgencyForm(prev => ({ ...prev, ...c }));
-                        }
-                    }
-                } catch (e) { console.error("Agency Load Error", e); }
-            }
+        const init = async () => {
+             if (role !== 'RELAY_OWNER' && role !== 'FREELANCE') return;
+             setIsLoading(true);
 
-            // CAS 2: RELAY POINT (Freelance)
-            if (role === 'FREELANCE') {
-                try {
-                    const allPoints = await relayPointService.getAllRelayPoints();
-                    const myPoint = allPoints.find(p => String(p.ownerId) === String(profile.id));
-                    
-                    if (myPoint) {
-                        setRelayPoint(myPoint);
-                        setRelayForm({
-                            relayPointName: myPoint.relayPointName || '',
-                            address: myPoint.address || myPoint.relay_point_address || '',
-                            locality: myPoint.locality || myPoint.relay_point_locality || '',
-                            openingHours: myPoint.openingHours || '08:00-18:00',
-                            maxCapacity: myPoint.maxCapacity || 50,
-                            latitude: myPoint.latitude || 0,
-                            longitude: myPoint.longitude || 0
-                        });
-                    } else {
-                        // Cache registration ?
-                         const cached = localStorage.getItem('registration_data_cache');
-                         if(cached) {
-                             const c = JSON.parse(cached);
-                             setRelayForm(prev => ({
-                                 ...prev,
-                                 relayPointName: c.relay_point_name || '',
-                                 address: c.relay_point_address || '',
-                                 locality: c.relay_point_locality || '',
-                             }));
-                         }
-                    }
-                } catch (e) { console.error("Relay Load Error", e); }
-            }
+             try {
+                 // A. Essayer de charger depuis l'API (Mode EDITION d'un existant)
+                 const points = await relayPointService.getAllRelayPoints();
+                 // Note: L'ownerId dans les objets BDD est parfois un string, on compare de manière sûre
+                 const myPoint = points.find(p => String(p.ownerId) === String(profile.id));
+
+                 if (myPoint) {
+                     console.log("✅ Point Relais trouvé en base.");
+                     setRelayPoint(myPoint);
+                     setForm({
+                         relayPointName: myPoint.relayPointName,
+                         address: myPoint.address || myPoint.relay_point_address || '',
+                         locality: myPoint.locality || myPoint.relay_point_locality || '',
+                         openingHours: myPoint.openingHours || '08:00-18:00',
+                         maxCapacity: myPoint.maxCapacity,
+                         latitude: myPoint.latitude,
+                         longitude: myPoint.longitude
+                     });
+                     // Ne PAS mettre en mode édition automatiquement si données BDD trouvées
+                     setIsEditing(false);
+                 } 
+                 else {
+                     // B. Si rien en base, chercher le cache (Mode CREATION à partir des données d'inscription)
+                     const cached = localStorage.getItem('registration_data_cache');
+                     if (cached) {
+                         const c = JSON.parse(cached);
+                         console.log("📥 Pré-remplissage depuis LocalStorage :", c);
+                         setForm({
+                             relayPointName: c.relay_point_name || '',
+                             address: c.relay_point_address || '',
+                             locality: c.relay_point_locality || '',
+                             openingHours: c.opening_hours || '08:00-18:00',
+                             maxCapacity: c.storage_capacity === 'Grand' ? 500 : (c.storage_capacity === 'Moyen' ? 200 : 50),
+                             latitude: 0, longitude: 0
+                         });
+                         // Activer l'édition pour que l'utilisateur valide/sauvegarde
+                         setIsEditing(true);
+                     }
+                 }
+             } catch(e) { console.error(e); } 
+             finally { setIsLoading(false); }
         };
+        init();
+    }, [profile, role]);
 
-        fetchBusinessData();
-    }, [profile.id, role]);
+    const handleSave = async () => {
+        setIsLoading(true);
+        const tId = toast.loading("Traitement en cours...");
+
+        try {
+            // Payload
+            const payload = {
+                relayPointName: form.relayPointName, // Nom correspondant au DTO Java
+                address: form.address,
+                locality: form.locality,
+                openingHours: form.openingHours,
+                maxCapacity: form.maxCapacity,
+                latitude: form.latitude, 
+                longitude: form.longitude
+            };
+
+            let currentId = relayPoint?.id;
+
+            // A. MISE À JOUR OU CRÉATION
+            if (currentId) {
+                // PUT (Mise à jour)
+                await relayPointService.updateRelayPoint(currentId, payload);
+                toast.success("Mise à jour réussie", { id: tId });
+            } else {
+                // POST (Création) - C'est ici qu'on utilise le pre-remplissage
+                console.log("🚀 Création nouveau point relais...", payload);
+                const newRp = await relayPointService.createRelayPoint(payload, profile.id);
+                
+                if (newRp && newRp.id) {
+                    currentId = newRp.id;
+                    setRelayPoint(newRp); // Mise à jour de l'état local pour passer en mode 'existant'
+                    toast.success("Point Relais créé !", { id: tId });
+                    localStorage.removeItem('registration_data_cache'); // Nettoyage cache
+                } else {
+                    throw new Error("Erreur création : ID manquant");
+                }
+            }
+
+            // B. PHOTO
+            if (photo && currentId) {
+                toast.loading("Upload photo...", { id: tId });
+                await relayPointService.uploadRelayPhoto(currentId, photo.file);
+            }
+
+            // C. SOUMISSION ADMIN AUTOMATIQUE
+            // Si le point vient d'être créé ou est encore en brouillon
+            if (currentId && (!relayPoint || ['DRAFT', 'PENDING_DOCUMENTS'].includes(relayPoint.status))) {
+                toast.loading("Soumission admin...", { id: tId });
+                await relayPointService.submitForVerification(currentId);
+                toast.success("Dossier soumis !", { id: tId });
+                
+                // Rafraichir les données pour avoir le nouveau statut (PENDING_VERIFICATION)
+                const updated = await relayPointService.getRelayPointById(currentId);
+                setRelayPoint(updated);
+            }
+
+            setIsEditing(false);
+            setPhoto(null);
+            onUpdate();
+
+        } catch (e: any) {
+            console.error(e);
+            toast.error(e.message || "Erreur sauvegarde", { id: tId });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
 
 
     // 2. GESTION FICHIERS
@@ -15680,104 +15755,6 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
                 preview: URL.createObjectURL(file)
             });
             toast.success("Photo prête à l'envoi");
-        }
-    };
-
-
-    // 3. SAUVEGARDE GLOBALE
-    const handleSave = async () => {
-        setIsLoading(true);
-        const tId = toast.loading("Enregistrement en cours...");
-
-        try {
-            // === SCÉNARIO A: AGENCE ===
-            if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
-                let agenceId = agency?.id;
-
-                const payload = {
-                    commercialName: agencyForm.commercialName,
-                    address: agencyForm.address,
-                    addressLocality: agencyForm.addressLocality,
-                    businessRegistration: agencyForm.registration,
-                    openingHours: agencyForm.openingHours,
-                    employeeCount: agency?.employee_count || 1
-                };
-
-                if (agency) {
-                    await agencyService.updateAgency(agency.id, payload);
-                } else {
-                    const newAgency = await agencyService.createAgency(payload);
-                    if(newAgency) agenceId = newAgency.id;
-                    setAgency(newAgency); // Update local state to avoid "create" again
-                    localStorage.removeItem('pending_agency_creation'); // Cleanup cache
-                }
-
-                // Upload Photo Agence
-                if (pendingPhoto && agenceId) {
-                     toast.loading("Upload de la photo...", { id: tId });
-                     await uploadFileToApi(pendingPhoto.file, `/api/photos/agency/${agenceId}/photo`);
-                }
-            }
-            
-            // === SCÉNARIO B: POINT RELAIS (Freelance) ===
-            if (role === 'RELAY_OWNER') {
-                let rId = relayPoint?.id;
-                
-                const payload = {
-                    name: relayForm.relayPointName,       // Mappez selon ce que attend /api/relay-points (ex: 'name' au lieu de 'relayPointName')
-                    address: relayForm.address,
-                    quartier: relayForm.locality,
-                    lat: Number(relayForm.latitude),
-                    lng: Number(relayForm.longitude),
-                    hours: relayForm.openingHours,
-                    type: 'COMMERCE', // Ou autre type par défaut
-                    // Pas de status ici, le backend le mettra par défaut
-                };
-
-                if (relayPoint) {
-                    // Update existant : PUT /api/relay-points/{id}
-                    await relayPointService.updateRelayPoint(relayPoint.id, payload);
-                    toast.success("Mise à jour effectuée", { id: tId });
-                } else {
-                    // 1. CRÉATION : POST /api/relay-points
-                    console.log("1️⃣ Création Point Relais...");
-                    const newRelay = await relayPointService.createRelayPoint(payload, profile.id);
-                    
-                    if (newRelay && newRelay.id) {
-                        rId = newRelay.id;
-                        setRelayPoint(newRelay);
-                        
-                        // 2. UPLOAD PHOTO (Si présente)
-                        // Note: Adapter l'URL si votre backend a une route spécifique upload pour relay point
-                        // Souvent c'est un multipart/form-data sur une route distincte ou PUT
-                        if (pendingPhoto) {
-                             console.log("2️⃣ Upload Photo...");
-                             // Exemple fictif d'upload, à adapter à votre backend réel pour photo
-                             // await uploadFileToApi(pendingPhoto.file, `/api/relay-points/${rId}/photo`); 
-                        }
-
-                        // 3. SOUMISSION ADMIN : POST /submit-verification
-                        console.log("3️⃣ Soumission pour validation...");
-                        await relayPointService.submitForVerification(String(rId));
-                        
-                        toast.success("Point Relais créé et soumis à l'administrateur !", { id: tId });
-                    }
-                    localStorage.removeItem('registration_data_cache');
-                }
-            } else if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
-                // Code existant pour l'agence...
-                 toast.success("Infos agence mises à jour", { id: tId });
-            }
-
-            setIsEditing(false);
-            setPendingPhoto(null);
-            onUpdate();
-
-        } catch (e: any) {
-            console.error("Save Error:", e);
-            toast.error(e.message || "Erreur de sauvegarde", { id: tId });
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -15896,7 +15873,7 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
                         readOnly={!isEditing} 
                     />
                     <AnimatedInputField 
-                        label="Ville / Quartier" 
+                        label="Lieu-dit de l'adresse" 
                         name="addressLocality" 
                         icon={Globe} 
                         value={agencyForm.addressLocality} 
@@ -15944,7 +15921,7 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
                             readOnly={!isEditing} 
                         />
                          <AnimatedInputField 
-                            label="Quartier / Repère" 
+                            label="Lieu-dit de l'adresse" 
                             name="locality" 
                             icon={Globe} 
                             value={relayForm.locality} 
@@ -16560,6 +16537,7 @@ interface PackageSidebarProps {
     onAssign?: () => void;
     onPickup?: () => void;
     onDeliver?: () => void;
+    onDeliverRelay?: () => void;
     
     // Config boutons
     actionLoading?: boolean;
@@ -16569,7 +16547,7 @@ interface PackageSidebarProps {
 
 export default function PackageSidebar({ 
     pkg, isOpen, onClose, 
-    onAssign, onPickup, onDeliver,
+    onAssign, onPickup, onDeliver, onDeliverRelay,
     actionLoading, actionLabel, showAction 
 }: PackageSidebarProps) {
     
@@ -16578,6 +16556,8 @@ export default function PackageSidebar({
     // Détermination de l'action par défaut
     const isAvailable = pkg.currentStatus === 'FOR_PICKUP';
     const isAssigned = pkg.currentStatus === 'ASSIGNED_TO_DELIVERER';
+        // Status Logic
+    const isReadyToPickup = pkg.currentStatus === 'ASSIGNED_TO_DELIVERER' || pkg.currentStatus === 'FOR_PICKUP';
     const isTransit = pkg.currentStatus === 'IN_TRANSIT';
 
     return (
@@ -16684,7 +16664,7 @@ export default function PackageSidebar({
                 <div className="p-6 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800">
                      {showAction && (
                          <button
-                            onClick={isAvailable ? onAssign : (isAssigned ? onPickup : onDeliver)}
+                            onClick={isAvailable ? onAssign : (isAssigned ? onPickup : onDeliverRelay)}
                             disabled={actionLoading}
                             className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 ${
                                 isAvailable ? 'bg-violet-600 hover:bg-violet-700' :
@@ -18823,7 +18803,7 @@ import {
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; 
 import { supabase } from '@/lib/supabase';
-import { PhoneIcon, PlusIcon, StarIcon, UserPlusIcon } from 'lucide-react';
+import { ArrowRight, PhoneIcon, PlusIcon, StarIcon, UserPlusIcon } from 'lucide-react';
 import { ProcessingAnimation } from './demo';
 import { useRouter } from 'next/navigation';
 // --- IMPORTATIONS CRUCIALES POUR LE BACKEND ---
@@ -18831,6 +18811,7 @@ import { packageService, PackageCreationPayload } from '@/services/packageServic
 import { Loader2, CheckCircle, UserPlus, Star } from 'lucide-react';
 import { useNotification } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
+import toast from 'react-hot-toast';
 
 interface FinalData {
   senderName: string;
@@ -18898,6 +18879,7 @@ const PAYMENT_OPERATOR_FEE = 100;
 const APP_NAME = "TiiBnTick Link";
 
 export default function PaymentStep({ allData, onBack, onPaymentFinalized, currentUser }: PaymentStepProps) {
+  const { isAuthenticated, user } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState<'cash' | 'mobile' | 'recipient'>('cash');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
@@ -18908,6 +18890,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
   const [method, setMethod] = useState<'cash'|'mobile'|'recipient'>('cash');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   
   const router = useRouter(); 
   const { addNotification } = useNotification();
@@ -19174,6 +19157,62 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
 
   if (isProcessing) {
     return <ProcessingAnimation />
+  }
+
+    const handleFinalize = async () => {
+    // === ÉTAPE 1: CHECK CONNEXION ===
+    if (!isAuthenticated) {
+        console.warn("⛔ Utilisateur non connecté. Stockage du formulaire et redirection.");
+        
+        // On sauvegarde TOUT le formulaire pour reprise
+        localStorage.setItem('expedition_form_pending_payment', JSON.stringify(allData));
+        localStorage.setItem('return_url_after_login', '/expedition'); // Indicateur pour le login
+        
+        setShowLoginPrompt(true); // Afficher la modale ou redirect direct
+        return;
+    }
+
+    setLoading(true);
+    try {
+        console.log("🚀 Création Colis par Client:", user?.email);
+        
+        // Logique création existante...
+        const res = await packageService.createPackage(allData as any);
+        
+        // Callback succès
+        onPaymentFinalized(res);
+        localStorage.removeItem('expedition_form_pending_payment'); // Nettoyage
+        
+    } catch (e: any) {
+        console.error(e);
+        toast.error(e.message || "Erreur création colis");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const redirectToLogin = () => {
+      router.push('/login');
+  };
+
+  // Petite modale "Breaking News" si non connecté
+  if (showLoginPrompt) {
+      return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in">
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl">
+                  <h2 className="text-2xl font-black text-orange-600 mb-2">CONNEXION REQUISE !</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mb-6">
+                      Pour garantir la sécurité et le suivi de votre colis, vous devez être connecté avant le paiement.
+                      <br/><br/>
+                      <span className="font-bold text-sm">Vos données sont sauvegardées. Vous reviendrez ici automatiquement.</span>
+                  </p>
+                  <button onClick={redirectToLogin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-black transition">
+                      Se connecter / S'inscrire <ArrowRight className="w-4 h-4"/>
+                  </button>
+                  <button onClick={() => setShowLoginPrompt(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600">Annuler</button>
+              </div>
+          </div>
+      );
   }
 
     // --- MODIFIÉ : L'écran de succès inclut le bloc d'incitation et le bouton PDF ---
@@ -23237,6 +23276,7 @@ import { packageService } from '@/services/packageService';
 // Import du module d'expédition existant pour l'intégration "Nouveau Colis"
 import ShippingPage from '@/app/expedition/page';
 import jsPDF from 'jspdf';
+import toast from 'react-hot-toast';
 
 // --- TYPES & INTERFACES ---
 
@@ -23669,7 +23709,7 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
           const result = await relayPointService.receivePackage(myRelayId, selectedShipment.id);
            // 3. GÉNÉRATION BORDEREAU PDF
           await generateDepositPDF(selectedShipment, myRelayId, userInfo, payStatusLabel);
-
+          toast.success("Colis Réceptionné et Actif au Relais !");
           console.log("✅ API Success:", result);
           
           // Affichage succès
@@ -24736,7 +24776,7 @@ const MonitoringSystem = dynamic(() => import('./Monitoring'), { ssr: false });
 const TABS = {
   overview: { label: "Vue d'ensemble", icon: LayoutDashboard, comp: Overview },
   users: { label: 'Utilisateurs', icon: Users, comp: UserManagement },
-  operations: { label: 'Opérations', icon: Map, comp: OperationsManagement },
+  operations: { label: 'Points Relais', icon: Map, comp: OperationsManagement },
   finance: { label: 'Finances', icon: CircleDollarSign, comp: FinanceManagement},
   system: { label: 'Système', icon: Activity, comp: MonitoringSystem },
 };
@@ -25561,380 +25601,351 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\UserManagement.tsx
 // FICHIER: src/app/superadmin/UserManagement.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { adminService } from '@/services/adminService';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '@/services/apiClient'; 
+import { adminService } from '@/services/adminService'; // Toujours nécessaire pour actions validate/suspend si spécifiques
 
 import { 
     CheckCircle, UserX, Eye, Loader2, ShieldAlert, 
     UserCheck, Search, RefreshCw, ShieldCheck, Trash2,
-    Briefcase, User, Zap,
+    Briefcase, User, Zap, Truck, Store, Building,
     Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- TYPES LOCAUX ---
+// --- TYPES DE DONNÉES UNIFIÉS ---
 
-interface BaseUser {
+type UserRole = 'CLIENT' | 'RELAY_OWNER' | 'AGENCY_OWNER' | 'DELIVERER' | 'FREELANCE' | 'EMPLOYEE' | 'ADMIN';
+
+interface AdminUser {
     id: string;
     name: string;
     email: string;
     phoneNumber: string;
-    createdAt?: string;
+    role: UserRole;        // Rôle principal normalisé pour l'affichage/filtre
+    rawType: string;       // Type brut (ex: BUSINESS_ACTOR)
+    rawSubType?: string;   // Sous-type brut (ex: RELAY_OWNER)
     isActive: boolean;
-    roleDisplay: string;
-    avatarInitial: string; // Pour l'UI
-}
-
-interface ClientUser extends BaseUser {
-    type: 'CLIENT';
-}
-
-interface BusinessUser extends BaseUser {
-    type: 'BUSINESS';
-    businessName: string;
-    businessActorType: string;
     isVerified: boolean;
-    cniNumber?: string;
-    niu?: string;
+    createdAt: string;
+    
+    // Métadonnées Business optionnelles
+    businessName?: string;
+    avatarInitial: string;
 }
+
+// --- CONFIGURATION FILTRES ---
+const FILTER_TABS = [
+    { id: 'ALL', label: 'Tous', icon: Zap, color: 'slate' },
+    { id: 'CLIENT', label: 'Clients', icon: User, color: 'blue' },
+    { id: 'RELAY_OWNER', label: 'Relais', icon: Store, color: 'red' }, // Rouge comme dans Dashboard
+    { id: 'AGENCY_OWNER', label: 'Agences', icon: Building, color: 'purple' },
+    { id: 'DELIVERER', label: 'Livreurs', icon: Truck, color: 'orange' } // ou Freelance
+];
+
 
 // --- COMPOSANT PRINCIPAL ---
 export default function UserManagement() {
-    const [clients, setClients] = useState<ClientUser[]>([]);
-    const [businessActors, setBusinessActors] = useState<BusinessUser[]>([]);
+    const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
-    
-    // Tab actif : 'all' | 'business' | 'clients'
-    const [activeFilter, setActiveFilter] = useState<'all' | 'business' | 'clients'>('business');
+    const [filter, setFilter] = useState('ALL');
     const [searchTerm, setSearchTerm] = useState('');
-    const [actionProcessingId, setActionProcessingId] = useState<string | null>(null);
+    const [processingId, setProcessingId] = useState<string|null>(null);
+
+    // --- NORMALISATION DES DONNÉES USER ---
+    // Cette fonction transforme la donnée brute de l'API en objet propre pour l'admin
+    const normalizeUser = (u: any): AdminUser => {
+        // Détermination du Rôle
+        const accountType = (u.accountType || u.account_type || 'CLIENT').toUpperCase();
+        const subType = (u.businessActorType || u.businessActorType || '').toUpperCase();
+        
+        let role: UserRole = 'CLIENT'; // Default
+        
+        if (accountType === 'ADMIN' || accountType === 'SUPERADMIN') role = 'ADMIN';
+        else if (accountType === 'BUSINESS_ACTOR' || accountType.includes('BUSINESS')) {
+            if (subType === 'AGENCY_OWNER' || subType === 'AGENCY') role = 'AGENCY_OWNER';
+            else if (subType === 'RELAY_OWNER') role = 'RELAY_OWNER';
+            else if (subType === 'DELIVERER' || subType === 'LIVREUR') role = 'DELIVERER';
+            else if (subType === 'EMPLOYEE') role = 'EMPLOYEE';
+            else role = 'FREELANCE'; // Fallback pro
+        }
+
+        const name = u.name || u.manager_name || "Utilisateur Inconnu";
+        
+        return {
+            id: u.id,
+            name: name,
+            email: u.email || 'N/A',
+            phoneNumber: u.phone_number || u.phoneNumber || 'N/A',
+            role: role,
+            rawType: accountType,
+            rawSubType: subType,
+            isActive: u.is_active ?? u.isActive ?? true, // Souvent true par défaut si non présent
+            isVerified: u.is_verified ?? u.isVerified ?? (role === 'CLIENT'), // Clients souvent vérifiés par défaut
+            createdAt: u.createdAt || u.created_at || new Date().toISOString(),
+            businessName: u.businessName || u.business_name,
+            avatarInitial: name.charAt(0).toUpperCase()
+        };
+    };
 
     // --- CHARGEMENT ---
     const loadData = useCallback(async () => {
         setLoading(true);
+        console.group("📥 [ADMIN USERS] Chargement Global");
         try {
-            // 1. Business Actors
-            const actorsData = await adminService.getAllBusinessActors();
-            const mappedActors: BusinessUser[] = actorsData.map((a: any) => ({
-                id: a.id,
-                name: a.name || a.manager_name || "Nom inconnu",
-                email: a.email || "N/A",
-                phoneNumber: a.phoneNumber || a.phone_number || "N/A",
-                createdAt: a.createdAt,
-                isActive: a.isEnabled ?? a.is_enabled ?? true,
-                roleDisplay: (a.businessActorType || a.business_actor_type || 'PRO').toUpperCase(),
-                avatarInitial: (a.businessName || a.name || 'P')[0].toUpperCase(),
-                type: 'BUSINESS',
-                
-                businessName: a.businessName || a.business_name || a.name || "Business Inconnu",
-                businessActorType: a.businessActorType || a.business_actor_type,
-                isVerified: a.isVerified ?? a.is_verified ?? false,
-                cniNumber: a.cniNumber || a.cni_number,
-                niu: a.niu
-            }));
+            // Appel Unique à /api/users
+            // Le backend renvoie souvent un tableau direct ou { content: [...] }
+            const response: any = await apiClient('/api/users', 'GET');
+            const rawData = Array.isArray(response) ? response : (response.content || []);
             
-            // 2. Clients
-            let usersData: any[] = [];
-            try {
-                const response = await apiClient<any[]>('/api/users', 'GET');
-                usersData = response.filter((u: any) => (u.account_type || u.accountType) === 'CLIENT');
-            } catch(e) { console.warn("Clients introuvables"); }
+            console.log(`✅ ${rawData.length} utilisateurs bruts reçus.`);
+            
+            // Mapping
+            const mapped = rawData.map(normalizeUser);
+            
+            // Tri (Plus récents d'abord)
+            mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            setAllUsers(mapped);
 
-            const mappedClients: ClientUser[] = usersData.map((u: any) => ({
-                id: u.id,
-                name: u.name || "Nom Inconnu",
-                email: u.email || "N/A",
-                phoneNumber: u.phoneNumber || u.phone_number || "N/A",
-                createdAt: u.createdAt,
-                isActive: u.isActive ?? u.is_active ?? true,
-                roleDisplay: 'CLIENT',
-                avatarInitial: (u.name || 'C')[0].toUpperCase(),
-                type: 'CLIENT'
-            }));
-
-            setBusinessActors(mappedActors);
-            setClients(mappedClients);
-
-        } catch (err) {
-            console.error("Erreur Chargement", err);
+        } catch (e) {
+            console.error("Erreur chargement utilisateurs:", e);
         } finally {
             setLoading(false);
+            console.groupEnd();
         }
     }, []);
 
     useEffect(() => { loadData(); }, [loadData]);
 
 
-    // --- ACTIONS ---
-
-    const handleValidation = async (actor: BusinessUser) => {
-        if (!confirm(`Valider le compte ${actor.businessName} ?`)) return;
-        setActionProcessingId(actor.id);
-        try {
-            await adminService.validateBusinessActor(actor.id, true);
-            setBusinessActors(prev => prev.map(p => p.id === actor.id ? { ...p, isVerified: true, isActive: true } : p));
-        } catch (e) { alert("Erreur validation"); } 
-        finally { setActionProcessingId(null); }
-    };
-
-    const handleToggleStatus = async (user: BaseUser) => {
-        const newStatus = !user.isActive;
-        setActionProcessingId(user.id);
-        try {
-            const endpoint = user.roleDisplay === 'CLIENT' ? `/api/users/${user.id}` : `/api/business-actors/${user.id}`;
-            const currentObj = await apiClient<any>(endpoint, 'GET');
-            await apiClient(endpoint, 'PUT', { ...currentObj, isActive: newStatus, isEnabled: newStatus });
+    // --- FILTRAGE DYNAMIQUE ---
+    const displayData = useMemo(() => {
+        return allUsers.filter(u => {
+            // 1. Filtre Onglet
+            const roleMatch = filter === 'ALL' || u.role === filter || (filter === 'DELIVERER' && u.role === 'FREELANCE');
             
-            if (user.roleDisplay !== 'CLIENT') {
-                setBusinessActors(prev => prev.map(u => u.id === user.id ? { ...u, isActive: newStatus } : u));
-            } else {
-                setClients(prev => prev.map(u => u.id === user.id ? { ...u, isActive: newStatus } : u));
+            // 2. Filtre Recherche
+            const searchLower = searchTerm.toLowerCase();
+            const textMatch = 
+                u.name.toLowerCase().includes(searchLower) ||
+                u.email.toLowerCase().includes(searchLower) ||
+                (u.businessName && u.businessName.toLowerCase().includes(searchLower));
+
+            return roleMatch && textMatch;
+        });
+    }, [allUsers, filter, searchTerm]);
+
+
+    // --- ACTIONS ---
+    // Note: On utilise apiClient direct ou les services admin spécifiques
+
+    const toggleStatus = async (user: AdminUser) => {
+        if (!confirm(`Changer le statut de ${user.name} ?`)) return;
+        setProcessingId(user.id);
+        
+        try {
+            // Déterminer la route selon le type (Certaines API séparent business/clients)
+            // On tente une route générique Admin si elle existe : /api/admin/users/{id}/status
+            // Sinon on route vers les contrôleurs spécifiques
+            
+            let endpoint = '';
+            // Si l'API unifiée existe:
+            endpoint = `/api/admin/users/${user.id}/status`; 
+            
+            // Payload (bool ou objet)
+            await apiClient(endpoint, 'PUT', { isActive: !user.isActive });
+            
+            // Optimistic Update
+            setAllUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u));
+        
+        } catch (e: any) {
+            // Fallback: Si route admin status 404, essayer route spécifique update
+            try {
+               // Re-tenter avec route d'update standard si le toggle n'existe pas
+               const base = user.role === 'CLIENT' ? '/api/users' : '/api/business-actors';
+               await apiClient(`${base}/${user.id}`, 'PUT', { isActive: !user.isActive, is_active: !user.isActive });
+               
+               // Si ça marche
+               setAllUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u));
+            } catch(e2) {
+               alert("Impossible de changer le statut.");
+               console.error(e2);
             }
-        } catch (e) { alert("Erreur statut"); }
-        finally { setActionProcessingId(null); }
+        } finally {
+            setProcessingId(null);
+        }
     };
 
-    const handleDelete = async (user: BaseUser) => {
-        if (!confirm("Suppression définitive. Confirmer ?")) return;
-        setActionProcessingId(user.id);
+    const handleDelete = async (id: string) => {
+        if(!confirm("⚠️ ATTENTION : Suppression définitive. Confirmer ?")) return;
+        setProcessingId(id);
         try {
-             const endpoint = user.roleDisplay === 'CLIENT' ? `/api/users/${user.id}` : `/api/business-actors/${user.id}`;
-             await apiClient(endpoint, 'DELETE');
-             if (user.roleDisplay !== 'CLIENT') setBusinessActors(prev => prev.filter(u => u.id !== user.id));
-             else setClients(prev => prev.filter(u => u.id !== user.id));
-        } catch (e) { alert("Erreur suppression"); }
-        finally { setActionProcessingId(null); }
+            await apiClient(`/api/users/${id}`, 'DELETE'); // Route souvent commune cascade
+            setAllUsers(prev => prev.filter(u => u.id !== id));
+        } catch(e) { console.error(e); }
+        finally { setProcessingId(null); }
+    };
+    
+    // Fonction spécifique pour valider les comptes Business (s'ils ne sont pas auto-vérifiés)
+    const handleVerify = async (user: AdminUser) => {
+        if(user.isVerified) return;
+        setProcessingId(user.id);
+        try {
+            await adminService.validateBusinessActor(user.id, true);
+            setAllUsers(prev => prev.map(u => u.id === user.id ? { ...u, isVerified: true, isActive: true } : u));
+        } catch(e) { alert("Erreur validation"); }
+        finally { setProcessingId(null); }
     }
 
-    // --- UI & RENDER ---
 
-    const getFilteredData = () => {
-        let data: (BusinessUser | ClientUser)[] = [];
-        if (activeFilter === 'all') data = [...businessActors, ...clients];
-        else if (activeFilter === 'business') data = businessActors;
-        else data = clients;
-
-        if (!searchTerm) return data;
-        
-        const term = searchTerm.toLowerCase();
-        return data.filter(u => 
-            u.name.toLowerCase().includes(term) || 
-            u.email.toLowerCase().includes(term) ||
-            (u as BusinessUser).businessName?.toLowerCase().includes(term)
-        );
-    };
-
-    const displayData = getFilteredData();
-    const pendingCount = businessActors.filter(b => !b.isVerified).length;
-
+    // --- RENDER ---
     return (
-        <div className="space-y-6 pb-12">
+        <div className="space-y-6 pb-20">
             
-            {/* HEADER AVEC FILTRES VISUELS */}
-            <div className="flex flex-col lg:flex-row justify-between items-end lg:items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-3">
-                        <Users className="w-6 h-6 text-orange-500"/>
-                        Comptes Utilisateurs
-                    </h2>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">
-                        {businessActors.length} Pros • {clients.length} Clients • {pendingCount} en attente
-                    </p>
-                </div>
-
-                <div className="flex p-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    {[
-                        { id: 'business', label: 'Partenaires Pro', icon: Briefcase, count: businessActors.length },
-                        { id: 'clients', label: 'Clients', icon: User, count: clients.length },
-                        { id: 'all', label: 'Tout afficher', icon: Zap, count: null }
-                    ].map((tab) => {
-                        const Icon = tab.icon;
-                        const isActive = activeFilter === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveFilter(tab.id as any)}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all duration-300
-                                ${isActive 
-                                    ? 'bg-slate-900 dark:bg-orange-600 text-white shadow-lg shadow-slate-900/20' 
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900'
-                                }`}
-                            >
-                                <Icon className={`w-4 h-4 ${isActive ? 'text-orange-400 dark:text-white' : ''}`} />
-                                {tab.label}
-                                {tab.count !== null && (
-                                    <span className={`text-[10px] py-0.5 px-1.5 rounded-md ml-1 ${isActive ? 'bg-slate-700 dark:bg-orange-700' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                                        {tab.count}
-                                    </span>
-                                )}
-                            </button>
-                        )
-                    })}
-                </div>
+            {/* Header & Stats Rapides */}
+            <div className="flex flex-col md:flex-row justify-between items-end gap-4">
+                 <div>
+                     <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                         <Users className="text-orange-500 w-8 h-8"/> Gestion Utilisateurs
+                     </h2>
+                     <p className="text-slate-500 text-sm font-medium mt-1">
+                        {allUsers.length} comptes total • {allUsers.filter(u => u.role === 'CLIENT').length} Clients
+                     </p>
+                 </div>
+                 
+                 {/* Barre de Filtres (Onglets) */}
+                 <div className="flex bg-white dark:bg-slate-800 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto max-w-full">
+                     {FILTER_TABS.map(t => (
+                         <button 
+                            key={t.id}
+                            onClick={() => setFilter(t.id)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-all
+                            ${filter === t.id 
+                                ? `bg-slate-900 text-white shadow` 
+                                : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'
+                            }`}
+                         >
+                             <t.icon className="w-4 h-4" /> {t.label}
+                         </button>
+                     ))}
+                 </div>
             </div>
 
-            {/* BARRE DE RECHERCHE */}
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-slate-400" />
-                </div>
-                <input
-                    type="text"
-                    placeholder="Rechercher un nom, une société ou un email..."
-                    className="block w-full pl-11 pr-4 py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all shadow-sm text-sm font-medium"
+            {/* Barre Recherche */}
+            <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <Search className="w-5 h-5 text-slate-400" />
+                <input 
+                    type="text" 
+                    placeholder="Rechercher par nom, email ou entreprise..." 
+                    className="flex-1 bg-transparent outline-none text-slate-800 dark:text-white font-medium placeholder-slate-400"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={e => setSearchTerm(e.target.value)}
                 />
-                <button 
-                    onClick={loadData} 
-                    className="absolute right-3 top-3 p-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition text-slate-500 dark:text-slate-300"
-                    title="Actualiser"
-                >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}/>
+                <button onClick={loadData} title="Rafraîchir" className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 </button>
             </div>
 
-            {/* LISTE (GRID POUR RESPONSIVE, TABLEAU POUR LARGE) */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                {displayData.length === 0 && !loading ? (
-                    <div className="p-16 text-center flex flex-col items-center">
-                        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
-                             <Search className="w-8 h-8 text-slate-300"/>
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 font-medium">Aucun résultat ne correspond à votre recherche.</p>
-                    </div>
-                ) : (
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
-                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Utilisateur / Société</th>
-                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider">Contact</th>
-                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Type de Compte</th>
-                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">État</th>
-                                <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={5} className="p-12 text-center">
-                                        <div className="flex flex-col items-center gap-2 text-orange-500">
-                                            <Loader2 className="w-8 h-8 animate-spin"/>
-                                            <span className="text-sm font-medium">Chargement...</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : (
-                                displayData.map((user) => {
-                                    const isBiz = user.type === 'BUSINESS';
-                                    const biz = isBiz ? (user as BusinessUser) : null;
-                                    const isProcessing = actionProcessingId === user.id;
-                                    
-                                    return (
-                                        <tr key={user.id} className={`group transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/30 ${isProcessing ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
-                                            <td className="p-5">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm
-                                                        ${isBiz ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-400 to-slate-600'}
-                                                    `}>
-                                                        {user.avatarInitial}
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-bold text-slate-900 dark:text-white text-sm">
-                                                            {isBiz ? biz?.businessName : user.name}
-                                                        </p>
-                                                        {isBiz && (
-                                                            <p className="text-[11px] text-slate-500 font-medium">Gérant: {user.name}</p>
-                                                        )}
-                                                        <p className="text-[10px] text-slate-400 dark:text-slate-600 font-mono mt-0.5">
-                                                            {user.id.substring(0, 8)}...
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="p-5">
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.email}</span>
-                                                    <span className="text-xs text-slate-500">{user.phoneNumber}</span>
-                                                </div>
-                                            </td>
-                                            <td className="p-5 text-center">
-                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide
-                                                    ${user.roleDisplay === 'CLIENT' 
-                                                        ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                                                        : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800'}
-                                                 `}>
-                                                    {user.roleDisplay}
+            {/* Liste */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-xs uppercase font-bold text-slate-500">
+                        <tr>
+                            <th className="p-4">Utilisateur</th>
+                            <th className="p-4">Type Compte</th>
+                            <th className="p-4 text-center">État</th>
+                            <th className="p-4">Contact</th>
+                            <th className="p-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                         {loading ? (
+                             <tr><td colSpan={5} className="p-10 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-orange-500"/></td></tr>
+                         ) : displayData.length === 0 ? (
+                             <tr><td colSpan={5} className="p-10 text-center text-slate-400 italic">Aucun utilisateur trouvé.</td></tr>
+                         ) : (
+                             displayData.map(u => (
+                                 <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 group">
+                                     <td className="p-4">
+                                         <div className="flex items-center gap-3">
+                                             <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold bg-gradient-to-br ${
+                                                 u.role === 'CLIENT' ? 'from-blue-400 to-blue-600' :
+                                                 u.role === 'AGENCY_OWNER' ? 'from-purple-500 to-indigo-600' :
+                                                 u.role === 'RELAY_OWNER' ? 'from-red-400 to-red-600' :
+                                                 'from-orange-400 to-orange-600'
+                                             }`}>
+                                                 {u.avatarInitial}
+                                             </div>
+                                             <div>
+                                                 <p className="font-bold text-slate-900 dark:text-white">{u.businessName || u.name}</p>
+                                                 {/* Si c'est un business et qu'il y a un nom de gérant distinct */}
+                                                 {u.businessName && u.name !== u.businessName && (
+                                                     <p className="text-[10px] text-slate-500">Gérant: {u.name}</p>
+                                                 )}
+                                             </div>
+                                         </div>
+                                     </td>
+                                     <td className="p-4">
+                                         <div className="flex flex-col gap-1">
+                                             <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                                 ${u.role === 'CLIENT' ? 'bg-slate-100 text-slate-600' : 
+                                                   u.role === 'RELAY_OWNER' ? 'bg-red-100 text-red-700' :
+                                                   u.role === 'AGENCY_OWNER' ? 'bg-purple-100 text-purple-700' :
+                                                   'bg-orange-100 text-orange-700'}
+                                             `}>
+                                                 {u.role.replace('_', ' ')}
+                                             </span>
+                                             {!u.isVerified && u.role !== 'CLIENT' && (
+                                                 <span className="text-[10px] text-amber-600 flex items-center gap-1 font-bold">
+                                                     <ShieldAlert className="w-3 h-3"/> Non Vérifié
                                                  </span>
-                                            </td>
-                                            <td className="p-5 text-center">
-                                                <div className="flex justify-center">
-                                                    {user.isActive ? (
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            {isBiz && !biz?.isVerified ? (
-                                                                 <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-md text-[10px] font-bold">
-                                                                     <Loader2 className="w-3 h-3 animate-spin"/> Vérification...
-                                                                 </span>
-                                                            ) : (
-                                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-md text-[10px] font-bold">
-                                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                                                                    Actif
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded-md text-[10px] font-bold">
-                                                            Suspendu
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="p-5 text-right">
-                                                <div className="flex items-center justify-end gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-200">
-                                                    
-                                                    {/* Bouton Valider (si Pro en attente) */}
-                                                    {isBiz && !biz?.isVerified && (
-                                                        <button onClick={() => handleValidation(biz!)}
-                                                            className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md shadow-emerald-200 hover:scale-105 transition-transform" title="Valider">
-                                                            <ShieldCheck className="w-4 h-4"/>
-                                                        </button>
-                                                    )}
+                                             )}
+                                         </div>
+                                     </td>
+                                     <td className="p-4 text-center">
+                                         {u.isActive ? (
+                                             <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-100">
+                                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/> Actif
+                                             </span>
+                                         ) : (
+                                             <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-bold border border-gray-200">
+                                                 Suspendu
+                                             </span>
+                                         )}
+                                     </td>
+                                     <td className="p-4 text-slate-500 text-xs">
+                                         <p>{u.email}</p>
+                                         <p>{u.phoneNumber}</p>
+                                     </td>
+                                     <td className="p-4 text-right">
+                                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             
+                                             {/* Bouton de Validation pour les Pros en attente */}
+                                             {!u.isVerified && u.role !== 'CLIENT' && (
+                                                 <button onClick={() => handleVerify(u)} className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition" title="Valider compte">
+                                                     <ShieldCheck className="w-4 h-4"/>
+                                                 </button>
+                                             )}
 
-                                                    {/* Voir Détails (Fake action pour l'instant) */}
-                                                    <button className="p-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-slate-300 text-slate-500 dark:text-slate-300 rounded-lg transition hover:bg-slate-50" title="Détails">
-                                                        <Eye className="w-4 h-4"/>
-                                                    </button>
+                                             <button 
+                                                onClick={() => toggleStatus(u)} 
+                                                className={`p-2 rounded-lg transition ${u.isActive ? 'bg-slate-100 text-slate-500 hover:text-orange-600 hover:bg-orange-50' : 'bg-green-100 text-green-600 hover:bg-green-200'}`}
+                                                title={u.isActive ? "Désactiver" : "Activer"}
+                                             >
+                                                {u.isActive ? <UserX className="w-4 h-4"/> : <CheckCircle className="w-4 h-4"/>}
+                                             </button>
 
-                                                    {/* Activer / Suspendre */}
-                                                    <button 
-                                                        onClick={() => handleToggleStatus(user)}
-                                                        className={`p-2 rounded-lg border transition hover:shadow-sm
-                                                        ${user.isActive 
-                                                            ? 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:text-red-600 hover:border-red-200' 
-                                                            : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100'}`}
-                                                        title={user.isActive ? 'Suspendre' : 'Réactiver'}
-                                                    >
-                                                        {user.isActive ? <UserX className="w-4 h-4"/> : <UserCheck className="w-4 h-4"/>}
-                                                    </button>
-                                                    
-                                                    {/* Supprimer */}
-                                                    <button 
-                                                        onClick={() => handleDelete(user)}
-                                                        className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition"
-                                                        title="Supprimer définitivement"
-                                                    >
-                                                        <Trash2 className="w-4 h-4"/>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )
-                                })
-                            )}
-                        </tbody>
-                    </table>
-                )}
+                                             <button onClick={() => handleDelete(u.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition" title="Supprimer">
+                                                 <Trash2 className="w-4 h-4"/>
+                                             </button>
+                                         </div>
+                                     </td>
+                                 </tr>
+                             ))
+                         )}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
@@ -25947,370 +25958,468 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\OperationManagement.tsx
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { 
     Package, Building, Search, Loader2, X, Eye, 
-    Map as MapIcon, List, ArrowRight, MapPin,
-    CheckCircle,
-    Zap
+    MoreVertical, CheckCircle, XCircle, PlayCircle, PauseCircle,
+    Power, AlertTriangle, Shield, MapPin, Lock, FileText,
+    BarChart3, LayoutList, Map as MapIcon, Filter, Layers, List,
+    Store
 } from 'lucide-react';
-import { adminService, AdminPackage } from '@/services/adminService';
 import { relayPointService, RelayPoint } from '@/services/relayPointService';
-import 'leaflet/dist/leaflet.css';
-import { toast } from 'react-hot-toast';
+import { adminService, AdminPackage } from '@/services/adminService';
+import toast, { Toaster } from 'react-hot-toast';
 
-// --- CONFIGURATION LEAFLET SÉCURISÉE ---
+// IMPORTATION DU NOUVEAU COMPOSANT SIDEBAR
+import RelaySidebar from './RelaySidebar'; 
+
+// Chart JS
+import { 
+  Chart as ChartJS, CategoryScale, LinearScale, PointElement, 
+  LineElement, Title, Tooltip, Legend, ArcElement, BarElement 
+} from 'chart.js';
+import { Bar, Doughnut } from 'react-chartjs-2';
+
+// Enregistrement ChartJS
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement);
+
+// Import Leaflet Dynamique
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
-const ITEMS_PER_PAGE = 8;
-type ShipmentStatus = 'EN_ATTENTE_DE_DEPOT' | 'AU_DEPART' | 'EN_TRANSIT' | 'ARRIVE_AU_RELAIS' | 'RECU' | 'ANNULE' | 'LIVRE';
+import 'leaflet/dist/leaflet.css';
 
-interface Shipment {
-    id: string;
-    trackingNumber: string;
-    status: ShipmentStatus;
-    description: string;
-    shippingCost: number;
-    createdAt: string;
-    senderName?: string;
-    recipientName?: string;
-    departurePointName?: string;
-    arrivalPointName?: string;
-    weight?: number;
-    isFragile?: boolean;
-}
+// --- HELPERS UI ---
 
-// Composant pour l'icone des Status
-const StatusBadge = ({ status }: { status: string }) => {
-    let color = "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
-    const s = status?.toUpperCase() || 'UNKNOWN';
-
-    if (s.includes('ATTENTE') || s.includes('PENDING')) color = "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-    else if (s.includes('TRANSIT') || s.includes('DEPART')) color = "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-    else if (s.includes('ARRIVE') || s.includes('RELAY')) color = "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
-    else if (s.includes('LIVRE') || s.includes('RECU')) color = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-    else if (s.includes('ANNULE')) color = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-
-    return (
-        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-transparent ${color}`}>
-            {status?.replace(/_/g, ' ')}
-        </span>
-    );
+const translateStatus = (status: string) => {
+    const s = (status || 'UNKNOWN').toUpperCase();
+    const map: Record<string, string> = {
+        'EN_ATTENTE_DE_DEPOT': 'En Attente Dépôt',
+        'PRE_REGISTERED': 'Pré-Enregistré',
+        'PENDING': 'En Attente',
+        'PENDING_VERIFICATION': 'Vérif. Requise',
+        'AU_DEPART': 'Au Départ',
+        'AT_DEPARTURE_RELAY_POINT': 'Stock Départ',
+        'EN_TRANSIT': 'En Transit',
+        'IN_TRANSIT': 'En Transit',
+        'ARRIVE_AU_RELAIS': 'Arrivé Relais',
+        'AT_ARRIVAL_RELAY_POINT': 'Stock Arrivée',
+        'READY_FOR_PICKUP': 'Prêt Retrait',
+        'LIVRE': 'Livré',
+        'DELIVERED': 'Livré',
+        'RECU': 'Reçu',
+        'WITHDRAWN': 'Retiré',
+        'ANNULE': 'Annulé',
+        'CANCELLED': 'Annulé',
+        'ACTIVE': 'Actif',
+        'SUSPENDED': 'Suspendu'
+    };
+    return map[s] || s.replace(/_/g, ' ');
 };
 
-// Sous-Composant pour la Map des Relais (Pour isoler la logique Leaflet)
-const RelayMap = ({ relays }: { relays: RelayPoint[] }) => {
-    useEffect(() => {
-        // Correctif pour les icônes Leaflet qui manquent en production
-        const fixLeafletIcons = async () => {
-            const L = (await import('leaflet')).default;
-            
-            // @ts-ignore
-            delete L.Icon.Default.prototype._getIconUrl;
-            L.Icon.Default.mergeOptions({
-                iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-                iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-                shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-            });
-        };
-        fixLeafletIcons();
-    }, []);
+const getStatusColor = (status: string) => {
+    const s = (status || '').toUpperCase();
+    if (s.includes('PENDING') || s.includes('ATTENTE') || s === 'DRAFT') return "bg-amber-100 text-amber-700 border-amber-200";
+    if (s.includes('TRANSIT') || s.includes('DEPART')) return "bg-blue-100 text-blue-700 border-blue-200";
+    if (s.includes('ARRIVE') || s.includes('READY')) return "bg-purple-100 text-purple-700 border-purple-200";
+    if (s.includes('LIVRE') || s.includes('DELIVERED') || s.includes('ACTIVE')) return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    if (s.includes('ANNULE') || s.includes('SUSPEND') || s.includes('DEACTIVATE')) return "bg-red-100 text-red-700 border-red-200";
+    return "bg-gray-100 text-gray-600 border-gray-200";
+};
 
-    return (
-        <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-4 border-white dark:border-slate-700 relative z-0">
+const StatusBadge = ({ status }: { status: string }) => (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border flex items-center gap-1 w-fit whitespace-nowrap ${getStatusColor(status)}`}>
+        <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(status).split(' ')[1].replace('text-', 'bg-')}`} />
+        {translateStatus(status)}
+    </span>
+);
+
+const StatCard = ({ title, value, icon: Icon, color, sub }: any) => (
+    <div className={`p-5 rounded-2xl bg-white dark:bg-slate-800 border-l-4 ${color} shadow-sm hover:shadow-md transition-all group`}>
+        <div className="flex justify-between items-start">
+            <div>
+                <p className="text-slate-500 text-xs font-bold uppercase mb-1 tracking-wider">{title}</p>
+                <h3 className="text-3xl font-black text-slate-800 dark:text-white">{value}</h3>
+                {sub && <p className="text-[10px] text-slate-400 mt-1">{sub}</p>}
+            </div>
+            <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-xl group-hover:scale-110 transition-transform">
+                <Icon className="w-6 h-6 text-slate-600 dark:text-slate-300" />
+            </div>
+        </div>
+    </div>
+);
+
+// ------------------------------------------------------------------
+// VUE GESTIONNAIRE DE RELAIS
+// ------------------------------------------------------------------
+
+const RelayManager = () => {
+    const [viewMode, setViewMode] = useState<'TABLE' | 'MAP' | 'STATS'>('TABLE');
+    const [relays, setRelays] = useState<RelayPoint[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState('ALL');
+    const [search, setSearch] = useState('');
+    const [selectedRelay, setSelectedRelay] = useState<RelayPoint | null>(null);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            let data: RelayPoint[] = [];
+            if (filter === 'ALL') data = await relayPointService.getAllRelayPoints();
+            else data = await relayPointService.getPointsByStatus(filter);
+            
+            // Filtre Recherche Local
+            if (search) {
+                const term = search.toLowerCase();
+                data = data.filter(r => 
+                    (r.relayPointName || '').toLowerCase().includes(term) ||
+                    (r.locality || '').toLowerCase().includes(term)
+                );
+            }
+            
+            setRelays(data);
+        } catch(e) { console.error(e); } 
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => { loadData(); }, [filter, search]);
+
+    // Action Handler
+    const handleAction = async (action: string, id: string) => {
+        const loadingId = toast.loading("Action en cours...");
+        try {
+            switch(action) {
+                case 'APPROVE': await relayPointService.approveRelayPoint(id); toast.success("Validé"); break;
+                case 'REJECT': 
+                    const r = prompt("Raison ?"); if(r) await relayPointService.rejectRelayPoint(id, r); break;
+                case 'ACTIVATE': await relayPointService.activateRelayPoint(id); toast.success("Activé"); break;
+                case 'SUSPEND': 
+                    const s = prompt("Motif ?"); if(s) await relayPointService.suspendRelayPoint(id, s); break;
+                case 'DEACTIVATE': if(confirm("Sûr ?")) await relayPointService.deactivateRelayPoint(id); break;
+            }
+            loadData();
+            if (selectedRelay?.id === id) setSelectedRelay(null); 
+        } catch(e) { toast.error("Erreur technique"); }
+        finally { toast.dismiss(loadingId); }
+    };
+
+    // Calcul Stats
+    const stats = useMemo(() => ({
+        total: relays.length,
+        active: relays.filter(r => r.status === 'ACTIVE').length,
+        pending: relays.filter(r => r.status.includes('PENDING')).length,
+        capacity: relays.reduce((acc, r) => acc + (r.maxCapacity||0), 0),
+        occupied: relays.reduce((acc, r) => acc + (r.current_package_count||0), 0)
+    }), [relays]);
+
+
+    // -- VUES --
+    const TableView = () => (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border dark:border-slate-700 overflow-hidden">
+             <table className="w-full text-left text-sm">
+                 <thead className="bg-slate-50 dark:bg-slate-900 border-b dark:border-slate-700 text-xs font-bold text-slate-500 uppercase">
+                     <tr>
+                         <th className="p-4">Relais</th>
+                         <th className="p-4">Localisation</th>
+                         <th className="p-4 text-center">Occupation</th>
+                         <th className="p-4 text-center">Statut</th>
+                         <th className="p-4 text-right"></th>
+                     </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                     {relays.map(r => (
+                         <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer group" onClick={() => setSelectedRelay(r)}>
+                             <td className="p-4 font-bold text-slate-800 dark:text-white">{r.relayPointName || "Inconnu"}</td>
+                             <td className="p-4 text-slate-600 dark:text-slate-300 flex items-center gap-2"><MapPin className="w-3 h-3"/> {r.locality || 'N/A'}</td>
+                             <td className="p-4 text-center font-mono">{r.current_package_count} / {r.maxCapacity}</td>
+                             <td className="p-4 text-center"><StatusBadge status={r.status}/></td>
+                             <td className="p-4 text-right"><Eye className="w-4 h-4 text-slate-400 group-hover:text-blue-500"/></td>
+                         </tr>
+                     ))}
+                 </tbody>
+             </table>
+             {relays.length===0 && <div className="p-10 text-center text-slate-400">Aucun résultat.</div>}
+        </div>
+    );
+
+    const MapView = () => (
+        <div className="h-[600px] w-full rounded-xl overflow-hidden border-4 border-white dark:border-slate-800 shadow-xl relative z-0 bg-slate-100">
              <MapContainer center={[3.848, 11.502]} zoom={12} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OSM' />
                 {relays.map(rp => (
-                    <Marker key={rp.id} position={[rp.latitude || 3.848, rp.longitude || 11.502]}>
-                        <Popup>
-                            <strong>{rp.relayPointName || "Point Relais"}</strong><br/>
-                            {rp.relay_point_address || rp.address}
-                        </Popup>
+                    <Marker 
+                        key={rp.id} 
+                        position={[rp.latitude || 3.848, rp.longitude || 11.502]}
+                        eventHandlers={{ click: () => setSelectedRelay(rp) }}
+                    >
                     </Marker>
                 ))}
             </MapContainer>
         </div>
     );
+
+    const StatsView = () => {
+        // CORRECTION BUG SUBSTRING : Protection sur le nom
+        const chartLabels = relays.slice(0, 10).map(r => (r.relayPointName ? r.relayPointName.substring(0, 12) : "Inconnu") + '...');
+        const chartData = relays.slice(0, 10).map(r => Math.round(((r.current_package_count||0)/(r.maxCapacity||1))*100));
+
+        const barData = {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Taux Occupation (%)',
+                data: chartData,
+                backgroundColor: '#3b82f6',
+                borderRadius: 4
+            }]
+        };
+
+        const doughnutData = {
+            labels: ['Actif', 'En Attente', 'Suspendu'],
+            datasets: [{
+                data: [stats.active, stats.pending, stats.total - stats.active - stats.pending],
+                backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                borderWidth: 0
+            }]
+        };
+
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                    <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><BarChart3 className="w-5 h-5 text-orange-500"/> État du Réseau</h3>
+                    <div className="h-64 flex items-center justify-center">
+                        <Doughnut data={doughnutData} options={{plugins: {legend: {position: 'right'}}}} />
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                    <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><LayoutList className="w-5 h-5 text-blue-500"/> Top Occupations</h3>
+                    <div className="h-64">
+                        <Bar data={barData} options={{ maintainAspectRatio: false, scales: {y: {beginAtZero: true, max: 100}} }} />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                 <StatCard title="Relais Total" value={stats.total} icon={Store} color="border-blue-500"/>
+                 <StatCard title="Actifs" value={stats.active} icon={CheckCircle} color="border-green-500" sub={`${Math.round((stats.active/(stats.total||1))*100)}% actifs`}/>
+                 <StatCard title="À Valider" value={stats.pending} icon={AlertTriangle} color="border-amber-500"/>
+                 <StatCard title="Stock Global" value={stats.occupied} icon={Package} color="border-purple-500"/>
+            </div>
+
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl">
+                 <div className="flex bg-white dark:bg-slate-800 p-1 rounded-lg shadow-sm border dark:border-slate-700">
+                     {['TABLE', 'MAP', 'STATS'].map((mode) => (
+                         <button key={mode} onClick={() => setViewMode(mode as any)} className={`px-4 py-2 rounded-md text-xs font-bold flex items-center gap-2 transition ${viewMode===mode ? 'bg-orange-500 text-white shadow' : 'text-slate-500'}`}>
+                             {mode === 'TABLE' && <List className="w-4 h-4"/>}
+                             {mode === 'MAP' && <MapIcon className="w-4 h-4"/>}
+                             {mode === 'STATS' && <BarChart3 className="w-4 h-4"/>}
+                             {mode}
+                         </button>
+                     ))}
+                 </div>
+                 
+                 <div className="relative w-full md:w-64">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                    <input type="text" placeholder="Rechercher..." className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 rounded-lg text-sm border-none focus:ring-2 focus:ring-orange-500" value={search} onChange={e=>setSearch(e.target.value)}/>
+                 </div>
+
+                 {viewMode === 'TABLE' && (
+                     <div className="flex gap-2">
+                         {['ALL', 'PENDING_VERIFICATION', 'ACTIVE'].map(s => (
+                             <button key={s} onClick={()=>setFilter(s)} className={`px-3 py-1 text-xs rounded border font-bold ${filter===s ? 'bg-slate-800 text-white' : 'bg-white text-slate-500'}`}>
+                                 {s.includes('PENDING') ? 'En Attente' : s}
+                             </button>
+                         ))}
+                     </div>
+                 )}
+            </div>
+            
+            {/* Vues */}
+            {viewMode === 'TABLE' && <TableView />}
+            {viewMode === 'MAP' && <MapView />}
+            {viewMode === 'STATS' && <StatsView />}
+
+            {/* Sidebar Details */}
+            <RelaySidebar relay={selectedRelay} onClose={() => setSelectedRelay(null)} onAction={handleAction} />
+        </div>
+    );
 };
 
-// GESTIONNAIRES DES COLIS
-const ShipmentsManager = () => {
-    const [shipments, setShipments] = useState<AdminPackage[]>([]);
-    const [filteredShipments, setFilteredShipments] = useState<AdminPackage[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [page, setPage] = useState(1);
-    const [selectedShipment, setSelectedShipment] = useState<AdminPackage | null>(null);
 
-    useEffect(() => { 
+// --------------------------------------------------------------------------------------------------
+// VUE GESTIONNAIRE DE COLIS (AMELIORÉE)
+// --------------------------------------------------------------------------------------------------
+
+const ShipmentManager = () => {
+    const [packages, setPackages] = useState<AdminPackage[]>([]);
+    const [filtered, setFiltered] = useState<AdminPackage[]>([]);
+    const [loading, setLoading] = useState(true);
+    
+    // Filtres
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, EN_COURS, LIVRE, ANNULE
+
+    // Chargement
+    useEffect(() => {
         const load = async () => {
             setLoading(true);
             try {
                 const data = await adminService.getAllShipmentsGlobal();
-                const sorted = Array.isArray(data) ? data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) : [];
-                setShipments(sorted);
-                setFilteredShipments(sorted);
-            } catch(e) { console.error(e); }
+                setPackages(data);
+                setFiltered(data);
+            } catch(e) { console.error(e); } 
             finally { setLoading(false); }
         };
         load();
     }, []);
 
+    // Logique Filtre (Similaire à userManagement)
     useEffect(() => {
-        const term = searchTerm.toLowerCase();
-        setFilteredShipments(shipments.filter(s => 
-             s.trackingNumber?.toLowerCase().includes(term) || 
-             s.senderName?.toLowerCase().includes(term)
-        ));
-        setPage(1);
-    }, [searchTerm, shipments]);
+        let res = packages;
+        
+        // 1. Recherche Texte
+        if (search) {
+            const t = search.toLowerCase();
+            res = res.filter(p => 
+                (p.trackingNumber && p.trackingNumber.toLowerCase().includes(t)) ||
+                (p.senderName && p.senderName.toLowerCase().includes(t)) ||
+                (p.recipientName && p.recipientName.toLowerCase().includes(t))
+            );
+        }
 
-    const paginatedData = filteredShipments.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+        // 2. Filtre Statut
+        if (statusFilter !== 'ALL') {
+            res = res.filter(p => {
+                if (!p.status) return false;
+                const st = p.status.toUpperCase();
+                
+                if (statusFilter === 'EN_COURS') 
+                    return ['EN_ATTENTE', 'TRANSIT', 'DEPART', 'ARRIVE', 'PENDING'].some(k => st.includes(k));
+                
+                if (statusFilter === 'LIVRE') 
+                    return ['LIVRE', 'RECU', 'DELIVERED', 'WITHDRAWN'].some(k => st.includes(k));
+                
+                if (statusFilter === 'ANNULE') 
+                    return st.includes('ANNULE') || st.includes('CANCEL');
+                
+                return true;
+            });
+        }
+
+        setFiltered(res);
+    }, [search, statusFilter, packages]);
 
     return (
         <div className="space-y-6">
-             {/* Filtre */}
-             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700 shadow-sm flex gap-4">
-                 <div className="relative flex-1">
-                     <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
+            
+            {/* Toolbar Colis */}
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+                 {/* Barre recherche */}
+                 <div className="relative w-full md:w-96">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/>
                      <input 
-                        type="text" 
-                        placeholder="Rechercher tracking, expéditeur..." 
-                        className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-sm"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                        type="text" placeholder="Recherche par tracking, nom..."
+                        value={search} onChange={e => setSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-900 border-none rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none transition"
                      />
                  </div>
-                 <button onClick={() => window.location.reload()} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-500"><Loader2 className="w-5 h-5"/></button>
+                 
+                 {/* Filtres Statut */}
+                 <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-lg overflow-x-auto">
+                     {['ALL', 'EN_COURS', 'LIVRE', 'ANNULE'].map(st => (
+                         <button 
+                            key={st} 
+                            onClick={() => setStatusFilter(st)}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition whitespace-nowrap ${statusFilter === st ? 'bg-white dark:bg-slate-700 shadow text-slate-800 dark:text-white' : 'text-slate-500 hover:bg-white/50'}`}
+                         >
+                            {st === 'EN_COURS' ? 'En Cours' : st === 'LIVRE' ? 'Livrés' : st === 'ALL' ? 'Tous' : 'Annulés'}
+                         </button>
+                     ))}
+                 </div>
+            </div>
+
+            {/* Tableau */}
+            <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl overflow-hidden shadow-sm min-h-[300px]">
+                <table className="w-full text-left text-sm">
+                     <thead className="bg-slate-50 dark:bg-slate-700/50 border-b dark:border-slate-700 text-xs font-bold text-slate-500 uppercase">
+                         <tr>
+                             <th className="p-4">Tracking</th>
+                             <th className="p-4">Détails</th>
+                             <th className="p-4 text-center">Statut</th>
+                             <th className="p-4 text-right">Frais</th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                         {loading ? (
+                             <tr><td colSpan={4} className="p-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-orange-500"/></td></tr>
+                         ) : filtered.length === 0 ? (
+                             <tr><td colSpan={4} className="p-10 text-center text-slate-400 italic">Aucun colis trouvé.</td></tr>
+                         ) : filtered.map(pkg => (
+                             <tr key={pkg.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20">
+                                 <td className="p-4 font-mono font-bold text-slate-700 dark:text-orange-400">{pkg.trackingNumber}</td>
+                                 <td className="p-4">
+                                     <div className="font-semibold text-slate-800 dark:text-white">{pkg.description || 'Colis'}</div>
+                                     <div className="text-[10px] text-slate-500">Exp: {pkg.senderName} → Dest: {pkg.recipientName}</div>
+                                 </td>
+                                 <td className="p-4 text-center">
+                                     <StatusBadge status={pkg.status} />
+                                 </td>
+                                 <td className="p-4 text-right font-mono font-bold text-slate-700 dark:text-white">
+                                     {pkg.shippingCost.toLocaleString()} F
+                                 </td>
+                             </tr>
+                         ))}
+                     </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+// --------------------------------------------------------------------------------------------------
+// ORCHESTRATION FINALE
+// --------------------------------------------------------------------------------------------------
+
+export default function OperationsManagement() {
+    const [tab, setTab] = useState<'PACKAGES' | 'RELAYS'>('RELAYS'); 
+
+    return (
+        <div className="min-h-[600px] animate-in fade-in duration-500 pb-20 space-y-6">
+             <Toaster position="top-center"/>
+             
+             <div className="flex items-center justify-between">
+                 <div>
+                     <h2 className="text-2xl font-black text-slate-800 dark:text-white">Opérations</h2>
+                     <p className="text-sm text-slate-500">Pilotage du réseau logistique.</p>
+                 </div>
+                 <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex shadow-inner">
+                     <button onClick={()=>setTab('RELAYS')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${tab==='RELAYS'?'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-blue-400':'text-gray-500'}`}>
+                         <Building className="w-4 h-4"/> Points Relais
+                     </button>
+                     <button onClick={()=>setTab('PACKAGES')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${tab==='PACKAGES'?'bg-white dark:bg-slate-700 shadow text-orange-600 dark:text-orange-400':'text-gray-500'}`}>
+                         <Package className="w-4 h-4"/> Gestion Colis
+                     </button>
+                 </div>
              </div>
 
-             {/* Liste */}
-             <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl overflow-hidden shadow-sm relative">
-                  {loading && <div className="absolute inset-0 bg-white/60 dark:bg-black/50 z-10 flex justify-center items-center"><Loader2 className="animate-spin text-orange-500 w-8 h-8"/></div>}
-                  <table className="w-full text-sm text-left">
-                       <thead className="bg-gray-50 dark:bg-slate-700/50 text-gray-500 uppercase font-bold text-xs">
-                            <tr><th className="p-4">Tracking</th><th className="p-4">Trajet</th><th className="p-4 text-center">Statut</th><th className="p-4 text-right">Montant</th></tr>
-                       </thead>
-                       <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                            {paginatedData.map(s => (
-                                <tr key={s.id} onClick={() => setSelectedShipment(s)} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer">
-                                     <td className="p-4 font-mono font-bold text-orange-600">{s.trackingNumber}</td>
-                                     <td className="p-4"><div className="font-bold">{s.senderName}</div><div className="text-xs text-gray-400">{s.recipientName}</div></td>
-                                     <td className="p-4 text-center"><StatusBadge status={s.status}/></td>
-                                     <td className="p-4 text-right font-bold">{(s.shippingCost || 0).toLocaleString()} F</td>
-                                </tr>
-                            ))}
-                       </tbody>
-                  </table>
-                  {filteredShipments.length === 0 && !loading && <div className="p-8 text-center text-gray-500">Aucun colis trouvé.</div>}
-             </div>
-
-             {/* MODALE DÉTAIL */}
-             <AnimatePresence>
-                 {selectedShipment && (
-                     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedShipment(null)}>
-                          <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 relative" onClick={e => e.stopPropagation()}>
-                              <button onClick={() => setSelectedShipment(null)} className="absolute top-4 right-4"><X className="text-gray-400"/></button>
-                              <h3 className="text-xl font-bold mb-4 flex gap-2"><Package className="text-orange-500"/> {selectedShipment.trackingNumber}</h3>
-                              <div className="space-y-3 text-sm">
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <div className="bg-gray-50 p-3 rounded">
-                                          <p className="text-xs text-gray-400 font-bold uppercase">Expéditeur</p>
-                                          <p className="font-bold">{selectedShipment.senderName}</p>
-                                          <p className="text-xs">{selectedShipment.departurePointName}</p>
-                                      </div>
-                                      <div className="bg-gray-50 p-3 rounded">
-                                          <p className="text-xs text-gray-400 font-bold uppercase">Destinataire</p>
-                                          <p className="font-bold">{selectedShipment.recipientName}</p>
-                                          <p className="text-xs">{selectedShipment.arrivalPointName}</p>
-                                      </div>
-                                  </div>
-                                  <div className="p-3 border rounded text-center">
-                                      <p className="text-xs uppercase text-gray-400 mb-1">Coût Transport</p>
-                                      <p className="text-2xl font-black text-green-600">{(selectedShipment.shippingCost || 0).toLocaleString()} FCFA</p>
-                                  </div>
-                              </div>
-                          </div>
+             <AnimatePresence mode="wait">
+                 {tab === 'RELAYS' ? (
+                     <motion.div key="relays" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                         <RelayManager />
+                     </motion.div>
+                 ) : (
+                     <motion.div key="packages" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                         <ShipmentManager />
                      </motion.div>
                  )}
              </AnimatePresence>
-        </div>
-    );
-};
-
-// GESTIONNAIRE DE VALIDATION DES RELAIS
-const RelayValidationsManager = () => {
-    const [pendingPoints, setPendingPoints] = useState<RelayPoint[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const loadPending = async () => {
-        setLoading(true);
-        try {
-            const data = await relayPointService.getPendingRelayPoints();
-            setPendingPoints(data);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => { loadPending(); }, []);
-
-    const handleApprove = async (id: string) => {
-        if(!confirm("Confirmer la validation de ce Point Relais ?")) return;
-        const tid = toast.loading("Validation en cours...");
-        try {
-            await relayPointService.approveRelayPoint(id);
-            toast.success("Point Relais activé !", {id: tid});
-            loadPending();
-        } catch(e) {
-            toast.error("Erreur technique", {id: tid});
-        }
-    };
-
-    const handleReject = async (id: string) => {
-        const reason = prompt("Motif du rejet :");
-        if(!reason) return;
-        
-        const tid = toast.loading("Rejet en cours...");
-        try {
-            await relayPointService.rejectRelayPoint(id, reason);
-            toast.error("Point Relais rejeté.", {id: tid});
-            loadPending();
-        } catch(e) {
-            toast.error("Erreur technique", {id: tid});
-        }
-    };
-
-    if(loading && pendingPoints.length === 0) return <div className="p-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500"/></div>;
-
-    if(pendingPoints.length === 0) return (
-        <div className="p-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
-            <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3"/>
-            <h3 className="font-bold text-slate-700 dark:text-white">Aucune demande en attente</h3>
-            <p className="text-sm text-slate-500">Tout est à jour !</p>
-        </div>
-    );
-
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pendingPoints.map((rp) => (
-                <div key={rp.id} className="bg-white dark:bg-slate-800 rounded-xl border border-amber-200 dark:border-amber-900 shadow-lg overflow-hidden relative">
-                    <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">NOUVEAU</div>
-                    
-                    <div className="p-5">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                                <Building className="w-6 h-6 text-slate-500"/>
-                            </div>
-                            <div>
-                                {/* Sécurisation ici avec l'opérateur || "" */}
-                                <h4 className="font-bold text-lg text-slate-800 dark:text-white line-clamp-1">
-                                    {rp.relayPointName || "Nom non défini"}
-                                </h4>
-                                <p className="text-xs text-slate-500 flex items-center gap-1">
-                                    <MapPin className="w-3 h-3"/> {rp.locality || 'Ville inconnue'}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg mb-4">
-                            <p><strong>Adresse:</strong> {rp.address || rp.relay_point_address}</p>
-                            <p><strong>Capacité:</strong> {rp.maxCapacity} colis</p>
-                            <p><strong>Horaires:</strong> {rp.openingHours || "Non spécifié"}</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={() => handleReject(rp.id)}
-                                className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-bold text-sm transition"
-                            >
-                                <X className="w-4 h-4"/> Rejeter
-                            </button>
-                            <button 
-                                onClick={() => handleApprove(rp.id)}
-                                className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-green-600 text-white hover:bg-green-700 font-bold text-sm shadow-md transition"
-                            >
-                                <CheckCircle className="w-4 h-4"/> Valider
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-};
-
-// GESTIONNAIRE POINTS RELAIS ACTIFS
-const RelayPointsManager = () => {
-    const [relays, setRelays] = useState<RelayPoint[]>([]);
-    const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
-
-    useEffect(() => {
-        relayPointService.getAllRelayPoints().then(setRelays).catch(console.error);
-    }, []);
-
-    return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border dark:border-slate-700">
-                 <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white"><Building className="text-blue-500 w-5 h-5"/> Points Relais</h3>
-                 <div className="flex gap-2">
-                      <button onClick={() => setViewMode('LIST')} className={`p-2 rounded font-bold text-xs ${viewMode==='LIST' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}><List className="w-4 h-4"/></button>
-                      <button onClick={() => setViewMode('MAP')} className={`p-2 rounded font-bold text-xs ${viewMode==='MAP' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}><MapIcon className="w-4 h-4"/></button>
-                 </div>
-            </div>
-
-            {viewMode === 'LIST' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                     {relays.map(r => (
-                         <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border dark:border-slate-700 shadow-sm hover:shadow-md transition">
-                             <div className="flex justify-between mb-2">
-                                 <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white flex items-center justify-center font-bold text-xs">
-                                     {/* Protection ici également contre la valeur null */}
-                                     {(r.relayPointName || "?").charAt(0).toUpperCase()}
-                                 </div>
-                                 <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded font-bold uppercase">Actif</span>
-                             </div>
-                             <h4 className="font-bold text-slate-900 dark:text-white truncate">
-                                 {r.relayPointName || "Sans Nom"}
-                             </h4>
-                             <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><MapPin className="w-3 h-3"/> {r.address || r.relay_point_address}</p>
-                         </div>
-                     ))}
-                </div>
-            ) : (
-                <RelayMap relays={relays} />
-            )}
-        </div>
-    );
-};
-
-export default function OperationsManagement() {
-    const [activeTab, setActiveTab] = useState<'packages' | 'relays' | 'validations'>('packages');
-
-    return (
-        <div className="min-h-[600px] space-y-8 pb-20 animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-6">
-                 <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Opérations Logistiques</h2>
-                 <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex">
-                      <button onClick={() => setActiveTab('packages')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'packages' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}><Package className="w-4 h-4"/> Colis</button>
-                      <button onClick={() => setActiveTab('relays')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'relays' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}><Building className="w-4 h-4"/> Relais</button>
-                      <button onClick={() => setActiveTab('validations')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${activeTab === 'validations' ? 'bg-white shadow text-green-600' : 'text-gray-500'}`}><Zap className="w-4 h-4"/> Validations</button>
-                 </div>
-            </div>
-        <AnimatePresence mode="wait">
-            <motion.div key={activeTab} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.2 }}>
-                {activeTab === 'packages' && <ShipmentsManager />}
-                {activeTab === 'relays' && <RelayPointsManager />}
-                {activeTab === 'validations' && <RelayValidationsManager />}
-            </motion.div>
-        </AnimatePresence>
         </div>
     );
 }
@@ -27105,6 +27214,193 @@ const SystemCharts = ({ trafficHistory, latencyHistory }: ChartProps) => {
 };
 
 export default SystemCharts;
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\src\app\superadmin\RelaySidebar.tsx
+================================================================================
+
+// FICHIER : src/app/superadmin/components/RelaySidebar.tsx
+'use client';
+
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+    X, MapPin, Phone, Mail, Clock, ShieldCheck, 
+    AlertTriangle, Package, CheckCircle, Store, Power 
+} from 'lucide-react';
+import { RelayPoint } from '@/services/relayPointService';
+
+interface RelaySidebarProps {
+    relay: RelayPoint | null;
+    onClose: () => void;
+    onAction: (action: string, id: string) => void;
+}
+
+export default function RelaySidebar({ relay, onClose, onAction }: RelaySidebarProps) {
+    if (!relay) return null;
+
+    // Détermine le statut pour le badge et l'affichage conditionnel
+    const isPending = relay.status.includes('PENDING');
+    const isActive = relay.status === 'ACTIVE';
+    const isSuspended = relay.status === 'SUSPENDED';
+
+    return (
+        <AnimatePresence>
+            <div className="fixed inset-0 z-50 flex justify-end pointer-events-none">
+                {/* Backdrop Clickable */}
+                <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }} 
+                    onClick={onClose}
+                    className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto"
+                />
+
+                {/* Sidebar Panel */}
+                <motion.div 
+                    initial={{ x: '100%' }} 
+                    animate={{ x: '0%' }} 
+                    exit={{ x: '100%' }} 
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    className="w-full max-w-md bg-white dark:bg-slate-900 h-full shadow-2xl pointer-events-auto border-l border-slate-200 dark:border-slate-800 flex flex-col z-50"
+                >
+                    {/* HEADER AVEC PHOTO COVER */}
+                    <div className="relative h-56 bg-slate-100 dark:bg-slate-800 group">
+                        {relay.photoUrl ? (
+                            <img src={relay.photoUrl} alt={relay.relayPointName} className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-400 to-red-500">
+                                <Store className="w-20 h-20 text-white/50" />
+                            </div>
+                        )}
+                        
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/10"></div>
+
+                        {/* Actions Rapides en haut */}
+                        <div className="absolute top-4 right-4 flex gap-2">
+                             <button onClick={onClose} className="p-2 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-md transition">
+                                 <X className="w-5 h-5"/>
+                             </button>
+                        </div>
+
+                        {/* Titre Overlay */}
+                        <div className="absolute bottom-0 left-0 w-full p-6">
+                             <h2 className="text-2xl font-bold text-white mb-2 shadow-sm">{relay.relayPointName}</h2>
+                             <div className="flex flex-wrap items-center gap-2 text-white/90 text-xs">
+                                 <span className={`px-2 py-0.5 rounded font-bold uppercase ${
+                                     isActive ? 'bg-green-500' : isSuspended ? 'bg-red-500' : 'bg-yellow-500'
+                                 } text-white`}>
+                                     {relay.status.replace('_',' ')}
+                                 </span>
+                                 <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded backdrop-blur-sm"><MapPin className="w-3 h-3"/> {relay.locality || 'Ville inconnue'}</span>
+                             </div>
+                        </div>
+                    </div>
+
+                    {/* CORPS SCROLLABLE */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50 dark:bg-slate-900">
+                        
+                        {/* Section Alertes (Action Requise) */}
+                        {isPending && (
+                            <div className="p-5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl shadow-sm">
+                                <h4 className="font-bold text-amber-800 dark:text-amber-200 flex items-center gap-2 mb-2">
+                                    <AlertTriangle className="w-5 h-5"/> Validation Requise
+                                </h4>
+                                <p className="text-sm text-amber-700 dark:text-amber-300 mb-4 leading-relaxed">
+                                    Ce point relais attend votre approbation pour commencer ses activités. Vérifiez la conformité avant de valider.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => onAction('APPROVE', relay.id)} className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-green-500/20">Valider</button>
+                                    <button onClick={() => onAction('REJECT', relay.id)} className="flex-1 py-2.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 dark:bg-slate-800 dark:border-red-900 text-sm font-bold rounded-xl transition">Rejeter</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Informations Détail Grid */}
+                        <div className="space-y-4">
+                            <h3 className="font-bold text-slate-800 dark:text-white uppercase text-xs tracking-wider border-b pb-2 dark:border-slate-800 flex items-center gap-2">
+                                <Store className="w-4 h-4"/> Détails Opérationnels
+                            </h3>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Occupation</span>
+                                    <span className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                        {relay.current_package_count || 0} <span className="text-sm text-slate-400 font-medium">/ {relay.maxCapacity}</span>
+                                    </span>
+                                    <div className="w-full bg-slate-100 h-1 mt-2 rounded-full overflow-hidden">
+                                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, ((relay.current_package_count||0)/relay.maxCapacity)*100)}%` }}/>
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Horaires</span>
+                                    <span className="text-sm font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <Clock className="w-4 h-4 text-orange-500"/> {relay.openingHours || "Non défini"}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 space-y-3">
+                                <div className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300">
+                                    <MapPin className="w-5 h-5 text-blue-500 mt-0.5 shrink-0"/>
+                                    <div>
+                                        <p className="font-bold text-xs uppercase text-slate-400 mb-0.5">Adresse Physique</p>
+                                        <p>{relay.address || relay.relay_point_address || "Non renseignée"}</p>
+                                    </div>
+                                </div>
+                                <div className="w-full h-px bg-slate-100 dark:bg-slate-700"></div>
+                                <div className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300">
+                                    <Phone className="w-5 h-5 text-green-500 mt-0.5 shrink-0"/>
+                                    <div>
+                                        <p className="font-bold text-xs uppercase text-slate-400 mb-0.5">Contact</p>
+                                        <p>{relay.contactPhone || "Non renseigné"}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Documents & Conformité */}
+                        <div>
+                             <h3 className="font-bold text-slate-800 dark:text-white uppercase text-xs tracking-wider border-b pb-2 mb-4 dark:border-slate-800 flex items-center gap-2">
+                                 <ShieldCheck className="w-4 h-4"/> Conformité
+                             </h3>
+                             <div className="flex gap-3">
+                                 {relay.documents ? (
+                                     <span className="text-green-700 bg-green-100 dark:bg-green-900/30 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 w-full justify-center">
+                                         <CheckCircle className="w-4 h-4"/> Dossier Validé
+                                     </span>
+                                 ) : (
+                                     <span className="text-slate-500 bg-slate-200 dark:bg-slate-800 px-3 py-2 rounded-lg text-xs font-medium w-full text-center italic">
+                                         Documents manquants
+                                     </span>
+                                 )}
+                             </div>
+                        </div>
+                    </div>
+                    
+                    {/* FOOTER ACTIONS DANGER */}
+                    {(isActive || isSuspended) && (
+                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
+                             <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-3 tracking-wider">Administration Avancée</h4>
+                             <div className="grid grid-cols-2 gap-4">
+                                 {isSuspended ? (
+                                     <button onClick={() => onAction('LIFT_SUSPENSION', relay.id)} className="w-full py-3 bg-green-100 text-green-700 hover:bg-green-200 font-bold rounded-xl text-sm transition border border-green-200">Lever Suspension</button>
+                                 ) : (
+                                     <button onClick={() => onAction('SUSPEND', relay.id)} className="w-full py-3 bg-orange-100 text-orange-700 hover:bg-orange-200 font-bold rounded-xl text-sm transition border border-orange-200">Suspendre</button>
+                                 )}
+                                 
+                                 <button onClick={() => onAction('DEACTIVATE', relay.id)} className="w-full py-3 bg-red-100 text-red-700 hover:bg-red-200 font-bold rounded-xl text-sm transition border border-red-200 flex items-center justify-center gap-2">
+                                     <Power className="w-4 h-4"/> Désactiver
+                                 </button>
+                             </div>
+                        </div>
+                    )}
+                </motion.div>
+            </div>
+        </AnimatePresence>
+    );
+}
 
 
 ================================================================================
@@ -33685,13 +33981,17 @@ async function apiClient<T>(
   let token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
   if (token) token = token.replace(/^"(.*)"$/, '$1');
 
-  // Logs en VIOLET si le mot clé "deliverer" est dans l'URL pour différencier les flux visuellement
-  const isLivreur = endpoint.includes('deliverer');
-  const groupStyle = isLivreur 
-    ? 'color: #8b5cf6; font-weight: bold; background: #f3f0ff; padding: 2px 5px; border-radius: 4px;' 
-    : 'color: #3b82f6; font-weight: bold;';
+  // Code couleur pour différencier les rôles dans la console
+  let logStyle = 'color: #3b82f6; font-weight: bold;'; // Blue (Standard)
+  if (endpoint.includes('deliverer') || endpoint.includes('pickup-from') || endpoint.includes('deliver-to')) 
+      logStyle = 'color: #7c3aed; font-weight: bold;'; // Violet (Livreur)
+  if (endpoint.includes('relay-point') || endpoint.includes('relay-to')) 
+      logStyle = 'color: #f97316; font-weight: bold;'; // Orange (Relais)
 
-  console.groupCollapsed(`%c🌐 [API] ${method} ${endpoint}`, groupStyle);
+  console.groupCollapsed(`%c📡 [API REQUEST] ${method} ${endpoint}`, logStyle);
+  console.log('URL:', url);
+  if(body) console.log('Payload:', body);
+  console.groupEnd();
 
   const config: RequestInit = {
     method,
@@ -33715,45 +34015,30 @@ async function apiClient<T>(
 
   try {
     const response = await fetch(url, config);
-    const clone = response.clone();
     
-    if (response.ok) {
-        try {
-            // Tente de parser, si vide retourne null sans erreur
-            const text = await clone.text();
-            const data = text ? JSON.parse(text) : {};
-            console.log('✅ Success Payload:', data);
-            console.groupEnd();
-            return data as T;
-        } catch(e) {
-            console.warn('⚠️ JSON Parse Warning (Success but malformed JSON)');
-            console.groupEnd();
-            return {} as T;
-        }
-    } else {
-         // --- CORRECTION DE L'ERREUR CONSOLE ---
-         const errorText = await clone.text();
-         console.warn(`❌ [API FAIL] Status: ${response.status}`);
-         if (errorText) console.error('Error Body:', errorText);
-         else console.log('Error Body is empty.');
-         
-         console.groupEnd();
+    // Log de la réponse
+    console.groupCollapsed(`%c📩 [API RESPONSE] ${response.status} ${endpoint}`, response.ok ? 'color: #10b981;' : 'color: #ef4444;');
+    
+    const clone = response.clone();
+    let data;
+    try {
+        const text = await clone.text();
+        data = text ? JSON.parse(text) : {};
+        console.log('Body:', data);
+    } catch(e) {
+        console.warn('Empty or invalid JSON body');
+    }
+    console.groupEnd();
 
-         // Tentative d'extraire un message propre
-         let errorMessage = `Erreur HTTP ${response.status}`;
-         try {
-             const jsonError = JSON.parse(errorText);
-             errorMessage = jsonError.message || jsonError.error || errorMessage;
-         } catch(e) {
-             if (errorText) errorMessage = errorText.substring(0, 100);
-         }
-         
+    if (response.ok) {
+        return data as T;
+    } else {
+         const errorMessage = data?.message || data?.error || `Erreur HTTP ${response.status}`;
          throw new Error(errorMessage);
     }
 
   } catch (error: any) {
     console.error(`💥 Network Error ${method} ${endpoint}:`, error);
-    console.groupEnd();
     throw error;
   }
 }
@@ -33878,229 +34163,169 @@ FICHIER: D:\4GI\PO\pick-n-drop\src\services\relayPointService.ts
 ================================================================================
 
 // FICHIER: src/services/relayPointService.ts
-
 import apiClient from './apiClient';
 
-// --- TYPES & INTERFACES ---
-
+// --- TYPES ---
 export interface RelayPoint {
-    id: string; // UUID
+    id: string; 
     ownerId: string;
-    agency_id?: string;
     relayPointName: string;
     address?: string;
-    relay_point_address?: string; // Fallback naming
+    relay_point_address?: string;
     locality?: string;
-    relay_point_locality?: string; // Fallback naming
+    relay_point_locality?: string;
     openingHours?: string;
     maxCapacity: number;
     latitude: number;
     longitude: number;
+    status: string; // 'DRAFT', 'PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED', 'TEMPORARILY_CLOSED', 'DEACTIVATED'
     is_active: boolean;
     current_package_count: number;
+    documents?: any;
+    photoUrl?: string;
+    contactPhone?: string;
 }
 
-export interface RelayPackage {
-    id: string;
-    trackingNumber: string;
-    status: string;
-    description: string;
-    shippingCost: number;
-    senderName: string;
-    recipientName: string;
-    createdAt: string;
-    packageType?: string;
-}
-
-// --- IMPLEMENTATION DES ENDPOINTS MÉTIERS (Ton nouveau Flow) ---
-
-// 1. RECEPTIONNER (Dépôt Client OU Arrivée Livreur au hub)
-// Route: POST /api/relay-point/packages/{packageId}/receive
-const receivePackage = async (packageId: string): Promise<any> => {
-    return apiClient(`/api/relay-point/packages/${packageId}/receive`, 'POST');
-};
-
-// 2. PRÉPARER POUR DÉPART (Vers Livreur)
-// Route: POST /api/relay-point/packages/{packageId}/ready-for-dispatch
-const markReadyForDispatch = async (packageId: string): Promise<any> => {
-    return apiClient(`/api/relay-point/packages/${packageId}/ready-for-dispatch`, 'POST');
-};
-
-// 3. PRÉPARER POUR RETRAIT (Vers Client Destinataire)
-// Route: POST /api/relay-point/packages/{packageId}/ready-for-pickup
-const markReadyForPickup = async (packageId: string): Promise<any> => {
-    return apiClient(`/api/relay-point/packages/${packageId}/ready-for-pickup`, 'POST');
-};
-
-// 4. REMETTRE AU CLIENT (Finalisation)
-// Route: POST /api/relay-point/packages/{packageId}/hand-to-recipient
-const handoverToRecipient = async (packageId: string, pickupCode: string): Promise<any> => {
-    // On passe souvent le code en query param ou body, ici adapté à ta demande simple
-    return apiClient(`/api/relay-point/packages/${packageId}/hand-to-recipient`, 'POST', { pickupCode });
-};
-
-// --- IMPLEMENTATION DATA FETCHING (Inventaires) ---
+// =============================================================================
+// ACTIONS PROPRIÉTAIRE & CRÉATION (Flux Inscription -> Validation)
+// =============================================================================
 
 /**
- * Récupère tous les colis PHYSQIUEMENT PRÉSENTS au point relais
- * Route: GET /api/relay-point/packages
- */
-const getMyRelayInventory = async (): Promise<RelayPackage[]> => {
-    try {
-        const res = await apiClient<any>('/api/relay-point/packages', 'GET');
-        return extractArray(res);
-    } catch (e) {
-        console.error("Erreur inventaire global:", e);
-        return [];
-    }
-};
-
-/**
- * Récupère les colis EN ARRIVAGE (venant d'un livreur vers ce relais)
- * Route: GET /api/relay-point/packages/awaiting-arrival
- */
-const getPackagesIncoming = async (): Promise<RelayPackage[]> => {
-    try {
-        const res = await apiClient<RelayPackage[]>('/api/relay-point/packages/awaiting-arrival', 'GET');
-        return extractArray(res);
-    } catch (e) { return []; }
-};
-
-/**
- * Récupère les colis PRE-ENREGISTRÉS par les clients (à déposer)
- * Route: GET /api/relay-point/packages/to-deposit
- */
-const getPackagesToDeposit = async (): Promise<RelayPackage[]> => {
-    try {
-        const res = await apiClient<RelayPackage[]>('/api/relay-point/packages/to-deposit', 'GET');
-        return extractArray(res);
-    } catch (e) { return []; }
-};
-
-// --- UTILITAIRES & GENERIQUES ---
-
-const getAllRelayPoints = async (): Promise<RelayPoint[]> => {
-    const res = await apiClient<RelayPoint[]>('/api/relay-points', 'GET');
-    return extractArray(res);
-};
-
-// C'est la fonction qui te manquait dans l'erreur !
-const getRelayPointById = async (id: string): Promise<RelayPoint> => {
-    return apiClient<RelayPoint>(`/api/relay-points/${id}`, 'GET');
-};
-
-// Utilitaires de conversion pour extraire les tableaux des réponses paginées/wrapper
-const extractArray = (response: any): any[] => {
-    if (!response) return [];
-    if (Array.isArray(response)) return response;
-    if (response.content && Array.isArray(response.content)) return response.content;
-    if (response.data && Array.isArray(response.data)) return response.data;
-    if (response.packages && Array.isArray(response.packages)) return response.packages;
-    return [];
-};
-
-/**
- * 1. Créer un nouveau Point Relais (Pour un owner existant ou via le profil agence)
- * Route : POST /api/relay-points
+ * 1. Création (Propriétaire)
+ * POST /api/relay-points
  */
 const createRelayPoint = async (data: any, ownerId?: string): Promise<RelayPoint> => {
-    // Si ownerId est fourni, on peut l'injecter dans le body ou le backend le tire du token
-    const payload = {
-        ...data,
-        ownerId: ownerId // Optionnel si le token suffit
-    };
-    
+    const payload = { ...data, ownerId };
     console.log("📤 Création Point Relais:", payload);
     return apiClient<RelayPoint>('/api/relay-points', 'POST', payload);
 };
 
+/**
+ * 2. Upload Photo (Propriétaire / Admin)
+ * POST /api/relay-points/{relayPointId}/photo/upload
+ */
+const uploadRelayPhoto = async (relayPointId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    // Note : apiClient gère le content-type multipart si body est FormData
+    return apiClient(`/api/relay-points/${relayPointId}/photo/upload`, 'POST', fd);
+};
 
 /**
- * 2. Soumettre le point relais à l'admin pour vérification (Après création + upload documents)
- * Route : POST /api/relay-points/{relayPointId}/submit-verification
+ * 3. Upload Documents (Propriétaire / Admin)
+ * POST /api/relay-points/{relayPointId}/documents/upload
  */
-const submitForVerification = async (relayId: string): Promise<any> => {
-    console.log(`📤 [RelayService] Submission pour validation : ${relayId}`);
+const uploadRelayDocument = async (relayPointId: string, file: File, docType: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', docType);
+    return apiClient(`/api/relay-points/${relayPointId}/documents/upload`, 'POST', fd);
+};
+
+/**
+ * 4. Soumettre pour vérification (Propriétaire)
+ * POST /api/relay-points/{relayPointId}/submit-verification
+ */
+const submitForVerification = async (relayId: string) => {
     return apiClient(`/api/relay-points/${relayId}/submit-verification`, 'POST');
 };
 
-/**
- * 3. L'Admin Approuve
- * Route : POST /api/relay-points/{relayPointId}/approve
- * Fix: Ajout du body JSON requis par le Backend
- */
-const approveRelayPoint = async (relayId: string, notes: string = "Validation Admin"): Promise<any> => {
-    // Le backend attend un RelayPointVerificationRequest en JSON
-    const payload = {
-        verificationNotes: notes,
-        canResubmit: false // Champ souvent attendu par le DTO backend pour l'approbation
+// =============================================================================
+// ACTIONS ADMIN (Gestion du Cycle de Vie)
+// =============================================================================
+
+// Validation
+const approveRelayPoint = async (relayPointId: string) => apiClient(`/api/relay-points/${relayPointId}/approve`, 'POST');
+const rejectRelayPoint = async (relayPointId: string, reason: string) => apiClient(`/api/relay-points/${relayPointId}/reject`, 'POST', { reason });
+
+// Activation / Désactivation
+const activateRelayPoint = async (relayPointId: string) => apiClient(`/api/relay-points/${relayPointId}/activate`, 'POST');
+const deactivateRelayPoint = async (relayPointId: string, reason?: string) => apiClient(`/api/relay-points/${relayPointId}/deactivate`, 'POST', { reason });
+
+// Suspension
+const suspendRelayPoint = async (relayPointId: string, reason?: string) => apiClient(`/api/relay-points/${relayPointId}/suspend`, 'POST', { reason });
+const liftSuspension = async (relayPointId: string) => apiClient(`/api/relay-points/${relayPointId}/lift-suspension`, 'POST');
+
+// Fermeture Temporaire / Réouverture
+const closeTemporarily = async (relayPointId: string, reason?: string) => apiClient(`/api/relay-points/${relayPointId}/close-temporarily`, 'POST', { reason });
+const reopenRelayPoint = async (relayPointId: string) => apiClient(`/api/relay-points/${relayPointId}/reopen`, 'POST');
+
+// =============================================================================
+// LECTURE & RECHERCHE (Admin & Public)
+// =============================================================================
+
+const getAllRelayPoints = async () => apiClient<RelayPoint[]>('/api/relay-points', 'GET');
+const getRelayPointById = async (id: string) => apiClient<RelayPoint>(`/api/relay-points/${id}`, 'GET');
+const getRelayStats = async () => apiClient<any>('/api/relay-points/stats', 'GET'); 
+const getGlobalStatistics = async () => apiClient<any>('/api/relay-points/statistics', 'GET'); 
+
+const searchRelayPoints = async (query: string) => apiClient<RelayPoint[]>(`/api/relay-points/search?q=${query}`, 'GET');
+
+// FILTRES PAR STATUT (Admin)
+const getPointsByStatus = async (status: string) => {
+    // Mapping des status vers les endpoints fournis
+    const endpointMap: Record<string, string> = {
+        'VERIFIED': '/api/relay-points/status/verified',
+        'PENDING_VERIFICATION': '/api/relay-points/status/pending-verification',
+        'PENDING_DOCUMENTS': '/api/relay-points/status/pending-documents',
+        'DRAFT': '/api/relay-points/status/draft',
+        'ACTIVE': '/api/relay-points/status/active',
+        'ALL': '/api/relay-points/status/all' 
     };
-    return apiClient(`/api/relay-points/${relayId}/approve`, 'POST', payload);
+    
+    const url = endpointMap[status] || `/api/relay-points/status/${status.toLowerCase()}`;
+    return apiClient<RelayPoint[]>(url, 'GET');
 };
 
-/**
- * 4. L'Admin Rejette
- * Route : POST /api/relay-points/{relayPointId}/reject
- * Fix: Standardisation des noms de champs
- */
-const rejectRelayPoint = async (relayId: string, reason: string): Promise<any> => {
-    const payload = {
-        verificationNotes: reason, // Le DTO backend mappe souvent 'verificationNotes'
-        rejectionReason: reason,   // On envoie aussi celui-ci par sécurité si le nom diffère
-        canResubmit: true
-    };
-    return apiClient(`/api/relay-points/${relayId}/reject`, 'POST', payload);
-};
+const getPendingVerification = async () => apiClient<RelayPoint[]>('/api/relay-points/pending-verification', 'GET');
 
-// ... (Gardez vos autres méthodes : getMyRelayInventory, getAllRelayPoints, etc.) ...
+// =============================================================================
+// CRUD BASIQUE & COMPATIBILITÉ
+// =============================================================================
 
-/**
- * Récupère les points en attente (Côté Admin)
- * Route : GET /api/relay-points/pending-verification
- */
-const getPendingRelayPoints = async (): Promise<RelayPoint[]> => {
-    const res = await apiClient<RelayPoint[]>('/api/relay-points/pending-verification', 'GET');
-    // Gestion de la réponse si elle est encapsulée (ex: { content: [...] })
-    if (res && (res as any).content) return (res as any).content;
-    return Array.isArray(res) ? res : [];
-};
-
-
-// Autres aliases nécessaires pour ne pas casser le reste de l'app
 const updateRelayPoint = async (id: string, data: any) => apiClient(`/api/relay-points/${id}`, 'PUT', data);
+const deleteRelayPoint = async (id: string) => apiClient(`/api/relay-points/${id}`, 'DELETE');
 
-// Fonctions alias pour éviter de casser 'FreelanceOverview.tsx'
-const getPackagesForExpedition = async (id: string) => getMyRelayInventory(); // Fallback temporaire
-const getPackagesForPickup = async (id: string) => getMyRelayInventory(); // Fallback temporaire
-const getRelayPointsByOwner = async (id: string) => getAllRelayPoints(); // Filter logic coté client souvent
+// Fonctions placeholder pour la compatibilité existante (colis)
+const getPackagesForExpedition = async (id?: string) => [];
+const receivePackage = async (relayId: string, packageId: string) => {}; 
+const dispatchPackage = async (relayId: string, packageId: string) => {}; 
+const markReceivedAtDestination = async (packageId: string) => {}; 
+const handToRecipient = async (packageId: string, code: string) => {}; 
+const getMyRelayInventory = async () => []; 
+const getPackagesIncoming = async () => [];
+const getPackagesForPickup = async () => [];
+
+// Alias de filtrage client si l'endpoint backend n'existe pas
+const getRelayPointsByOwner = async (ownerId: string) => getAllRelayPoints(); 
 
 export const relayPointService = {
-    // Méthodes Flow Validées
-    receivePackage,
-    markReadyForDispatch,
-    markReadyForPickup,
-    handoverToRecipient,
-
-    // Listes Spécifiques
-    getMyRelayInventory,
-    getPackagesIncoming,
-    getPackagesToDeposit,
+    createRelayPoint,
+    uploadRelayPhoto,
+    uploadRelayDocument,
     submitForVerification,
-
-    // Generic / Admin
+    approveRelayPoint,
+    rejectRelayPoint,
+    activateRelayPoint,
+    deactivateRelayPoint,
+    suspendRelayPoint,
+    liftSuspension,
+    closeTemporarily,
+    reopenRelayPoint,
     getAllRelayPoints,
     getRelayPointById,
-    createRelayPoint,
+    getRelayStats,
+    getGlobalStatistics,
+    searchRelayPoints,
+    getPointsByStatus,
+    getPendingVerification,
     updateRelayPoint,
-    rejectRelayPoint,
-    approveRelayPoint,
-    getPendingRelayPoints,
-
-    // Alias pour rétrocompatibilité
-    getPackagesForExpedition,
-    getPackagesForPickup,
+    deleteRelayPoint,
     getRelayPointsByOwner,
-    getPackagesByRelayPoint: getMyRelayInventory
+    
+    // Alias pour ne pas casser le reste (à implémenter ou garder tel quel si autre fichier)
+    getPackagesForExpedition, receivePackage, dispatchPackage, markReceivedAtDestination, 
+    handToRecipient, getMyRelayInventory, getPackagesIncoming, getPackagesForPickup
 };
 
 
@@ -34360,13 +34585,23 @@ const validateBusinessActor = async (id: string, isValid: boolean) => {
 };
 
 const deleteBusinessActor = async (id: string) => apiClient(`/api/business-actors/${id}`, 'DELETE');
-
+const getAllUsers = async (): Promise<any[]> => {
+    try {
+        const response: any = await apiClient('/api/users', 'GET');
+        // Gestion pagination Spring ou Array simple
+        return Array.isArray(response) ? response : (response.content || []);
+    } catch(e) {
+        console.error("Error fetching all users", e);
+        return [];
+    }
+};
 export const adminService = {
     getDashboardStats,
     getAllShipmentsGlobal,
     getAllBusinessActors,
     validateBusinessActor,
-    deleteBusinessActor
+    deleteBusinessActor,
+    getAllUsers
 };
 
 
@@ -35353,24 +35588,15 @@ const delivererService = {
         return res;
     },
 
-    /** POST /api/deliverer/packages/{packageId}/pickup */
-    pickupPackage: async (packageId: string): Promise<any> => {
-        const url = `/api/deliverer/packages/${packageId}/pickup`;
-        logViolet('POST REQUEST Pickup', url);
-        // Note: Ajouter geolocation ou photo ici si requis par votre API plus tard
-        const res = await apiClient(url, 'POST', {}); 
-        logViolet('POST RESPONSE Pickup', res, 'RES');
-        return res;
+    // POST /api/{packageId}/pickup-from-relay
+    pickupFromRelay : async (packageId: string): Promise<any> => {
+        return apiClient(`/api/${packageId}/pickup-from-relay`, 'POST');
     },
 
-    /** POST /api/deliverer/packages/{packageId}/deliver-to-relay */
-    deliverToRelay: async (packageId: string, relayId: string): Promise<any> => {
-        const url = `/api/deliverer/packages/${packageId}/deliver-to-relay`;
-        const body = { relayPointId: relayId };
-        logViolet('POST REQUEST DeliverToRelay', { url, body });
-        const res = await apiClient(url, 'POST', body);
-        logViolet('POST RESPONSE DeliverToRelay', res, 'RES');
-        return res;
+    // === ÉTAPE 6: Déposer colis au relais Arrivée ===
+    // POST /api/{packageId}/deliver-to-relay
+    deliverToRelay : async (packageId: string): Promise<any> => {
+        return apiClient(`/api/${packageId}/deliver-to-relay`, 'POST');
     },
 
     /** POST /api/deliverer/packages/{packageId}/deliver-to-client */
@@ -35494,3 +35720,27 @@ const markAllAsRead = async (): Promise<any> => {
 
 export const notificationService = {
     getUnreadCount,
+    getRecentNotifications,
+    markAsRead,
+    markAllAsRead
+};
+
+
+================================================================================
+FICHIER: D:\4GI\PO\pick-n-drop\.vscode\settings.json
+================================================================================
+
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "My local database",
+            "database": "postgres",
+            "username": "postgres"
+        }
+    ]
+}
