@@ -234,12 +234,6 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
          alert("Merci de renseigner le Nom, CNI et Signature du retirant.");
          return;
     }
-
-    // Validation Paiement
-    if (!packageInfo.is_paid_at_departure && Number(amountPaid) < packageInfo.shippingCost) {
-         alert(`Le paiement est incomplet. Montant dû : ${packageInfo.shippingCost} FCFA.`);
-         return;
-    }
     
     setIsConfirming(true);
     
@@ -247,7 +241,7 @@ export const WithdrawPackagePage = ({ onClose, onSuccess }: WithdrawPackageProps
         console.log(`📤 [Retrait] Envoi validation pour ${packageInfo.trackingNumber}...`);
         
         // Endpoint: PUT /api/packages/{id}/deliver
-        await packageService.markAsDelivered(packageInfo.id);
+        await packageService.handToRecipient(packageInfo.id);
         
         // Génération Bordereau PDF
         await generateWithdrawalPDF(packageInfo, retirantInfo);

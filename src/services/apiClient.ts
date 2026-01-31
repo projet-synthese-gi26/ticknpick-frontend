@@ -14,13 +14,17 @@ async function apiClient<T>(
   let token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
   if (token) token = token.replace(/^"(.*)"$/, '$1');
 
-  // Logs en VIOLET si le mot clé "deliverer" est dans l'URL pour différencier les flux visuellement
-  const isLivreur = endpoint.includes('deliverer');
-  const groupStyle = isLivreur 
-    ? 'color: #8b5cf6; font-weight: bold; background: #f3f0ff; padding: 2px 5px; border-radius: 4px;' 
-    : 'color: #3b82f6; font-weight: bold;';
+  // Code couleur pour différencier les rôles dans la console
+  let logStyle = 'color: #3b82f6; font-weight: bold;'; // Blue (Standard)
+  if (endpoint.includes('deliverer') || endpoint.includes('pickup-from') || endpoint.includes('deliver-to')) 
+      logStyle = 'color: #7c3aed; font-weight: bold;'; // Violet (Livreur)
+  if (endpoint.includes('relay-point') || endpoint.includes('relay-to')) 
+      logStyle = 'color: #f97316; font-weight: bold;'; // Orange (Relais)
 
-  console.groupCollapsed(`%c🌐 [API] ${method} ${endpoint}`, groupStyle);
+  console.groupCollapsed(`%c📡 [API REQUEST] ${method} ${endpoint}`, logStyle);
+  console.log('URL:', url);
+  if(body) console.log('Payload:', body);
+  console.groupEnd();
 
   const config: RequestInit = {
     method,
@@ -44,45 +48,30 @@ async function apiClient<T>(
 
   try {
     const response = await fetch(url, config);
-    const clone = response.clone();
     
-    if (response.ok) {
-        try {
-            // Tente de parser, si vide retourne null sans erreur
-            const text = await clone.text();
-            const data = text ? JSON.parse(text) : {};
-            console.log('✅ Success Payload:', data);
-            console.groupEnd();
-            return data as T;
-        } catch(e) {
-            console.warn('⚠️ JSON Parse Warning (Success but malformed JSON)');
-            console.groupEnd();
-            return {} as T;
-        }
-    } else {
-         // --- CORRECTION DE L'ERREUR CONSOLE ---
-         const errorText = await clone.text();
-         console.warn(`❌ [API FAIL] Status: ${response.status}`);
-         if (errorText) console.error('Error Body:', errorText);
-         else console.log('Error Body is empty.');
-         
-         console.groupEnd();
+    // Log de la réponse
+    console.groupCollapsed(`%c📩 [API RESPONSE] ${response.status} ${endpoint}`, response.ok ? 'color: #10b981;' : 'color: #ef4444;');
+    
+    const clone = response.clone();
+    let data;
+    try {
+        const text = await clone.text();
+        data = text ? JSON.parse(text) : {};
+        console.log('Body:', data);
+    } catch(e) {
+        console.warn('Empty or invalid JSON body');
+    }
+    console.groupEnd();
 
-         // Tentative d'extraire un message propre
-         let errorMessage = `Erreur HTTP ${response.status}`;
-         try {
-             const jsonError = JSON.parse(errorText);
-             errorMessage = jsonError.message || jsonError.error || errorMessage;
-         } catch(e) {
-             if (errorText) errorMessage = errorText.substring(0, 100);
-         }
-         
+    if (response.ok) {
+        return data as T;
+    } else {
+         const errorMessage = data?.message || data?.error || `Erreur HTTP ${response.status}`;
          throw new Error(errorMessage);
     }
 
   } catch (error: any) {
     console.error(`💥 Network Error ${method} ${endpoint}:`, error);
-    console.groupEnd();
     throw error;
   }
 }

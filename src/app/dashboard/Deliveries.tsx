@@ -285,6 +285,28 @@ export default function DeliveriesPage() {
     const countTransit = packages.filter(p => p.currentStatus === 'IN_TRANSIT').length;
     const countDone = packages.filter(p => p.currentStatus.includes('DELIVERED')).length;
 
+    // Dans le composant DeliveriesPage ou le composant parent du Sidebar
+    const handleDeliverRelay = async (pkg: any) => {
+        try {
+            console.log(`🚚 [ÉTAPE 6] Livreur dépose au relais : ${pkg.id}`);
+            await delivererService.deliverToRelay(pkg.id);
+            toast.success("Colis déposé au relais destination !");
+            reloadData();
+        } catch(e:any) {
+            toast.error("Erreur dépot relais");
+        }
+    };
+
+    const handlePickupRelay = async (pkg: any) => {
+        try {
+            console.log(`🚚 [ÉTAPE 5] Livreur récupère : ${pkg.id}`);
+            await delivererService.pickupFromRelay(pkg.id);
+            toast.success("Colis récupéré !");
+            reloadData();
+        } catch(e:any) {
+            toast.error("Erreur récupération");
+        }
+    };
 
     // --- RENDU PRINCIPAL ---
     

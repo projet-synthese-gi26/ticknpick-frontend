@@ -31,7 +31,7 @@ const MonitoringSystem = dynamic(() => import('./Monitoring'), { ssr: false });
 const TABS = {
   overview: { label: "Vue d'ensemble", icon: LayoutDashboard, comp: Overview },
   users: { label: 'Utilisateurs', icon: Users, comp: UserManagement },
-  operations: { label: 'Opérations', icon: Map, comp: OperationsManagement },
+  operations: { label: 'Points Relais', icon: Map, comp: OperationsManagement },
   finance: { label: 'Finances', icon: CircleDollarSign, comp: FinanceManagement},
   system: { label: 'Système', icon: Activity, comp: MonitoringSystem },
 };

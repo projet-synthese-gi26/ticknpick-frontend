@@ -1,7 +1,7 @@
 // FICHIER: src/app/superadmin/Overview.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 // Assure-toi que le chemin d'import est correct selon ta structure
 import { adminService, AdminDashboardStats } from '@/services/adminService';
 import apiClient from '@/services/apiClient'; // Pour les requêtes directes supplémentaires
@@ -38,6 +38,25 @@ interface EventLog {
     description: string;
     timestamp: string;
     level?: string;
+}
+
+type UserRole = 'CLIENT' | 'RELAY_OWNER' | 'AGENCY_OWNER' | 'DELIVERER' | 'FREELANCE' | 'EMPLOYEE' | 'ADMIN';
+
+interface AdminUser {
+    id: string;
+    name: string;
+    email: string;
+    phoneNumber: string;
+    role: UserRole;        // Rôle principal normalisé pour l'affichage/filtre
+    rawType: string;       // Type brut (ex: BUSINESS_ACTOR)
+    rawSubType?: string;   // Sous-type brut (ex: RELAY_OWNER)
+    isActive: boolean;
+    isVerified: boolean;
+    createdAt: string;
+    
+    // Métadonnées Business optionnelles
+    businessName?: string;
+    avatarInitial: string;
 }
 
 // ============================================================================
@@ -120,58 +139,71 @@ export default function Overview() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string|null>(null);
     const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
-
-    const loadData = async () => {
-        console.group("🚀 [SUPERADMIN] Dashboard Data Fetch");
-        setLoading(true);
-        setError(null);
-        try {
-            // 1. Charger les statistiques via AdminService (aggrégation Users, Actors, Shipments)
-            console.log("1️⃣ Demande des Statistiques Globales...");
-            const dataStats = await adminService.getDashboardStats();
-            console.log("✅ Statistiques Reçues :", dataStats);
-            setStats(dataStats);
-
-            // 2. Charger les Logs Récents via apiClient direct (car non inclus dans adminService pour l'instant)
-            // Endpoint basé sur Swagger: GET /api/event-logs
-            console.log("2️⃣ Demande des Logs (/api/event-logs)...");
-            let logsData: any[] = [];
-            try {
-                // On récupère les logs, triés par date si le backend le supporte (sinon on triera ici)
-                logsData = await apiClient<any[]>('/api/event-logs', 'GET');
-                
-                // Si l'API renvoie une structure paginée { content: [...] }, il faut adapter
-                if (!Array.isArray(logsData) && (logsData as any).content) {
-                    logsData = (logsData as any).content;
-                }
-
-                console.log(`✅ ${logsData.length} Logs reçus.`);
-            } catch (logErr) {
-                console.warn("⚠️ Impossible de charger les logs (Endpoint peut-être vide ou inaccessible):", logErr);
-                // Fallback sur des logs fictifs pour le design si l'API échoue au début
-                logsData = []; 
-            }
-
-            // Tri des logs du plus récent au plus ancien (fallback si backend ne trie pas)
-            const sortedLogs = Array.isArray(logsData) 
-                ? logsData.sort((a, b) => new Date(b.timestamp || b.createdAt).getTime() - new Date(a.timestamp || a.createdAt).getTime())
-                : [];
-            
-            setLogs(sortedLogs.slice(0, 10)); // On garde les 10 derniers
-            setLastRefreshed(new Date());
-
-        } catch(e: any) {
-            console.error("❌ CRITICAL ERROR Dashboard :", e);
-            setError(e.message || "Erreur de connexion au backend");
-        } finally {
-            console.groupEnd();
-            setLoading(false);
+    const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
+        // Cette fonction transforme la donnée brute de l'API en objet propre pour l'admin
+    const normalizeUser = (u: any): AdminUser => {
+        // Détermination du Rôle
+        const accountType = (u.accountType || u.account_type || 'CLIENT').toUpperCase();
+        const subType = (u.businessActorType || u.businessActorType || '').toUpperCase();
+        
+        let role: UserRole = 'CLIENT'; // Default
+        
+        if (accountType === 'ADMIN' || accountType === 'SUPERADMIN') role = 'ADMIN';
+        else if (accountType === 'BUSINESS_ACTOR' || accountType.includes('BUSINESS')) {
+            if (subType === 'AGENCY_OWNER' || subType === 'AGENCY') role = 'AGENCY_OWNER';
+            else if (subType === 'RELAY_OWNER') role = 'RELAY_OWNER';
+            else if (subType === 'DELIVERER' || subType === 'LIVREUR') role = 'DELIVERER';
+            else if (subType === 'EMPLOYEE') role = 'EMPLOYEE';
+            else role = 'FREELANCE'; // Fallback pro
         }
+
+        const name = u.name || u.manager_name || "Utilisateur Inconnu";
+        
+        return {
+            id: u.id,
+            name: name,
+            email: u.email || 'N/A',
+            phoneNumber: u.phone_number || u.phoneNumber || 'N/A',
+            role: role,
+            rawType: accountType,
+            rawSubType: subType,
+            isActive: u.is_active ?? u.isActive ?? true, // Souvent true par défaut si non présent
+            isVerified: u.is_verified ?? u.isVerified ?? (role === 'CLIENT'), // Clients souvent vérifiés par défaut
+            createdAt: u.createdAt || u.created_at || new Date().toISOString(),
+            businessName: u.businessName || u.business_name,
+            avatarInitial: name.charAt(0).toUpperCase()
+        };
     };
 
-    useEffect(() => {
-        loadData();
+    // --- CHARGEMENT ---
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        console.group("📥 [ADMIN USERS] Chargement Global");
+        try {
+            // Appel Unique à /api/users
+            // Le backend renvoie souvent un tableau direct ou { content: [...] }
+            const response: any = await apiClient('/api/users', 'GET');
+            const rawData = Array.isArray(response) ? response : (response.content || []);
+            
+            console.log(`✅ ${rawData.length} utilisateurs bruts reçus.`);
+            
+            // Mapping
+            const mapped = rawData.map(normalizeUser);
+            
+            // Tri (Plus récents d'abord)
+            mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            setAllUsers(mapped);
+
+        } catch (e) {
+            console.error("Erreur chargement utilisateurs:", e);
+        } finally {
+            setLoading(false);
+            console.groupEnd();
+        }
     }, []);
+
+    useEffect(() => { loadData(); }, [loadData]);
 
     // Valeurs par défaut pour éviter les crashs de rendu
     const s = stats || { totalUsers: 0, totalShipments: 0, totalBusinessActors: 0, pendingValidations: 0, totalRevenue: 0 };

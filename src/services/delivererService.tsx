@@ -160,24 +160,15 @@ const delivererService = {
         return res;
     },
 
-    /** POST /api/deliverer/packages/{packageId}/pickup */
-    pickupPackage: async (packageId: string): Promise<any> => {
-        const url = `/api/deliverer/packages/${packageId}/pickup`;
-        logViolet('POST REQUEST Pickup', url);
-        // Note: Ajouter geolocation ou photo ici si requis par votre API plus tard
-        const res = await apiClient(url, 'POST', {}); 
-        logViolet('POST RESPONSE Pickup', res, 'RES');
-        return res;
+    // POST /api/{packageId}/pickup-from-relay
+    pickupFromRelay : async (packageId: string): Promise<any> => {
+        return apiClient(`/api/${packageId}/pickup-from-relay`, 'POST');
     },
 
-    /** POST /api/deliverer/packages/{packageId}/deliver-to-relay */
-    deliverToRelay: async (packageId: string, relayId: string): Promise<any> => {
-        const url = `/api/deliverer/packages/${packageId}/deliver-to-relay`;
-        const body = { relayPointId: relayId };
-        logViolet('POST REQUEST DeliverToRelay', { url, body });
-        const res = await apiClient(url, 'POST', body);
-        logViolet('POST RESPONSE DeliverToRelay', res, 'RES');
-        return res;
+    // === ÉTAPE 6: Déposer colis au relais Arrivée ===
+    // POST /api/{packageId}/deliver-to-relay
+    deliverToRelay : async (packageId: string): Promise<any> => {
+        return apiClient(`/api/${packageId}/deliver-to-relay`, 'POST');
     },
 
     /** POST /api/deliverer/packages/{packageId}/deliver-to-client */

@@ -12,6 +12,7 @@ interface PackageSidebarProps {
     onAssign?: () => void;
     onPickup?: () => void;
     onDeliver?: () => void;
+    onDeliverRelay?: () => void;
     
     // Config boutons
     actionLoading?: boolean;
@@ -21,7 +22,7 @@ interface PackageSidebarProps {
 
 export default function PackageSidebar({ 
     pkg, isOpen, onClose, 
-    onAssign, onPickup, onDeliver,
+    onAssign, onPickup, onDeliver, onDeliverRelay,
     actionLoading, actionLabel, showAction 
 }: PackageSidebarProps) {
     
@@ -30,6 +31,8 @@ export default function PackageSidebar({
     // Détermination de l'action par défaut
     const isAvailable = pkg.currentStatus === 'FOR_PICKUP';
     const isAssigned = pkg.currentStatus === 'ASSIGNED_TO_DELIVERER';
+        // Status Logic
+    const isReadyToPickup = pkg.currentStatus === 'ASSIGNED_TO_DELIVERER' || pkg.currentStatus === 'FOR_PICKUP';
     const isTransit = pkg.currentStatus === 'IN_TRANSIT';
 
     return (
@@ -136,7 +139,7 @@ export default function PackageSidebar({
                 <div className="p-6 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800">
                      {showAction && (
                          <button
-                            onClick={isAvailable ? onAssign : (isAssigned ? onPickup : onDeliver)}
+                            onClick={isAvailable ? onAssign : (isAssigned ? onPickup : onDeliverRelay)}
                             disabled={actionLoading}
                             className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 ${
                                 isAvailable ? 'bg-violet-600 hover:bg-violet-700' :

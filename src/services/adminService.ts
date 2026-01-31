@@ -135,11 +135,21 @@ const validateBusinessActor = async (id: string, isValid: boolean) => {
 };
 
 const deleteBusinessActor = async (id: string) => apiClient(`/api/business-actors/${id}`, 'DELETE');
-
+const getAllUsers = async (): Promise<any[]> => {
+    try {
+        const response: any = await apiClient('/api/users', 'GET');
+        // Gestion pagination Spring ou Array simple
+        return Array.isArray(response) ? response : (response.content || []);
+    } catch(e) {
+        console.error("Error fetching all users", e);
+        return [];
+    }
+};
 export const adminService = {
     getDashboardStats,
     getAllShipmentsGlobal,
     getAllBusinessActors,
     validateBusinessActor,
-    deleteBusinessActor
+    deleteBusinessActor,
+    getAllUsers
 };

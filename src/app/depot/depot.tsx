@@ -20,6 +20,7 @@ import { packageService } from '@/services/packageService';
 // Import du module d'expédition existant pour l'intégration "Nouveau Colis"
 import ShippingPage from '@/app/expedition/page';
 import jsPDF from 'jspdf';
+import toast from 'react-hot-toast';
 
 // --- TYPES & INTERFACES ---
 
@@ -452,7 +453,7 @@ export const DepotColis = ({ onClose, onSuccess }: DepotColisProps) => {
           const result = await relayPointService.receivePackage(myRelayId, selectedShipment.id);
            // 3. GÉNÉRATION BORDEREAU PDF
           await generateDepositPDF(selectedShipment, myRelayId, userInfo, payStatusLabel);
-
+          toast.success("Colis Réceptionné et Actif au Relais !");
           console.log("✅ API Success:", result);
           
           // Affichage succès

@@ -19,7 +19,7 @@ import {
 import jsPDF from 'jspdf';
 import OriginalQRCode from 'qrcode'; 
 import { supabase } from '@/lib/supabase';
-import { PhoneIcon, PlusIcon, StarIcon, UserPlusIcon } from 'lucide-react';
+import { ArrowRight, PhoneIcon, PlusIcon, StarIcon, UserPlusIcon } from 'lucide-react';
 import { ProcessingAnimation } from './demo';
 import { useRouter } from 'next/navigation';
 // --- IMPORTATIONS CRUCIALES POUR LE BACKEND ---
@@ -27,6 +27,7 @@ import { packageService, PackageCreationPayload } from '@/services/packageServic
 import { Loader2, CheckCircle, UserPlus, Star } from 'lucide-react';
 import { useNotification } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
+import toast from 'react-hot-toast';
 
 interface FinalData {
   senderName: string;
@@ -94,6 +95,7 @@ const PAYMENT_OPERATOR_FEE = 100;
 const APP_NAME = "TiiBnTick Link";
 
 export default function PaymentStep({ allData, onBack, onPaymentFinalized, currentUser }: PaymentStepProps) {
+  const { isAuthenticated, user } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState<'cash' | 'mobile' | 'recipient'>('cash');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
@@ -104,6 +106,7 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
   const [method, setMethod] = useState<'cash'|'mobile'|'recipient'>('cash');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   
   const router = useRouter(); 
   const { addNotification } = useNotification();
@@ -370,6 +373,62 @@ export default function PaymentStep({ allData, onBack, onPaymentFinalized, curre
 
   if (isProcessing) {
     return <ProcessingAnimation />
+  }
+
+    const handleFinalize = async () => {
+    // === ÉTAPE 1: CHECK CONNEXION ===
+    if (!isAuthenticated) {
+        console.warn("⛔ Utilisateur non connecté. Stockage du formulaire et redirection.");
+        
+        // On sauvegarde TOUT le formulaire pour reprise
+        localStorage.setItem('expedition_form_pending_payment', JSON.stringify(allData));
+        localStorage.setItem('return_url_after_login', '/expedition'); // Indicateur pour le login
+        
+        setShowLoginPrompt(true); // Afficher la modale ou redirect direct
+        return;
+    }
+
+    setLoading(true);
+    try {
+        console.log("🚀 Création Colis par Client:", user?.email);
+        
+        // Logique création existante...
+        const res = await packageService.createPackage(allData as any);
+        
+        // Callback succès
+        onPaymentFinalized(res);
+        localStorage.removeItem('expedition_form_pending_payment'); // Nettoyage
+        
+    } catch (e: any) {
+        console.error(e);
+        toast.error(e.message || "Erreur création colis");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const redirectToLogin = () => {
+      router.push('/login');
+  };
+
+  // Petite modale "Breaking News" si non connecté
+  if (showLoginPrompt) {
+      return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in">
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl">
+                  <h2 className="text-2xl font-black text-orange-600 mb-2">CONNEXION REQUISE !</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mb-6">
+                      Pour garantir la sécurité et le suivi de votre colis, vous devez être connecté avant le paiement.
+                      <br/><br/>
+                      <span className="font-bold text-sm">Vos données sont sauvegardées. Vous reviendrez ici automatiquement.</span>
+                  </p>
+                  <button onClick={redirectToLogin} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-black transition">
+                      Se connecter / S'inscrire <ArrowRight className="w-4 h-4"/>
+                  </button>
+                  <button onClick={() => setShowLoginPrompt(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600">Annuler</button>
+              </div>
+          </div>
+      );
   }
 
     // --- MODIFIÉ : L'écran de succès inclut le bloc d'incitation et le bouton PDF ---

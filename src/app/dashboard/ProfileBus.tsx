@@ -85,6 +85,12 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
     const [isLoading, setIsLoading] = useState(false);
     const [isLocating, setIsLocating] = useState(false);
     const photoInputRef = useRef<HTMLInputElement>(null);
+        // Etats Relais
+    const [form, setForm] = useState({
+        relayPointName: '', address: '', locality: '', 
+        openingHours: '08:00-18:00', maxCapacity: 100, 
+        latitude: 0, longitude: 0
+    });
 
     // -- DATA STATES --
     const role = profile.businessActorType || profile.business_actor_type || 'FREELANCE' || overrideRole;
@@ -110,6 +116,8 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
         latitude: 0,
         longitude: 0
     });
+
+    const [photo, setPhoto] = useState<{file: File, preview: string} | null>(null);
 
     // C. Photo Temporaire
     const [pendingPhoto, setPendingPhoto] = useState<{file: File, preview: string} | null>(null);
@@ -138,75 +146,126 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
         load();
     }, [profile, role]);
 
-
-    // 1. CHARGEMENT INITIAL DES DONNÉES
+    
+    // 1. CHARGEMENT
     useEffect(() => {
-        const fetchBusinessData = async () => {
-            console.log("📥 Loading Business Profile for:", role);
-            
-            // CAS 1: AGENCY
-            if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
-                try {
-                    const ag = await agencyService.getMyAgency(profile.id);
-                    if (ag) {
-                        setAgency(ag);
-                        setAgencyForm({
-                            commercialName: ag.commercial_name || '',
-                            address: ag.address || '',
-                            addressLocality: ag.address_locality || '',
-                            registration: ag.business_registration || '',
-                            openingHours: ag.opening_hours || '08:00-18:00'
-                        });
-                        
-                        // Récupération du cache inscription si existe (et pas encore d'agence en DB)
-                        // N/A ici car l'agence existe
-                    } else {
-                        // Check localstorage si inscription récente
-                        const cached = localStorage.getItem('pending_agency_creation');
-                        if (cached) {
-                            const c = JSON.parse(cached);
-                            setAgencyForm(prev => ({ ...prev, ...c }));
-                        }
-                    }
-                } catch (e) { console.error("Agency Load Error", e); }
-            }
+        const init = async () => {
+             if (role !== 'RELAY_OWNER' && role !== 'FREELANCE') return;
+             setIsLoading(true);
 
-            // CAS 2: RELAY POINT (Freelance)
-            if (role === 'FREELANCE') {
-                try {
-                    const allPoints = await relayPointService.getAllRelayPoints();
-                    const myPoint = allPoints.find(p => String(p.ownerId) === String(profile.id));
-                    
-                    if (myPoint) {
-                        setRelayPoint(myPoint);
-                        setRelayForm({
-                            relayPointName: myPoint.relayPointName || '',
-                            address: myPoint.address || myPoint.relay_point_address || '',
-                            locality: myPoint.locality || myPoint.relay_point_locality || '',
-                            openingHours: myPoint.openingHours || '08:00-18:00',
-                            maxCapacity: myPoint.maxCapacity || 50,
-                            latitude: myPoint.latitude || 0,
-                            longitude: myPoint.longitude || 0
-                        });
-                    } else {
-                        // Cache registration ?
-                         const cached = localStorage.getItem('registration_data_cache');
-                         if(cached) {
-                             const c = JSON.parse(cached);
-                             setRelayForm(prev => ({
-                                 ...prev,
-                                 relayPointName: c.relay_point_name || '',
-                                 address: c.relay_point_address || '',
-                                 locality: c.relay_point_locality || '',
-                             }));
-                         }
-                    }
-                } catch (e) { console.error("Relay Load Error", e); }
-            }
+             try {
+                 // A. Essayer de charger depuis l'API (Mode EDITION d'un existant)
+                 const points = await relayPointService.getAllRelayPoints();
+                 // Note: L'ownerId dans les objets BDD est parfois un string, on compare de manière sûre
+                 const myPoint = points.find(p => String(p.ownerId) === String(profile.id));
+
+                 if (myPoint) {
+                     console.log("✅ Point Relais trouvé en base.");
+                     setRelayPoint(myPoint);
+                     setForm({
+                         relayPointName: myPoint.relayPointName,
+                         address: myPoint.address || myPoint.relay_point_address || '',
+                         locality: myPoint.locality || myPoint.relay_point_locality || '',
+                         openingHours: myPoint.openingHours || '08:00-18:00',
+                         maxCapacity: myPoint.maxCapacity,
+                         latitude: myPoint.latitude,
+                         longitude: myPoint.longitude
+                     });
+                     // Ne PAS mettre en mode édition automatiquement si données BDD trouvées
+                     setIsEditing(false);
+                 } 
+                 else {
+                     // B. Si rien en base, chercher le cache (Mode CREATION à partir des données d'inscription)
+                     const cached = localStorage.getItem('registration_data_cache');
+                     if (cached) {
+                         const c = JSON.parse(cached);
+                         console.log("📥 Pré-remplissage depuis LocalStorage :", c);
+                         setForm({
+                             relayPointName: c.relay_point_name || '',
+                             address: c.relay_point_address || '',
+                             locality: c.relay_point_locality || '',
+                             openingHours: c.opening_hours || '08:00-18:00',
+                             maxCapacity: c.storage_capacity === 'Grand' ? 500 : (c.storage_capacity === 'Moyen' ? 200 : 50),
+                             latitude: 0, longitude: 0
+                         });
+                         // Activer l'édition pour que l'utilisateur valide/sauvegarde
+                         setIsEditing(true);
+                     }
+                 }
+             } catch(e) { console.error(e); } 
+             finally { setIsLoading(false); }
         };
+        init();
+    }, [profile, role]);
 
-        fetchBusinessData();
-    }, [profile.id, role]);
+    const handleSave = async () => {
+        setIsLoading(true);
+        const tId = toast.loading("Traitement en cours...");
+
+        try {
+            // Payload
+            const payload = {
+                relayPointName: form.relayPointName, // Nom correspondant au DTO Java
+                address: form.address,
+                locality: form.locality,
+                openingHours: form.openingHours,
+                maxCapacity: form.maxCapacity,
+                latitude: form.latitude, 
+                longitude: form.longitude
+            };
+
+            let currentId = relayPoint?.id;
+
+            // A. MISE À JOUR OU CRÉATION
+            if (currentId) {
+                // PUT (Mise à jour)
+                await relayPointService.updateRelayPoint(currentId, payload);
+                toast.success("Mise à jour réussie", { id: tId });
+            } else {
+                // POST (Création) - C'est ici qu'on utilise le pre-remplissage
+                console.log("🚀 Création nouveau point relais...", payload);
+                const newRp = await relayPointService.createRelayPoint(payload, profile.id);
+                
+                if (newRp && newRp.id) {
+                    currentId = newRp.id;
+                    setRelayPoint(newRp); // Mise à jour de l'état local pour passer en mode 'existant'
+                    toast.success("Point Relais créé !", { id: tId });
+                    localStorage.removeItem('registration_data_cache'); // Nettoyage cache
+                } else {
+                    throw new Error("Erreur création : ID manquant");
+                }
+            }
+
+            // B. PHOTO
+            if (photo && currentId) {
+                toast.loading("Upload photo...", { id: tId });
+                await relayPointService.uploadRelayPhoto(currentId, photo.file);
+            }
+
+            // C. SOUMISSION ADMIN AUTOMATIQUE
+            // Si le point vient d'être créé ou est encore en brouillon
+            if (currentId && (!relayPoint || ['DRAFT', 'PENDING_DOCUMENTS'].includes(relayPoint.status))) {
+                toast.loading("Soumission admin...", { id: tId });
+                await relayPointService.submitForVerification(currentId);
+                toast.success("Dossier soumis !", { id: tId });
+                
+                // Rafraichir les données pour avoir le nouveau statut (PENDING_VERIFICATION)
+                const updated = await relayPointService.getRelayPointById(currentId);
+                setRelayPoint(updated);
+            }
+
+            setIsEditing(false);
+            setPhoto(null);
+            onUpdate();
+
+        } catch (e: any) {
+            console.error(e);
+            toast.error(e.message || "Erreur sauvegarde", { id: tId });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
 
 
     // 2. GESTION FICHIERS
@@ -218,104 +277,6 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
                 preview: URL.createObjectURL(file)
             });
             toast.success("Photo prête à l'envoi");
-        }
-    };
-
-
-    // 3. SAUVEGARDE GLOBALE
-    const handleSave = async () => {
-        setIsLoading(true);
-        const tId = toast.loading("Enregistrement en cours...");
-
-        try {
-            // === SCÉNARIO A: AGENCE ===
-            if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
-                let agenceId = agency?.id;
-
-                const payload = {
-                    commercialName: agencyForm.commercialName,
-                    address: agencyForm.address,
-                    addressLocality: agencyForm.addressLocality,
-                    businessRegistration: agencyForm.registration,
-                    openingHours: agencyForm.openingHours,
-                    employeeCount: agency?.employee_count || 1
-                };
-
-                if (agency) {
-                    await agencyService.updateAgency(agency.id, payload);
-                } else {
-                    const newAgency = await agencyService.createAgency(payload);
-                    if(newAgency) agenceId = newAgency.id;
-                    setAgency(newAgency); // Update local state to avoid "create" again
-                    localStorage.removeItem('pending_agency_creation'); // Cleanup cache
-                }
-
-                // Upload Photo Agence
-                if (pendingPhoto && agenceId) {
-                     toast.loading("Upload de la photo...", { id: tId });
-                     await uploadFileToApi(pendingPhoto.file, `/api/photos/agency/${agenceId}/photo`);
-                }
-            }
-            
-            // === SCÉNARIO B: POINT RELAIS (Freelance) ===
-            if (role === 'RELAY_OWNER') {
-                let rId = relayPoint?.id;
-                
-                const payload = {
-                    name: relayForm.relayPointName,       // Mappez selon ce que attend /api/relay-points (ex: 'name' au lieu de 'relayPointName')
-                    address: relayForm.address,
-                    quartier: relayForm.locality,
-                    lat: Number(relayForm.latitude),
-                    lng: Number(relayForm.longitude),
-                    hours: relayForm.openingHours,
-                    type: 'COMMERCE', // Ou autre type par défaut
-                    // Pas de status ici, le backend le mettra par défaut
-                };
-
-                if (relayPoint) {
-                    // Update existant : PUT /api/relay-points/{id}
-                    await relayPointService.updateRelayPoint(relayPoint.id, payload);
-                    toast.success("Mise à jour effectuée", { id: tId });
-                } else {
-                    // 1. CRÉATION : POST /api/relay-points
-                    console.log("1️⃣ Création Point Relais...");
-                    const newRelay = await relayPointService.createRelayPoint(payload, profile.id);
-                    
-                    if (newRelay && newRelay.id) {
-                        rId = newRelay.id;
-                        setRelayPoint(newRelay);
-                        
-                        // 2. UPLOAD PHOTO (Si présente)
-                        // Note: Adapter l'URL si votre backend a une route spécifique upload pour relay point
-                        // Souvent c'est un multipart/form-data sur une route distincte ou PUT
-                        if (pendingPhoto) {
-                             console.log("2️⃣ Upload Photo...");
-                             // Exemple fictif d'upload, à adapter à votre backend réel pour photo
-                             // await uploadFileToApi(pendingPhoto.file, `/api/relay-points/${rId}/photo`); 
-                        }
-
-                        // 3. SOUMISSION ADMIN : POST /submit-verification
-                        console.log("3️⃣ Soumission pour validation...");
-                        await relayPointService.submitForVerification(String(rId));
-                        
-                        toast.success("Point Relais créé et soumis à l'administrateur !", { id: tId });
-                    }
-                    localStorage.removeItem('registration_data_cache');
-                }
-            } else if (role === 'AGENCY_OWNER' || role === 'AGENCY') {
-                // Code existant pour l'agence...
-                 toast.success("Infos agence mises à jour", { id: tId });
-            }
-
-            setIsEditing(false);
-            setPendingPhoto(null);
-            onUpdate();
-
-        } catch (e: any) {
-            console.error("Save Error:", e);
-            toast.error(e.message || "Erreur de sauvegarde", { id: tId });
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -434,7 +395,7 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
                         readOnly={!isEditing} 
                     />
                     <AnimatedInputField 
-                        label="Ville / Quartier" 
+                        label="Lieu-dit de l'adresse" 
                         name="addressLocality" 
                         icon={Globe} 
                         value={agencyForm.addressLocality} 
@@ -482,7 +443,7 @@ export default function ProfileBusinessInfo({ profile, onUpdate, overrideRole }:
                             readOnly={!isEditing} 
                         />
                          <AnimatedInputField 
-                            label="Quartier / Repère" 
+                            label="Lieu-dit de l'adresse" 
                             name="locality" 
                             icon={Globe} 
                             value={relayForm.locality} 
