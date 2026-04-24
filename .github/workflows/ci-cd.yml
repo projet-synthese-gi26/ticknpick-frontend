@@ -1,0 +1,27 @@
+name: Ugate front CI/CD
+
+on:
+  push:
+    branches:
+      - "main"
+      - "master"
+      
+jobs:
+  pipeline:
+    uses: projet-synthese-gi26/workflows/.github/workflows/next-js-ci-cd.yml@main
+    with:
+      app_name: ticknpick-web
+      node_version: "20"
+      run_lint: true
+    secrets:
+      PERSONAL_ACCESS_TOKEN:             ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      REGISTRY_NAMESPACE:                ${{ secrets.REGISTRY_NAMESPACE }}
+      SSH_PRIVATE_KEY:                   ${{ secrets.SSH_PRIVATE_KEY }}
+      REMOTE_USER:                       ${{ secrets.REMOTE_USER }}
+      REMOTE_HOST:                       ${{ secrets.REMOTE_HOST }}
+      DEPLOY_DELAY:                      ${{ secrets.DEPLOY_DELAY }}
+
+      NEXT_PUBLIC_API_BASE_URL: https://traefikdev.yowyob.com/ticknpick
+      NEXT_PUBLIC_VEHICLE_API_BASE_URL: https://traefikdev.yowyob.com/vehicule
+      NEXT_PUBLIC_OSM_BASE_URL: https://nominatim.openstreetmap.org
+      NEXT_PUBLIC_COMPLIANCE_URL: https://ugate-dev.yowyob.com/compliance
